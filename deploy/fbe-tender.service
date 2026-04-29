@@ -1,0 +1,15 @@
+[Unit]
+Description=FBE Ausschreibungsplattform
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/ausschreibungsplattform-fbe
+Environment=HOST=127.0.0.1
+Environment=PORT=8000
+ExecStart=/root/ausschreibungsplattform-fbe/.venv/bin/python run.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

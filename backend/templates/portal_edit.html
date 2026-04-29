@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Neues Portal' if is_new else 'Portal bearbeiten' }} – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/admin/portals" class="hover:text-zinc-900">Portale</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">{{ 'Neu' if is_new else portal.name }}</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-6">
+  {{ 'Neues Portal anlegen' if is_new else 'Portal bearbeiten' }}
+</h1>
+
+<form method="post" action="/admin/portals/save" class="space-y-6 max-w-3xl">
+  {% if not is_new %}
+    <input type="hidden" name="original_name" value="{{ portal.name }}">
+  {% endif %}
+
+  <div class="card p-6 space-y-4">
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Name *</label>
+      <input class="input" type="text" name="name" required
+             value="{{ portal.name if portal else '' }}" placeholder="z.B. Vergabeplattform NRW">
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Scraper-Typ *</label>
+        <select class="input" name="scraper" required>
+          {% for s in scraper_choices %}
+            <option value="{{ s }}" {% if portal and portal.scraper == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Strategie</label>
+        <select class="input" name="strategy">
+          {% for s in ['api','rss','search_url','scrape'] %}
+            <option value="{{ s }}" {% if portal and portal.strategy == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Base-URL</label>
+      <input class="input" type="url" name="base_url"
+             value="{{ portal.base_url if portal else '' }}"
+             placeholder="https://www.beispielportal.de">
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Notizen</label>
+      <textarea class="input min-h-[80px]" name="notes"
+                placeholder="z.B. Hinweise zu Selektoren, Login-Status, Besonderheiten">{{ portal.notes if portal else '' }}</textarea>
+    </div>
+
+    <div>
+      <label class="inline-flex items-center gap-2">
+        <input type="checkbox" name="enabled" {% if portal is none or portal.enabled %}checked{% endif %}
+               class="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-500">
+        <span class="text-sm">Aktiv (wird beim nächsten Suchlauf abgefragt)</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="card p-6">
+    <label class="block text-sm font-medium mb-2">Erweiterte Konfiguration (YAML)</label>
+    <p class="text-xs text-zinc-500 mb-3">
+      Pro-Portal-Optionen (optional). Beispiele:
+      <strong>rss_generic</strong> braucht <code>feed_urls: [...]</code>;
+      <strong>generic_html</strong> braucht <code>search_path</code> und Selektoren
+      (<code>result_selector</code>, <code>title_selector</code>, …).
+    </p>
+    <textarea class="input min-h-[260px] font-mono text-xs" name="config_yaml"
+              spellcheck="false"
+              placeholder="# Beispiel generic_html:
+search_path: '/suche?q={term}'
+result_selector: 'div.result'
+title_selector: 'a.title'
+authority_selector: '.buyer'
+deadline_selector: '.deadline'">{% if config_yaml %}{{ config_yaml }}{% endif %}</textarea>
+  </div>
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn-primary">Speichern</button>
+    <a href="/admin/portals" class="btn-ghost">Abbrechen</a>
+  </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Suchbegriffe – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Suchbegriffe</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Suchbegriffe & Themencluster</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      Steuern Scoring + welche Begriffe an Portale gesendet werden.
+      Änderungen wirken ab dem nächsten Suchlauf.
+    </p>
+  </div>
+</div>
+
+<!-- Übersicht -->
+<div class="grid lg:grid-cols-3 gap-4 mb-6">
+  {% for c in raw.clusters or [] %}
+    {% set wcolor = 'rose' if c.weight=='high' else ('amber' if c.weight=='medium' else 'zinc') %}
+    <div class="card p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold text-sm">{{ c.name }}</h3>
+        <span class="pill bg-{{ wcolor }}-100 text-{{ wcolor }}-800">{{ c.weight }}</span>
+      </div>
+      <div class="flex flex-wrap gap-1.5">
+        {% for t in c.terms or [] %}
+          <span class="pill bg-zinc-100 text-zinc-700">{{ t }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="grid lg:grid-cols-2 gap-4 mb-6">
+  <div class="card p-4">
+    <h3 class="font-semibold text-sm mb-2">Query-Begriffe (an Portale gesendet)</h3>
+    <div class="flex flex-wrap gap-1.5">
+      {% for t in raw.query_terms or [] %}
+        <span class="pill bg-brand-50 text-brand-800 border border-brand-100">{{ t }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card p-4">
+    <h3 class="font-semibold text-sm mb-2">CPV-Codes (TED-Filter / Bonus-Score)</h3>
+    <div class="flex flex-wrap gap-1.5">
+      {% for c in raw.cpv_codes or [] %}
+        <span class="pill bg-zinc-100 text-zinc-700">{{ c }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Editor -->
+<div class="card p-6">
+  <h2 class="font-semibold mb-2">YAML bearbeiten</h2>
+  <p class="text-xs text-zinc-500 mb-3">
+    Direkter Editor für <code>config/search_terms.yaml</code>. Vor dem Speichern wird ein
+    <code>.bak</code> angelegt. Cluster-Gewichtung: <code>high</code> · <code>medium</code> · <code>low</code>.
+  </p>
+  <form method="post" action="/admin/search-terms" class="space-y-3">
+    <textarea name="yaml_text" class="input min-h-[480px] font-mono text-xs" spellcheck="false">{{ yaml_text }}</textarea>
+    <div class="flex gap-2">
+      <button type="submit" class="btn-primary">Speichern</button>
+      <a href="/admin/search-terms" class="btn-ghost">Abbrechen / Neu laden</a>
+    </div>
+  </form>
+</div>
+
+<details class="card p-4 mt-6 text-sm text-zinc-600">
+  <summary class="font-semibold cursor-pointer">Schema-Hinweise</summary>
+  <pre class="mt-3 text-xs bg-zinc-50 rounded-lg p-3 overflow-auto">clusters:
+  - name: "Mein Cluster"
+    weight: high      # high | medium | low
+    terms:
+      - "Begriff A"
+      - "Begriff B"
+
+query_terms:
+  - "Begriff fuer Portal-Volltextsuche"
+
+cpv_codes:
+  - "45112000"</pre>
+</details>
+
+{% endblock %}

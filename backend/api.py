@@ -22,6 +22,7 @@ from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
 from .scheduler import is_pipeline_running, next_run_time, run_pipeline_with_lock
 from .search_terms import load_search_config
+from . import yaml_store
 
 
 log = logging.getLogger(__name__)
@@ -295,13 +296,168 @@ def run_search_now(background_tasks: BackgroundTasks, format: Optional[str] = No
     )
 
 
-# --- Admin / Probe --------------------------------------------------
+# --- Admin: Portal-Verwaltung -----------------------------------------
+SCRAPER_CHOICES = ["bund", "ted", "rss_generic", "generic_html"]
+
+
+def _portals_view_ctx(request: Request, flash: str | None = None, error: str | None = None) -> dict:
+    return {
+        "portals": load_portals(),
+        "user": request.session.get("user"),
+        "flash": flash,
+        "error": error,
+    }
+
+
 @app.get("/admin/portals", response_class=HTMLResponse)
-def admin_portals(request: Request):
+def admin_portals(request: Request, flash: Optional[str] = None, error: Optional[str] = None):
     return templates.TemplateResponse(
-        request, "portals.html",
-        {"portals": load_portals(), "user": request.session.get("user")},
+        request, "portals.html", _portals_view_ctx(request, flash, error),
     )
+
+
+@app.post("/admin/portals/{name}/toggle")
+def admin_portal_toggle(name: str):
+    raw = yaml_store.read_portals_raw()
+    portals = raw.get("portals", [])
+    target = next((p for p in portals if p.get("name") == name), None)
+    if not target:
+        return RedirectResponse(url="/admin/portals?error=Portal nicht gefunden", status_code=303)
+    target["enabled"] = not bool(target.get("enabled", True))
+    yaml_store.write_portals(raw)
+    state = "aktiviert" if target["enabled"] else "deaktiviert"
+    return RedirectResponse(url=f"/admin/portals?flash={name} {state}.", status_code=303)
+
+
+@app.post("/admin/portals/{name}/delete")
+def admin_portal_delete(name: str):
+    raw = yaml_store.read_portals_raw()
+    portals = [p for p in raw.get("portals", []) if p.get("name") != name]
+    if len(portals) == len(raw.get("portals", [])):
+        return RedirectResponse(url="/admin/portals?error=Portal nicht gefunden", status_code=303)
+    raw["portals"] = portals
+    yaml_store.write_portals(raw)
+    return RedirectResponse(url=f"/admin/portals?flash={name} geloescht.", status_code=303)
+
+
+@app.get("/admin/portals/new", response_class=HTMLResponse)
+def admin_portal_new(request: Request):
+    return templates.TemplateResponse(
+        request, "portal_edit.html",
+        {
+            "portal": None,
+            "scraper_choices": SCRAPER_CHOICES,
+            "user": request.session.get("user"),
+            "is_new": True,
+        },
+    )
+
+
+@app.get("/admin/portals/{name}/edit", response_class=HTMLResponse)
+def admin_portal_edit(name: str, request: Request):
+    raw = yaml_store.read_portals_raw()
+    portal = next((p for p in raw.get("portals", []) if p.get("name") == name), None)
+    if not portal:
+        return RedirectResponse(url="/admin/portals?error=Portal nicht gefunden", status_code=303)
+    return templates.TemplateResponse(
+        request, "portal_edit.html",
+        {
+            "portal": portal,
+            "scraper_choices": SCRAPER_CHOICES,
+            "user": request.session.get("user"),
+            "is_new": False,
+            "config_yaml": yaml_store.yaml.safe_dump(portal.get("config", {}) or {}, allow_unicode=True, sort_keys=False) if portal.get("config") else "",
+        },
+    )
+
+
+@app.post("/admin/portals/save")
+def admin_portal_save(
+    request: Request,
+    original_name: str = Form(""),
+    name: str = Form(...),
+    scraper: str = Form(...),
+    base_url: str = Form(""),
+    strategy: str = Form("scrape"),
+    enabled: Optional[str] = Form(None),
+    notes: str = Form(""),
+    config_yaml: str = Form(""),
+):
+    name = name.strip()
+    if not name:
+        return RedirectResponse(url="/admin/portals?error=Name ist erforderlich.", status_code=303)
+
+    try:
+        cfg_data = yaml_store.parse_yaml_string(config_yaml) if config_yaml.strip() else {}
+    except Exception as exc:
+        return RedirectResponse(
+            url=f"/admin/portals?error=Config-YAML ungueltig: {str(exc)[:200]}",
+            status_code=303,
+        )
+
+    raw = yaml_store.read_portals_raw()
+    portals = raw.get("portals", [])
+
+    new_entry = {
+        "name": name,
+        "enabled": enabled == "on",
+        "scraper": scraper.strip(),
+        "base_url": base_url.strip(),
+        "strategy": strategy.strip() or "scrape",
+        "notes": notes.strip(),
+    }
+    if cfg_data:
+        new_entry["config"] = cfg_data
+
+    if original_name:
+        # Update bestehender Eintrag.
+        for i, p in enumerate(portals):
+            if p.get("name") == original_name:
+                portals[i] = new_entry
+                break
+        else:
+            portals.append(new_entry)
+    else:
+        if any(p.get("name") == name for p in portals):
+            return RedirectResponse(
+                url=f"/admin/portals?error=Portal mit Name '{name}' existiert bereits.",
+                status_code=303,
+            )
+        portals.append(new_entry)
+
+    raw["portals"] = portals
+    yaml_store.write_portals(raw)
+    return RedirectResponse(url=f"/admin/portals?flash={name} gespeichert.", status_code=303)
+
+
+# --- Admin: Suchbegriffe ----------------------------------------------
+@app.get("/admin/search-terms", response_class=HTMLResponse)
+def admin_search_terms(request: Request, flash: Optional[str] = None, error: Optional[str] = None):
+    raw = yaml_store.read_terms_raw()
+    yaml_text = yaml_store.yaml.safe_dump(raw, allow_unicode=True, sort_keys=False, default_flow_style=False, width=120)
+    return templates.TemplateResponse(
+        request, "search_terms.html",
+        {
+            "raw": raw,
+            "yaml_text": yaml_text,
+            "user": request.session.get("user"),
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/admin/search-terms")
+def admin_search_terms_save(request: Request, yaml_text: str = Form(...)):
+    try:
+        data = yaml_store.parse_yaml_string(yaml_text)
+    except Exception as exc:
+        return RedirectResponse(
+            url=f"/admin/search-terms?error=YAML ungueltig: {str(exc)[:200]}",
+            status_code=303,
+        )
+    yaml_store.write_terms(data)
+    return RedirectResponse(url="/admin/search-terms?flash=Suchbegriffe gespeichert.", status_code=303)
 
 
 @app.get("/admin/probe", response_class=HTMLResponse)

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Portale – FBE Ausschreibungen{% endblock %}
+{% block title %}Portale verwalten – FBE Ausschreibungen{% endblock %}
 {% block content %}
 
 <nav class="text-sm text-zinc-500 mb-4">
@@ -8,22 +8,31 @@
   <span class="text-zinc-700">Portale</span>
 </nav>
 
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
 <div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
   <div>
-    <h1 class="text-2xl font-semibold tracking-tight">Konfigurierte Portale</h1>
+    <h1 class="text-2xl font-semibold tracking-tight">Portale verwalten</h1>
     <p class="text-sm text-zinc-500 mt-1">
-      Verwaltung aktuell über <code>config/portals.yaml</code>.
-      Hier findest du eine Übersicht inkl. Probe-Link pro Portal.
+      {{ portals|length }} Quellen · Aktivieren, bearbeiten oder neue hinzufügen.
     </p>
   </div>
-  <a href="/admin/probe" class="btn-ghost">→ Portal-Probe</a>
+  <div class="flex gap-2">
+    <a href="/admin/probe" class="btn-ghost">Portal-Probe</a>
+    <a href="/admin/portals/new" class="btn-primary">+ Neues Portal</a>
+  </div>
 </div>
 
 <div class="card overflow-hidden">
   <table class="dashboard">
     <thead>
       <tr>
-        <th>Status</th>
+        <th>Aktiv</th>
         <th>Name</th>
         <th>Scraper</th>
         <th>Strategie</th>
@@ -35,11 +44,13 @@
       {% for p in portals %}
       <tr>
         <td>
-          {% if p.enabled %}
-            <span class="pill bg-emerald-100 text-emerald-800">aktiv</span>
-          {% else %}
-            <span class="pill bg-zinc-100 text-zinc-600">inaktiv</span>
-          {% endif %}
+          <form method="post" action="/admin/portals/{{ p.name|urlencode }}/toggle">
+            <button type="submit" class="inline-flex items-center" title="Klicken zum {{ 'Deaktivieren' if p.enabled else 'Aktivieren' }}">
+              <span class="relative inline-flex h-6 w-11 items-center rounded-full transition {{ 'bg-emerald-500' if p.enabled else 'bg-zinc-300' }}">
+                <span class="inline-block h-5 w-5 rounded-full bg-white shadow transform transition {{ 'translate-x-5' if p.enabled else 'translate-x-0.5' }}"></span>
+              </span>
+            </button>
+          </form>
         </td>
         <td>
           <div class="font-medium">{{ p.name }}</div>
@@ -48,10 +59,15 @@
         <td><code class="text-xs">{{ p.scraper }}</code></td>
         <td><span class="pill bg-zinc-100 text-zinc-700">{{ p.strategy }}</span></td>
         <td class="text-zinc-700 text-xs">
-          <a href="{{ p.base_url }}" target="_blank" rel="noopener" class="hover:underline">{{ p.base_url }}</a>
+          {% if p.base_url %}<a href="{{ p.base_url }}" target="_blank" rel="noopener" class="hover:underline">{{ p.base_url }}</a>{% else %}—{% endif %}
         </td>
-        <td class="text-right">
-          <a href="/admin/probe?portal={{ p.name|urlencode }}" class="btn-ghost btn-sm">Testen</a>
+        <td class="text-right whitespace-nowrap">
+          <a href="/admin/probe?portal={{ p.name|urlencode }}" class="btn-icon" title="Testen">🔍</a>
+          <a href="/admin/portals/{{ p.name|urlencode }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+          <form method="post" action="/admin/portals/{{ p.name|urlencode }}/delete" class="inline"
+                onsubmit="return confirm('Portal &quot;{{ p.name }}&quot; wirklich löschen?');">
+            <button type="submit" class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Löschen">🗑</button>
+          </form>
         </td>
       </tr>
       {% endfor %}
@@ -60,14 +76,13 @@
 </div>
 
 <div class="card p-5 mt-6 text-sm">
-  <h3 class="font-semibold mb-2">Neues Portal hinzufügen</h3>
-  <ol class="list-decimal pl-5 text-zinc-600 space-y-1">
-    <li>Eintrag in <code>config/portals.yaml</code> ergänzen.</li>
-    <li>Bei generic_html: Such-URL und CSS-Selektoren angeben.</li>
-    <li>Bei RSS: <code>feed_urls</code> Liste füllen.</li>
-    <li>Service neu starten: <code>systemctl restart fbe-tender</code>.</li>
-    <li>Hier auf <em>Testen</em> klicken um die Konfig zu verifizieren.</li>
-  </ol>
+  <h3 class="font-semibold mb-2">Verfügbare Scraper-Typen</h3>
+  <ul class="list-disc pl-5 text-zinc-600 space-y-1">
+    <li><code>bund</code> — Eigenes Service-Portal-bund.de-Modul (stabil)</li>
+    <li><code>ted</code> — TED EU API v3 (stabil)</li>
+    <li><code>rss_generic</code> — Beliebige RSS/Atom-Feeds; <code>config.feed_urls</code> setzen</li>
+    <li><code>generic_html</code> — HTML-Suche per CSS-Selektoren; siehe Felder unten</li>
+  </ul>
 </div>
 
 {% endblock %}

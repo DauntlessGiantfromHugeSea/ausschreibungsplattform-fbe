@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
@@ -18,6 +18,8 @@ from .export import to_csv, to_xlsx
 from .models import Tender, TenderStatus
 from .pipeline import run_pipeline
 from .portal_config import enabled_portals
+from .run_state import load_run_state
+from .scheduler import is_pipeline_running, next_run_time, run_pipeline_with_lock
 
 
 log = logging.getLogger(__name__)
@@ -118,6 +120,9 @@ def index(
         "soon": soon_count,
     }
 
+    last_run = load_run_state()
+    next_run = next_run_time()
+
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -141,6 +146,9 @@ def index(
             "configured_portals": enabled_portals(),
             "flash": flash,
             "error": error,
+            "last_run": last_run,
+            "next_run": next_run,
+            "is_running": is_pipeline_running(),
         },
     )
 
@@ -189,25 +197,31 @@ def quick_status(tender_id: int, status: str = Form(...), db: Session = Depends(
 
 
 @app.post("/run-search", response_class=HTMLResponse)
-def run_search_now(request: Request, format: Optional[str] = None):
-    """Startet einen Pipeline-Lauf synchron. Default: HTML-Redirect mit Banner.
-    Mit ?format=json: liefert die Statistik als JSON (fuer curl/API).
+def run_search_now(
+    background_tasks: BackgroundTasks,
+    format: Optional[str] = None,
+):
+    """Startet einen Pipeline-Lauf im Hintergrund (Lock verhindert Mehrfachstart).
+
+    Default: 303-Redirect aufs Dashboard mit Hinweis-Banner.
+    Mit ?format=json: synchroner Lauf, Statistik als JSON (fuer curl/API).
     """
     log.info("Manueller Suchlauf via /run-search ausgeloest.")
-    try:
-        stats = run_pipeline()
-    except Exception as exc:
-        log.exception("Pipeline-Lauf fehlgeschlagen: %s", exc)
-        if format == "json":
-            return JSONResponse({"error": str(exc)}, status_code=500)
-        return RedirectResponse(url=f"/?error={str(exc)[:200]}", status_code=303)
     if format == "json":
+        # Synchron, fuer Skripte/curl
+        stats = run_pipeline_with_lock() or {"info": "Lauf laeuft bereits"}
         return JSONResponse(stats)
-    msg = (
-        f"Suche abgeschlossen: {stats['new']} neu, "
-        f"{stats['updated']} aktualisiert, {stats['errors']} Fehler."
+
+    if is_pipeline_running():
+        return RedirectResponse(
+            url="/?flash=Ein Suchlauf läuft bereits – bitte warten.",
+            status_code=303,
+        )
+    background_tasks.add_task(run_pipeline_with_lock)
+    return RedirectResponse(
+        url="/?flash=Suche im Hintergrund gestartet. Tabelle aktualisiert sich nach Abschluss.",
+        status_code=303,
     )
-    return RedirectResponse(url=f"/?flash={msg}", status_code=303)
 
 
 # --- Export ---------------------------------------------------------

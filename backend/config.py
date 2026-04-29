@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     )
 
     database_url: str = f"sqlite:///{PROJECT_ROOT / 'data' / 'tenders.db'}"
+    # Default ist Continuous-Mode: alle 60 Minuten ein Lauf.
+    # Auf 0 setzen, um stattdessen den taeglichen Cron (siehe scheduler_hour)
+    # zu verwenden.
+    scheduler_interval_minutes: int = 60
     scheduler_hour: int = 7
     scheduler_minute: int = 0
 

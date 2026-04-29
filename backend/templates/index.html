@@ -13,18 +13,68 @@
   </div>
 {% endif %}
 
-<!-- Headline + KPI -->
-<div class="flex items-end justify-between mb-6">
+<!-- Headline + Status -->
+<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
   <div>
     <h1 class="text-2xl font-semibold tracking-tight">Ausschreibungs-Dashboard</h1>
-    <p class="text-sm text-zinc-500 mt-1">
-      Quellen:
-      {% for p in configured_portals %}
-        <span class="pill bg-zinc-100 text-zinc-700">{{ p.name }}</span>
-      {% endfor %}
-    </p>
+    <p class="text-sm text-zinc-500 mt-1">{{ configured_portals|length }} aktive Quellen</p>
+  </div>
+  <div class="flex items-center gap-3 text-sm">
+    {% if is_running %}
+      <span class="pill bg-amber-100 text-amber-800">
+        <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+        Suchlauf aktiv
+      </span>
+    {% endif %}
+    {% if last_run %}
+      <span class="text-zinc-500">
+        Letzter Lauf:
+        {% if last_run.finished_at %}
+          <strong class="text-zinc-700">{{ last_run.finished_at[:16].replace('T',' ') }}</strong>
+          · {{ last_run.new or 0 }} neu, {{ last_run.updated or 0 }} aktualisiert,
+          {{ last_run.errors or 0 }} Fehler
+        {% else %}
+          <em>läuft …</em>
+        {% endif %}
+      </span>
+    {% endif %}
+    {% if next_run %}
+      <span class="text-zinc-500">
+        Nächster: <strong class="text-zinc-700">{{ next_run.strftime('%H:%M') }}</strong>
+      </span>
+    {% endif %}
   </div>
 </div>
+
+<!-- Portal-Status Detail -->
+{% if last_run and last_run.portals %}
+<details class="card mb-6 group">
+  <summary class="cursor-pointer p-4 select-none flex items-center justify-between">
+    <span class="text-sm font-medium">Status pro Quelle (letzter Lauf)</span>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 text-zinc-400 group-open:rotate-180 transition">
+      <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+    </svg>
+  </summary>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 px-4 pb-4">
+    {% for p in last_run.portals %}
+      {% set ok = p.errors == 0 %}
+      <div class="rounded-lg border border-zinc-200 p-3 text-sm bg-zinc-50/50">
+        <div class="flex items-center justify-between">
+          <div class="font-medium truncate" title="{{ p.name }}">{{ p.name }}</div>
+          {% if ok %}
+            <span class="pill bg-emerald-100 text-emerald-800">OK</span>
+          {% else %}
+            <span class="pill bg-rose-100 text-rose-800">Fehler</span>
+          {% endif %}
+        </div>
+        <div class="text-xs text-zinc-500 mt-1">
+          {{ p.fetched or 0 }} Treffer · {{ p.new or 0 }} neu
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
 
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
   <div class="card p-5">

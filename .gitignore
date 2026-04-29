@@ -13,3 +13,4 @@ exports/*.xlsx
 .idea/
 .vscode/
 *.log
+config/*.yaml.bak

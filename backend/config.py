@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     target_regions: str = "Sachsen,Brandenburg,Berlin,Sachsen-Anhalt,Thüringen"
     high_relevance_threshold: int = 70
 
+    # ---- Auth ---------------------------------------------------------
+    admin_username: str = "admin"
+    admin_password: str = "fbe-admin-bitte-aendern"
+    # Wenn leer wird beim Start ein zufaelliger Wert gesetzt (Sessions
+    # ueberleben dann allerdings keinen Restart).
+    session_secret: str = ""
+
     scraper_user_agent: str = (
         "FBE-Ausschreibungsbot/1.0 (+kontakt@fluessigboden-engineering.de)"
     )

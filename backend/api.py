@@ -1,4 +1,4 @@
-"""FastAPI-App: Dashboard, REST, Export."""
+"""FastAPI-App: Dashboard, REST, Export, Auth, Probe."""
 from __future__ import annotations
 
 import logging
@@ -12,21 +12,24 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from .auth import install_auth, verify_credentials
 from .config import PROJECT_ROOT
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
 from .models import Tender, TenderStatus
-from .pipeline import run_pipeline
-from .portal_config import enabled_portals
+from .pipeline import _load_scraper
+from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
 from .scheduler import is_pipeline_running, next_run_time, run_pipeline_with_lock
+from .search_terms import load_search_config
 
 
 log = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
-app = FastAPI(title="FBE Ausschreibungsplattform", version="0.1.0")
+app = FastAPI(title="FBE Ausschreibungsplattform", version="0.2.0")
+install_auth(app)
 
 
 @app.on_event("startup")
@@ -38,6 +41,16 @@ def _startup():
 STATUS_VALUES = [s.value for s in TenderStatus]
 LEVEL_VALUES = ["high", "medium", "low"]
 
+SORT_OPTIONS = {
+    "score_desc": (Tender.relevance_score.desc(), Tender.created_at.desc()),
+    "score_asc":  (Tender.relevance_score.asc(),),
+    "deadline_asc":  (Tender.deadline.asc(), Tender.relevance_score.desc()),
+    "deadline_desc": (Tender.deadline.desc(),),
+    "created_desc":  (Tender.created_at.desc(),),
+    "created_asc":   (Tender.created_at.asc(),),
+    "title_asc":     (Tender.title.asc(),),
+}
+
 
 def _filtered_query(
     db: Session,
@@ -48,6 +61,9 @@ def _filtered_query(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
+    score_min: Optional[float] = None,
+    score_max: Optional[float] = None,
+    quick: Optional[str] = None,
 ):
     query = db.query(Tender)
     if portal:
@@ -58,6 +74,10 @@ def _filtered_query(
         query = query.filter(Tender.status == status)
     if level:
         query = query.filter(Tender.relevance_level == level)
+    if score_min is not None:
+        query = query.filter(Tender.relevance_score >= score_min)
+    if score_max is not None:
+        query = query.filter(Tender.relevance_score <= score_max)
     if deadline_from:
         try:
             query = query.filter(Tender.deadline >= datetime.fromisoformat(deadline_from))
@@ -78,7 +98,57 @@ def _filtered_query(
                 Tender.matched_terms.ilike(like),
             )
         )
+
+    # Quick-Filter (chips) – ueberlagern oben, kombinierbar
+    now = datetime.utcnow()
+    if quick == "high":
+        query = query.filter(Tender.relevance_level == "high")
+    elif quick == "deadline-7":
+        query = query.filter(Tender.deadline >= now, Tender.deadline <= now + timedelta(days=7))
+    elif quick == "deadline-14":
+        query = query.filter(Tender.deadline >= now, Tender.deadline <= now + timedelta(days=14))
+    elif quick == "deadline-30":
+        query = query.filter(Tender.deadline >= now, Tender.deadline <= now + timedelta(days=30))
+    elif quick in STATUS_VALUES:
+        query = query.filter(Tender.status == quick)
+
     return query
+
+
+def _apply_sort(query, sort: Optional[str]):
+    cols = SORT_OPTIONS.get(sort or "score_desc", SORT_OPTIONS["score_desc"])
+    return query.order_by(*cols)
+
+
+# --- Auth Routes ---------------------------------------------------
+@app.get("/login", response_class=HTMLResponse)
+def login_get(request: Request, next: str = "/", error: Optional[str] = None):
+    if request.session.get("user"):
+        return RedirectResponse(next, status_code=303)
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": error})
+
+
+@app.post("/login")
+def login_post(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/"),
+):
+    if verify_credentials(username, password):
+        request.session["user"] = username
+        return RedirectResponse(next or "/", status_code=303)
+    return templates.TemplateResponse(
+        request, "login.html",
+        {"next": next, "error": "Benutzername oder Passwort falsch."},
+        status_code=401,
+    )
+
+
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
 
 
 # --- HTML Routes ----------------------------------------------------
@@ -93,14 +163,20 @@ def index(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
+    score_min: Optional[float] = None,
+    score_max: Optional[float] = None,
+    quick: Optional[str] = None,
+    sort: Optional[str] = "score_desc",
     flash: Optional[str] = None,
     error: Optional[str] = None,
 ):
     query = _filtered_query(
-        db, portal=portal, region=region, status=status, level=level,
+        db,
+        portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
+        score_min=score_min, score_max=score_max, quick=quick,
     )
-    tenders = query.order_by(Tender.relevance_score.desc(), Tender.created_at.desc()).limit(500).all()
+    tenders = _apply_sort(query, sort).limit(500).all()
 
     portals_distinct = [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]]
     regions_distinct = [r[0] for r in db.query(Tender.region).distinct().all() if r[0]]
@@ -142,6 +218,10 @@ def index(
                 "deadline_from": deadline_from or "",
                 "deadline_to": deadline_to or "",
                 "q": q or "",
+                "score_min": score_min if score_min is not None else "",
+                "score_max": score_max if score_max is not None else "",
+                "quick": quick or "",
+                "sort": sort or "score_desc",
             },
             "configured_portals": enabled_portals(),
             "flash": flash,
@@ -149,6 +229,7 @@ def index(
             "last_run": last_run,
             "next_run": next_run,
             "is_running": is_pipeline_running(),
+            "user": request.session.get("user"),
         },
     )
 
@@ -161,7 +242,7 @@ def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request,
         "detail.html",
-        {"tender": tender, "statuses": STATUS_VALUES},
+        {"tender": tender, "statuses": STATUS_VALUES, "user": request.session.get("user")},
     )
 
 
@@ -197,21 +278,11 @@ def quick_status(tender_id: int, status: str = Form(...), db: Session = Depends(
 
 
 @app.post("/run-search", response_class=HTMLResponse)
-def run_search_now(
-    background_tasks: BackgroundTasks,
-    format: Optional[str] = None,
-):
-    """Startet einen Pipeline-Lauf im Hintergrund (Lock verhindert Mehrfachstart).
-
-    Default: 303-Redirect aufs Dashboard mit Hinweis-Banner.
-    Mit ?format=json: synchroner Lauf, Statistik als JSON (fuer curl/API).
-    """
+def run_search_now(background_tasks: BackgroundTasks, format: Optional[str] = None):
     log.info("Manueller Suchlauf via /run-search ausgeloest.")
     if format == "json":
-        # Synchron, fuer Skripte/curl
         stats = run_pipeline_with_lock() or {"info": "Lauf laeuft bereits"}
         return JSONResponse(stats)
-
     if is_pipeline_running():
         return RedirectResponse(
             url="/?flash=Ein Suchlauf läuft bereits – bitte warten.",
@@ -221,6 +292,48 @@ def run_search_now(
     return RedirectResponse(
         url="/?flash=Suche im Hintergrund gestartet. Tabelle aktualisiert sich nach Abschluss.",
         status_code=303,
+    )
+
+
+# --- Admin / Probe --------------------------------------------------
+@app.get("/admin/portals", response_class=HTMLResponse)
+def admin_portals(request: Request):
+    return templates.TemplateResponse(
+        request, "portals.html",
+        {"portals": load_portals(), "user": request.session.get("user")},
+    )
+
+
+@app.get("/admin/probe", response_class=HTMLResponse)
+def admin_probe_get(request: Request, portal: Optional[str] = None):
+    return templates.TemplateResponse(
+        request, "probe.html",
+        {"portals": load_portals(), "selected": portal,
+         "result": None, "user": request.session.get("user")},
+    )
+
+
+@app.post("/admin/probe", response_class=HTMLResponse)
+def admin_probe_post(request: Request, portal: str = Form(...), term: str = Form("Flüssigboden")):
+    chosen = next((p for p in load_portals() if p.name == portal), None)
+    if not chosen:
+        raise HTTPException(404, "Portal nicht gefunden")
+
+    result = {"name": chosen.name, "term": term, "items": [], "error": None, "count": 0}
+    try:
+        ScraperCls = _load_scraper(chosen)
+        with ScraperCls(base_url=chosen.base_url, name=chosen.name, config=chosen.config) as sc:
+            items = sc.fetch([term])
+        result["count"] = len(items)
+        result["items"] = items[:5]
+    except Exception as exc:
+        log.exception("Probe %s fehlgeschlagen: %s", chosen.name, exc)
+        result["error"] = f"{type(exc).__name__}: {exc}"
+
+    return templates.TemplateResponse(
+        request, "probe.html",
+        {"portals": load_portals(), "selected": portal,
+         "result": result, "term": term, "user": request.session.get("user")},
     )
 
 
@@ -235,15 +348,19 @@ def export_csv(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
+    score_min: Optional[float] = None,
+    score_max: Optional[float] = None,
+    quick: Optional[str] = None,
+    sort: Optional[str] = "score_desc",
 ):
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
+        score_min=score_min, score_max=score_max, quick=quick,
     )
-    tenders = query.order_by(Tender.relevance_score.desc()).all()
-    csv_data = to_csv(tenders)
+    tenders = _apply_sort(query, sort).all()
     return Response(
-        content=csv_data,
+        content=to_csv(tenders),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="ausschreibungen.csv"'},
     )
@@ -259,15 +376,19 @@ def export_xlsx(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
+    score_min: Optional[float] = None,
+    score_max: Optional[float] = None,
+    quick: Optional[str] = None,
+    sort: Optional[str] = "score_desc",
 ):
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
+        score_min=score_min, score_max=score_max, quick=quick,
     )
-    tenders = query.order_by(Tender.relevance_score.desc()).all()
-    xlsx = to_xlsx(tenders)
+    tenders = _apply_sort(query, sort).all()
     return Response(
-        content=xlsx,
+        content=to_xlsx(tenders),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="ausschreibungen.xlsx"'},
     )

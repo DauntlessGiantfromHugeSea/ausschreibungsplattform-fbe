@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Portale – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Portale</span>
+</nav>
+
+<div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Konfigurierte Portale</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      Verwaltung aktuell über <code>config/portals.yaml</code>.
+      Hier findest du eine Übersicht inkl. Probe-Link pro Portal.
+    </p>
+  </div>
+  <a href="/admin/probe" class="btn-ghost">→ Portal-Probe</a>
+</div>
+
+<div class="card overflow-hidden">
+  <table class="dashboard">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Name</th>
+        <th>Scraper</th>
+        <th>Strategie</th>
+        <th>Base-URL</th>
+        <th class="text-right pr-4">Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in portals %}
+      <tr>
+        <td>
+          {% if p.enabled %}
+            <span class="pill bg-emerald-100 text-emerald-800">aktiv</span>
+          {% else %}
+            <span class="pill bg-zinc-100 text-zinc-600">inaktiv</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="font-medium">{{ p.name }}</div>
+          {% if p.notes %}<div class="text-xs text-zinc-500 mt-0.5 truncate-2 max-w-md">{{ p.notes }}</div>{% endif %}
+        </td>
+        <td><code class="text-xs">{{ p.scraper }}</code></td>
+        <td><span class="pill bg-zinc-100 text-zinc-700">{{ p.strategy }}</span></td>
+        <td class="text-zinc-700 text-xs">
+          <a href="{{ p.base_url }}" target="_blank" rel="noopener" class="hover:underline">{{ p.base_url }}</a>
+        </td>
+        <td class="text-right">
+          <a href="/admin/probe?portal={{ p.name|urlencode }}" class="btn-ghost btn-sm">Testen</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card p-5 mt-6 text-sm">
+  <h3 class="font-semibold mb-2">Neues Portal hinzufügen</h3>
+  <ol class="list-decimal pl-5 text-zinc-600 space-y-1">
+    <li>Eintrag in <code>config/portals.yaml</code> ergänzen.</li>
+    <li>Bei generic_html: Such-URL und CSS-Selektoren angeben.</li>
+    <li>Bei RSS: <code>feed_urls</code> Liste füllen.</li>
+    <li>Service neu starten: <code>systemctl restart fbe-tender</code>.</li>
+    <li>Hier auf <em>Testen</em> klicken um die Konfig zu verifizieren.</li>
+  </ol>
+</div>
+
+{% endblock %}

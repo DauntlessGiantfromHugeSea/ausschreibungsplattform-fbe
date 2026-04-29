@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-zinc-50">
+<head>
+  <meta charset="UTF-8">
+  <title>Anmelden – FBE Ausschreibungen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] },
+      colors: { brand: { 500:'#3b5b86', 700:'#27406b', 800:'#1f3556' } } } } }
+  </script>
+  <style>body{font-family:Inter,system-ui,sans-serif}</style>
+</head>
+<body class="h-full text-zinc-900 flex items-center justify-center px-4">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-6">
+      <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand-700 text-white text-base font-semibold">FBE</span>
+      <h1 class="mt-3 text-xl font-semibold">Ausschreibungsplattform</h1>
+      <p class="text-sm text-zinc-500">Bitte anmelden</p>
+    </div>
+
+    <form method="post" action="/login" class="bg-white rounded-2xl border border-zinc-200/70 shadow-sm p-6 space-y-4">
+      {% if error %}
+        <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          {{ error }}
+        </div>
+      {% endif %}
+      <input type="hidden" name="next" value="{{ next or '/' }}">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Benutzername</label>
+        <input class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm
+                      shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none"
+               type="text" name="username" autofocus required autocomplete="username">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Passwort</label>
+        <input class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm
+                      shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none"
+               type="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit"
+              class="w-full inline-flex items-center justify-center rounded-lg px-3.5 py-2
+                     text-sm font-medium shadow-sm bg-brand-700 text-white hover:bg-brand-800">
+        Anmelden
+      </button>
+    </form>
+
+    <p class="text-xs text-zinc-400 text-center mt-6">
+      Flüssigboden Engineering · interne Auswertung
+    </p>
+  </div>
+</body>
+</html>

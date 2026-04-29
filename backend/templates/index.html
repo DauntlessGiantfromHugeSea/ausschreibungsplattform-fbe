@@ -19,7 +19,7 @@
     <h1 class="text-2xl font-semibold tracking-tight">Ausschreibungs-Dashboard</h1>
     <p class="text-sm text-zinc-500 mt-1">{{ configured_portals|length }} aktive Quellen</p>
   </div>
-  <div class="flex items-center gap-3 text-sm">
+  <div class="flex flex-wrap items-center gap-3 text-sm">
     {% if is_running %}
       <span class="pill bg-amber-100 text-amber-800">
         <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -31,22 +31,37 @@
         Letzter Lauf:
         {% if last_run.finished_at %}
           <strong class="text-zinc-700">{{ last_run.finished_at[:16].replace('T',' ') }}</strong>
-          · {{ last_run.new or 0 }} neu, {{ last_run.updated or 0 }} aktualisiert,
-          {{ last_run.errors or 0 }} Fehler
-        {% else %}
-          <em>läuft …</em>
-        {% endif %}
+          · {{ last_run.new or 0 }} neu, {{ last_run.errors or 0 }} Fehler
+        {% else %}<em>läuft …</em>{% endif %}
       </span>
     {% endif %}
     {% if next_run %}
-      <span class="text-zinc-500">
-        Nächster: <strong class="text-zinc-700">{{ next_run.strftime('%H:%M') }}</strong>
-      </span>
+      <span class="text-zinc-500">Nächster: <strong class="text-zinc-700">{{ next_run.strftime('%H:%M') }}</strong></span>
     {% endif %}
   </div>
 </div>
 
-<!-- Portal-Status Detail -->
+<!-- KPI -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <a href="/" class="card p-5 hover:shadow-md transition">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Gesamt in DB</div>
+    <div class="mt-1 text-3xl font-semibold">{{ stats.total }}</div>
+  </a>
+  <a href="/?quick=high" class="card p-5 hover:shadow-md transition">
+    <div class="text-xs uppercase tracking-wider text-rose-600">Hochrelevant</div>
+    <div class="mt-1 text-3xl font-semibold text-rose-700">{{ stats.high }}</div>
+  </a>
+  <a href="/?quick=deadline-14" class="card p-5 hover:shadow-md transition">
+    <div class="text-xs uppercase tracking-wider text-amber-600">Frist ≤ 14 Tage</div>
+    <div class="mt-1 text-3xl font-semibold text-amber-700">{{ stats.soon }}</div>
+  </a>
+  <a href="/?status=interessant" class="card p-5 hover:shadow-md transition">
+    <div class="text-xs uppercase tracking-wider text-emerald-600">Als interessant</div>
+    <div class="mt-1 text-3xl font-semibold text-emerald-700">{{ stats.interesting }}</div>
+  </a>
+</div>
+
+<!-- Portal-Status (klappbar) -->
 {% if last_run and last_run.portals %}
 <details class="card mb-6 group">
   <summary class="cursor-pointer p-4 select-none flex items-center justify-between">
@@ -61,14 +76,12 @@
       <div class="rounded-lg border border-zinc-200 p-3 text-sm bg-zinc-50/50">
         <div class="flex items-center justify-between">
           <div class="font-medium truncate" title="{{ p.name }}">{{ p.name }}</div>
-          {% if ok %}
-            <span class="pill bg-emerald-100 text-emerald-800">OK</span>
-          {% else %}
-            <span class="pill bg-rose-100 text-rose-800">Fehler</span>
-          {% endif %}
+          {% if ok %}<span class="pill bg-emerald-100 text-emerald-800">OK</span>
+          {% else %}<span class="pill bg-rose-100 text-rose-800">Fehler</span>{% endif %}
         </div>
         <div class="text-xs text-zinc-500 mt-1">
           {{ p.fetched or 0 }} Treffer · {{ p.new or 0 }} neu
+          · <a href="/admin/probe?portal={{ p.name|urlencode }}" class="text-brand-700 hover:underline">testen</a>
         </div>
       </div>
     {% endfor %}
@@ -76,35 +89,36 @@
 </details>
 {% endif %}
 
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-  <div class="card p-5">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">Gesamt in DB</div>
-    <div class="mt-1 text-3xl font-semibold">{{ stats.total }}</div>
-  </div>
-  <div class="card p-5">
-    <div class="text-xs uppercase tracking-wider text-rose-600">Hochrelevant</div>
-    <div class="mt-1 text-3xl font-semibold text-rose-700">{{ stats.high }}</div>
-  </div>
-  <div class="card p-5">
-    <div class="text-xs uppercase tracking-wider text-amber-600">Frist ≤ 14 Tage</div>
-    <div class="mt-1 text-3xl font-semibold text-amber-700">{{ stats.soon }}</div>
-  </div>
-  <div class="card p-5">
-    <div class="text-xs uppercase tracking-wider text-emerald-600">Als interessant</div>
-    <div class="mt-1 text-3xl font-semibold text-emerald-700">{{ stats.interesting }}</div>
-  </div>
+<!-- Quick-Filter Chips -->
+<div class="flex flex-wrap gap-2 mb-4">
+  {% set q = filters.quick %}
+  <a href="/" class="chip {% if not q and not filters.status %}chip-active{% endif %}">Alle</a>
+  <a href="/?quick=high" class="chip {% if q=='high' %}chip-active{% endif %}">★ Hochrelevant</a>
+  <a href="/?quick=deadline-7"  class="chip {% if q=='deadline-7' %}chip-active{% endif %}">Frist ≤ 7d</a>
+  <a href="/?quick=deadline-14" class="chip {% if q=='deadline-14' %}chip-active{% endif %}">Frist ≤ 14d</a>
+  <a href="/?quick=deadline-30" class="chip {% if q=='deadline-30' %}chip-active{% endif %}">Frist ≤ 30d</a>
+  <span class="w-px bg-zinc-200 mx-1"></span>
+  <a href="/?quick=neu"          class="chip {% if q=='neu' %}chip-active{% endif %}">Neu</a>
+  <a href="/?quick=interessant"  class="chip {% if q=='interessant' %}chip-active{% endif %}">Interessant</a>
+  <a href="/?quick=beworben"     class="chip {% if q=='beworben' %}chip-active{% endif %}">Beworben</a>
+  <a href="/?quick=archiviert"   class="chip {% if q=='archiviert' %}chip-active{% endif %}">Archiviert</a>
 </div>
 
-<!-- Filter -->
-<div class="card p-5 mb-6">
-  <form method="get" class="grid grid-cols-12 gap-3 items-end">
+<!-- Erweiterter Filter -->
+<details class="card mb-6" {% if filters.q or filters.portal or filters.region or filters.score_min != '' or filters.score_max != '' %}open{% endif %}>
+  <summary class="cursor-pointer p-4 select-none flex items-center justify-between">
+    <span class="text-sm font-medium">Erweiterte Filter</span>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 text-zinc-400">
+      <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+    </svg>
+  </summary>
+  <form method="get" class="grid grid-cols-12 gap-3 items-end p-4 pt-0">
     <div class="col-span-12 md:col-span-4">
       <label class="block text-xs font-medium text-zinc-600 mb-1">Volltextsuche</label>
-      <input class="input" type="text" name="q" value="{{ filters.q }}"
-             placeholder="Titel, Beschreibung, Auftraggeber…">
+      <input class="input" type="text" name="q" value="{{ filters.q }}" placeholder="Titel, Beschreibung, Auftraggeber…">
     </div>
-    <div class="col-span-6 md:col-span-2">
-      <label class="block text-xs font-medium text-zinc-600 mb-1">Portal</label>
+    <div class="col-span-6 md:col-span-3">
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Portal / Plattform</label>
       <select class="input" name="portal">
         <option value="">– alle –</option>
         {% for p in portals %}
@@ -121,7 +135,7 @@
         {% endfor %}
       </select>
     </div>
-    <div class="col-span-4 md:col-span-1">
+    <div class="col-span-6 md:col-span-1">
       <label class="block text-xs font-medium text-zinc-600 mb-1">Relevanz</label>
       <select class="input" name="level">
         <option value="">–</option>
@@ -130,7 +144,7 @@
         {% endfor %}
       </select>
     </div>
-    <div class="col-span-8 md:col-span-3">
+    <div class="col-span-6 md:col-span-2">
       <label class="block text-xs font-medium text-zinc-600 mb-1">Status</label>
       <select class="input" name="status">
         <option value="">– alle –</option>
@@ -138,6 +152,15 @@
           <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
+    </div>
+
+    <div class="col-span-6 md:col-span-2">
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Score min</label>
+      <input class="input" type="number" min="0" max="100" step="1" name="score_min" value="{{ filters.score_min }}">
+    </div>
+    <div class="col-span-6 md:col-span-2">
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Score max</label>
+      <input class="input" type="number" min="0" max="100" step="1" name="score_max" value="{{ filters.score_max }}">
     </div>
     <div class="col-span-6 md:col-span-2">
       <label class="block text-xs font-medium text-zinc-600 mb-1">Frist von</label>
@@ -147,6 +170,19 @@
       <label class="block text-xs font-medium text-zinc-600 mb-1">bis</label>
       <input class="input" type="date" name="deadline_to" value="{{ filters.deadline_to }}">
     </div>
+    <div class="col-span-12 md:col-span-4">
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Sortierung</label>
+      <select class="input" name="sort">
+        <option value="score_desc"    {% if filters.sort=='score_desc' %}selected{% endif %}>Relevanz – höchste zuerst</option>
+        <option value="score_asc"     {% if filters.sort=='score_asc' %}selected{% endif %}>Relevanz – niedrigste zuerst</option>
+        <option value="deadline_asc"  {% if filters.sort=='deadline_asc' %}selected{% endif %}>Frist – nächste zuerst</option>
+        <option value="deadline_desc" {% if filters.sort=='deadline_desc' %}selected{% endif %}>Frist – späteste zuerst</option>
+        <option value="created_desc"  {% if filters.sort=='created_desc' %}selected{% endif %}>Neu zuerst</option>
+        <option value="created_asc"   {% if filters.sort=='created_asc' %}selected{% endif %}>Älteste zuerst</option>
+        <option value="title_asc"     {% if filters.sort=='title_asc' %}selected{% endif %}>Titel A–Z</option>
+      </select>
+    </div>
+
     <div class="col-span-12 flex flex-wrap gap-2 items-center pt-1">
       <button type="submit" class="btn-primary">Filtern</button>
       <a href="/" class="btn-ghost">Zurücksetzen</a>
@@ -156,7 +192,7 @@
       </span>
     </div>
   </form>
-</div>
+</details>
 
 <!-- Tabelle -->
 <div class="card overflow-hidden">
@@ -164,12 +200,12 @@
     <table class="dashboard">
       <thead>
         <tr>
-          <th style="min-width: 90px">Score</th>
-          <th>Ausschreibung</th>
+          <th><a href="?{{ request.url.query|replace('sort=','sort_=') }}{% if request.url.query %}&{% endif %}sort=score_desc">Score</a></th>
+          <th><a href="?{{ request.url.query|replace('sort=','sort_=') }}{% if request.url.query %}&{% endif %}sort=title_asc">Ausschreibung</a></th>
           <th>Portal</th>
           <th>Auftraggeber</th>
           <th>Region</th>
-          <th>Frist</th>
+          <th><a href="?{{ request.url.query|replace('sort=','sort_=') }}{% if request.url.query %}&{% endif %}sort=deadline_asc">Frist ↑</a></th>
           <th>Status</th>
           <th class="text-right pr-4">Aktion</th>
         </tr>
@@ -179,13 +215,11 @@
         <tr>
           <td>
             {% set lvl = t.relevance_level %}
-            {% set color =
-              'rose' if lvl == 'high'
-              else ('amber' if lvl == 'medium' else 'zinc') %}
+            {% set color = 'rose' if lvl=='high' else ('amber' if lvl=='medium' else 'zinc') %}
             <div class="flex flex-col gap-1.5">
               <span class="pill bg-{{ color }}-100 text-{{ color }}-800">
                 <span class="h-1.5 w-1.5 rounded-full bg-{{ color }}-500"></span>
-                {{ '%.0f' % t.relevance_score }} · {{ lvl }}
+                {{ '%.0f' % t.relevance_score }}
               </span>
               <div class="relevance-bar w-20">
                 <div class="h-full bg-{{ color }}-500" style="width: {{ t.relevance_score|round|int }}%"></div>
@@ -193,67 +227,47 @@
             </div>
           </td>
           <td class="max-w-[420px]">
-            <a href="/tender/{{ t.id }}" class="font-medium text-zinc-900 hover:text-brand-700">
-              {{ t.title }}
-            </a>
+            <a href="/tender/{{ t.id }}" class="font-medium text-zinc-900 hover:text-brand-700">{{ t.title }}</a>
             {% if t.matched_terms %}
               <div class="text-xs text-zinc-500 mt-0.5 truncate-2">{{ t.matched_terms }}</div>
             {% endif %}
           </td>
-          <td><span class="pill bg-zinc-100 text-zinc-700">{{ t.portal }}</span></td>
+          <td><a href="/?portal={{ t.portal|urlencode }}" class="pill bg-zinc-100 text-zinc-700 hover:bg-zinc-200">{{ t.portal }}</a></td>
           <td class="text-zinc-700">{{ t.contracting_authority or '—' }}</td>
-          <td class="text-zinc-700">{{ t.region or t.location or '—' }}</td>
+          <td class="text-zinc-700">
+            {% if t.region %}<a class="hover:underline" href="/?region={{ t.region|urlencode }}">{{ t.region }}</a>
+            {% else %}{{ t.location or '—' }}{% endif %}
+          </td>
           <td class="text-zinc-700 whitespace-nowrap">
-            {% if t.deadline %}
-              {{ t.deadline.strftime('%d.%m.%Y') }}
-            {% else %}—{% endif %}
+            {% if t.deadline %}{{ t.deadline.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
           </td>
           <td>
-            {% set sc =
-              'emerald' if t.status == 'interessant'
-              else ('zinc' if t.status == 'archiviert'
-              else ('rose' if t.status == 'uninteressant'
-              else ('blue' if t.status == 'beworben'
-              else ('amber' if t.status == 'geprüft' else 'brand')))) %}
+            {% set sc = 'emerald' if t.status=='interessant'
+                  else ('zinc' if t.status=='archiviert'
+                  else ('rose' if t.status=='uninteressant'
+                  else ('blue' if t.status=='beworben'
+                  else ('amber' if t.status=='geprüft' else 'brand')))) %}
             <span class="pill bg-{{ sc }}-100 text-{{ sc }}-800">{{ t.status }}</span>
           </td>
           <td class="text-right">
             <div class="inline-flex gap-1.5">
               <form method="post" action="/tender/{{ t.id }}/quick-status">
                 <input type="hidden" name="status" value="interessant">
-                <button class="btn-icon hover:!text-emerald-600 hover:!border-emerald-300" title="Als interessant markieren">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-                    <path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.83-4.4Z" clip-rule="evenodd" />
-                  </svg>
-                </button>
+                <button class="btn-icon hover:!text-emerald-600 hover:!border-emerald-300" title="Als interessant markieren">★</button>
               </form>
               <form method="post" action="/tender/{{ t.id }}/quick-status">
                 <input type="hidden" name="status" value="archiviert">
-                <button class="btn-icon hover:!text-zinc-700" title="Archivieren">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-                    <path d="M3.375 3a1.875 1.875 0 0 0 0 3.75h13.25a1.875 1.875 0 0 0 0-3.75H3.375Z" />
-                    <path fill-rule="evenodd" d="M3.087 7.5h13.826l-.673 7.046a3 3 0 0 1-2.985 2.704H6.745a3 3 0 0 1-2.985-2.704L3.087 7.5ZM7.5 10a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5h-3.5A.75.75 0 0 1 7.5 10Z" clip-rule="evenodd" />
-                  </svg>
-                </button>
+                <button class="btn-icon" title="Archivieren">📦</button>
               </form>
-              <a href="{{ t.url }}" target="_blank" rel="noopener" class="btn-icon" title="Original-Seite öffnen">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-                  <path d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z" />
-                  <path d="M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z" />
-                </svg>
-              </a>
+              <a href="{{ t.url }}" target="_blank" rel="noopener" class="btn-icon" title="Original-Seite öffnen">↗</a>
             </div>
           </td>
         </tr>
         {% else %}
         <tr><td colspan="8" class="text-center py-16">
-          <div class="mx-auto h-12 w-12 rounded-full bg-zinc-100 flex items-center justify-center mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-6 w-6 text-zinc-400">
-              <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.42 9.79l3.65 3.66a.75.75 0 1 0 1.06-1.06l-3.65-3.66A5.5 5.5 0 0 0 9 3.5Z" clip-rule="evenodd" />
-            </svg>
-          </div>
-          <div class="text-zinc-700 font-medium">Noch keine Ausschreibungen</div>
-          <div class="text-sm text-zinc-500 mt-1">Klicke oben auf <strong>„Suche starten"</strong> oder warte auf den nächsten geplanten Lauf.</div>
+          <div class="mx-auto h-12 w-12 rounded-full bg-zinc-100 flex items-center justify-center mb-3">🔍</div>
+          <div class="text-zinc-700 font-medium">Keine Treffer für die aktuellen Filter</div>
+          <div class="text-sm text-zinc-500 mt-1"><a class="text-brand-700 hover:underline" href="/">Filter zurücksetzen</a> oder oben „Suche starten" klicken.</div>
         </td></tr>
         {% endfor %}
       </tbody>

@@ -2,6 +2,13 @@
 {% block title %}Dashboard – FBE Ausschreibungen{% endblock %}
 {% block content %}
 
+{% if flash %}
+  <div class="alert alert-success py-2">{{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="alert alert-danger py-2">Fehler: {{ error }}</div>
+{% endif %}
+
 <div class="card mb-4 shadow-sm">
   <div class="card-body">
     <form method="get" class="row g-2 align-items-end">
@@ -121,7 +128,7 @@
     </div>
   </div>
   <div class="card-footer small text-muted">
-    {{ tenders|length }} Treffer · konfigurierte Quellen:
+    {{ tenders|length }} angezeigt · {{ total_count }} insgesamt in Datenbank · konfigurierte Quellen:
     {% for p in configured_portals %}<span class="badge bg-light text-dark">{{ p.name }}</span> {% endfor %}
   </div>
 </div>

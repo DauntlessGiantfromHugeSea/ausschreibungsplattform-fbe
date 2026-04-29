@@ -91,6 +91,8 @@ def index(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
 ):
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
@@ -100,12 +102,14 @@ def index(
 
     portals_distinct = [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]]
     regions_distinct = [r[0] for r in db.query(Tender.region).distinct().all() if r[0]]
+    total_count = db.query(Tender).count()
 
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "tenders": tenders,
+            "total_count": total_count,
             "portals": portals_distinct,
             "regions": regions_distinct,
             "statuses": STATUS_VALUES,
@@ -120,13 +124,15 @@ def index(
                 "q": q or "",
             },
             "configured_portals": enabled_portals(),
+            "flash": flash,
+            "error": error,
         },
     )
 
 
 @app.get("/tender/{tender_id}", response_class=HTMLResponse)
 def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
-    tender = db.query(Tender).get(tender_id)
+    tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "Ausschreibung nicht gefunden")
     return templates.TemplateResponse(
@@ -142,7 +148,7 @@ def set_status(
     notes: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
-    tender = db.query(Tender).get(tender_id)
+    tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "Ausschreibung nicht gefunden")
     if status not in STATUS_VALUES:
@@ -156,7 +162,7 @@ def set_status(
 
 @app.post("/tender/{tender_id}/quick-status")
 def quick_status(tender_id: int, status: str = Form(...), db: Session = Depends(get_db)):
-    tender = db.query(Tender).get(tender_id)
+    tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "nicht gefunden")
     if status not in STATUS_VALUES:
@@ -166,12 +172,26 @@ def quick_status(tender_id: int, status: str = Form(...), db: Session = Depends(
     return RedirectResponse(url="/", status_code=303)
 
 
-@app.post("/run-search")
-def run_search_now():
-    """Startet einen Pipeline-Lauf synchron (MVP). Liefert Statistik."""
+@app.post("/run-search", response_class=HTMLResponse)
+def run_search_now(request: Request, format: Optional[str] = None):
+    """Startet einen Pipeline-Lauf synchron. Default: HTML-Redirect mit Banner.
+    Mit ?format=json: liefert die Statistik als JSON (fuer curl/API).
+    """
     log.info("Manueller Suchlauf via /run-search ausgeloest.")
-    stats = run_pipeline()
-    return JSONResponse(stats)
+    try:
+        stats = run_pipeline()
+    except Exception as exc:
+        log.exception("Pipeline-Lauf fehlgeschlagen: %s", exc)
+        if format == "json":
+            return JSONResponse({"error": str(exc)}, status_code=500)
+        return RedirectResponse(url=f"/?error={str(exc)[:200]}", status_code=303)
+    if format == "json":
+        return JSONResponse(stats)
+    msg = (
+        f"Suche abgeschlossen: {stats['new']} neu, "
+        f"{stats['updated']} aktualisiert, {stats['errors']} Fehler."
+    )
+    return RedirectResponse(url=f"/?flash={msg}", status_code=303)
 
 
 # --- Export ---------------------------------------------------------

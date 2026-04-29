@@ -22,6 +22,11 @@ class PortalConfig:
     base_url: str
     strategy: str
     notes: str = ""
+    config: dict = None  # type: ignore[assignment]
+
+    def __post_init__(self):
+        if self.config is None:
+            self.config = {}
 
 
 @lru_cache(maxsize=1)
@@ -37,6 +42,7 @@ def load_portals(path: Path | None = None) -> List[PortalConfig]:
             base_url=item.get("base_url", ""),
             strategy=item.get("strategy", "scrape"),
             notes=item.get("notes", ""),
+            config=item.get("config", {}) or {},
         )
         for item in raw.get("portals", [])
     ]

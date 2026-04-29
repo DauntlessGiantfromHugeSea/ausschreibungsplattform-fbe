@@ -6,9 +6,17 @@
 #   search_url  - serverseitig gerendertes HTML-Suchformular
 #   scrape      - generisches HTML-Scraping
 #
-# scraper: Modulname unter scrapers/ (ohne .py)
+# scraper: Modulname unter scrapers/ (ohne .py).
+#   Konvention: 'rss_generic' -> Klasse RssGenericScraper.
+#
+# config: pro-Portal-Optionen (Suchpfad, Selektoren, Feed-URLs ...)
 
 portals:
+
+  # =========================================================
+  # Aktive Quellen (laufen bei jedem Suchlauf)
+  # =========================================================
+
   - name: "bund.de Service-Portal"
     enabled: true
     scraper: "bund"
@@ -23,7 +31,60 @@ portals:
     strategy: "api"
     notes: "Offizielle TED Search API v3. Volltextsuche + CPV-Filter."
 
-  # Beispiele fuer kuenftige Quellen (deaktiviert):
+  # =========================================================
+  # Generische Beispiele - URL/Selektoren ggf. anpassen, dann
+  # 'enabled: true' setzen.
+  # =========================================================
+
+  - name: "bi-medien Bauausschreibungen (RSS)"
+    enabled: false
+    scraper: "rss_generic"
+    base_url: "https://www.bi-medien.de"
+    strategy: "rss"
+    notes: "Beispiel-Konfig: feed_urls auf bestehenden Feed setzen, dann aktivieren."
+    config:
+      feed_urls:
+        - "https://www.bi-medien.de/feeds/ausschreibungen.xml"
+      filter_by_terms: true
+      max_items_per_feed: 200
+
+  - name: "Vergabeplattform NRW"
+    enabled: false
+    scraper: "generic_html"
+    base_url: "https://www.evergabe.nrw.de"
+    strategy: "search_url"
+    notes: |
+      Beispiel-Konfig fuer die NRW-Vergabe. Selektoren ggf. an aktuelles
+      DOM anpassen (Browser-Devtools auf der Suchergebnis-Seite oeffnen,
+      passenden CSS-Pfad uebernehmen).
+    config:
+      search_path: "/VMPCenter/notice/search?query={term}"
+      result_selector: "div.notice-result, li.search-hit"
+      title_selector: "a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+      publication_selector: ".published, .veroeffentlicht"
+      description_selector: ".excerpt, .beschreibung"
+
+  - name: "Sachsen Vergabeplattform"
+    enabled: false
+    scraper: "generic_html"
+    base_url: "https://www.evergabe.sachsen.de"
+    strategy: "search_url"
+    notes: "Beispiel-Konfig - vor Aktivierung Selektoren pruefen."
+    config:
+      search_path: "/NetServer/PublicationSearchControllerServlet?function=SearchAndCount&searchTerm={term}"
+      result_selector: "tr.publication-row"
+      title_selector: "a.publication-title"
+      authority_selector: "td.buyer"
+      location_selector: "td.place"
+      deadline_selector: "td.deadline"
+
+  # =========================================================
+  # Quellen, die spaeter Spezial-Scraper brauchen (Stub)
+  # =========================================================
+
   - name: "Deutsche eVergabe"
     enabled: false
     scraper: "deutsche_evergabe"

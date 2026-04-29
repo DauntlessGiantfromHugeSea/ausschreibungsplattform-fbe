@@ -21,19 +21,21 @@ log = logging.getLogger(__name__)
 
 
 def _load_scraper(portal: PortalConfig):
-    """Laedt scrapers/<portal.scraper>.py und liefert die Scraper-Klasse."""
+    """Laedt scrapers/<portal.scraper>.py und liefert die Scraper-Klasse.
+
+    Konvention: 'rss_generic' -> 'RssGenericScraper', 'bund' -> 'BundScraper'.
+    """
     module = importlib.import_module(f"scrapers.{portal.scraper}")
-    # Konvention: Klassenname ist <Capitalized>Scraper
-    class_name = f"{portal.scraper.capitalize()}Scraper"
-    if not hasattr(module, class_name):
-        # Fallback: erste BaseScraper-Subklasse im Modul.
-        from scrapers.base import BaseScraper
-        for attr in dir(module):
-            obj = getattr(module, attr)
-            if isinstance(obj, type) and issubclass(obj, BaseScraper) and obj is not BaseScraper:
-                return obj
-        raise ImportError(f"Keine Scraper-Klasse in {module.__name__} gefunden")
-    return getattr(module, class_name)
+    class_name = "".join(p.capitalize() for p in portal.scraper.split("_")) + "Scraper"
+    if hasattr(module, class_name):
+        return getattr(module, class_name)
+    # Fallback: erste BaseScraper-Subklasse im Modul.
+    from scrapers.base import BaseScraper
+    for attr in dir(module):
+        obj = getattr(module, attr)
+        if isinstance(obj, type) and issubclass(obj, BaseScraper) and obj is not BaseScraper:
+            return obj
+    raise ImportError(f"Keine Scraper-Klasse in {module.__name__} gefunden")
 
 
 def run_pipeline() -> dict:
@@ -54,7 +56,7 @@ def run_pipeline() -> dict:
             continue
 
         try:
-            with ScraperCls(base_url=portal.base_url, name=portal.name) as scraper:
+            with ScraperCls(base_url=portal.base_url, name=portal.name, config=portal.config) as scraper:
                 items = scraper.fetch(cfg.query_terms)
         except Exception as exc:
             log.exception("Scraper %s fehlgeschlagen: %s", portal.name, exc)

@@ -230,12 +230,64 @@ bund.de, JSON-Fixture für TED).
 
 ## Erweiterung
 
-Neuen Scraper anlegen:
+### Neue Quelle ohne Code anbinden – generische Scraper
+
+Es gibt zwei generische Scraper, die alleine über YAML konfiguriert
+werden:
+
+#### a) `rss_generic` – beliebige RSS-/Atom-Feeds
+
+```yaml
+- name: "bi-medien Bauausschreibungen"
+  enabled: true
+  scraper: "rss_generic"
+  base_url: "https://www.bi-medien.de"
+  strategy: "rss"
+  config:
+    feed_urls:
+      - "https://www.bi-medien.de/feeds/ausschreibungen.xml"
+      - "https://www.bi-medien.de/feeds/tiefbau.xml"
+    filter_by_terms: true        # nur Items, die einen query_term enthalten
+    max_items_per_feed: 200
+```
+
+#### b) `generic_html` – CSS-Selektoren auf Such-URL
+
+```yaml
+- name: "Vergabeplattform XY"
+  enabled: true
+  scraper: "generic_html"
+  base_url: "https://vergabe.example.de"
+  strategy: "search_url"
+  config:
+    search_path: "/suche?q={term}"
+    result_selector: "li.result"
+    title_selector: "a.title"
+    authority_selector: ".buyer"
+    location_selector: ".place"
+    deadline_selector: ".deadline"
+    publication_selector: ".published"
+    description_selector: ".excerpt"
+```
+
+So findet man die richtigen Selektoren:
+1. Suchergebnis-Seite im Browser öffnen.
+2. Devtools (F12) → Rechtsklick auf einen Treffer → „Element untersuchen".
+3. Die umgebende `<div>` / `<li>` ist der `result_selector`.
+4. Im selben Block die einzelnen Felder anklicken und CSS-Pfad notieren.
+
+### Eigener Scraper in Python
+
+Wenn die generischen Scraper nicht reichen (Login, JS, Captcha):
 
 1. `scrapers/<portal>.py` mit Klasse `class FoobarScraper(BaseScraper)` und
    Methode `fetch(self, terms: list[str]) -> list[TenderItem]`.
-2. Eintrag in `config/portals.yaml` ergänzen (`scraper: foobar`).
+2. Eintrag in `config/portals.yaml` ergänzen (`scraper: foobar`,
+   `enabled: true`).
 3. Pipeline lädt das Modul automatisch (`importlib`).
+
+Klassenname-Konvention: `snake_case` → `CamelCase` + `Scraper`,
+also `rss_generic` → `RssGenericScraper`.
 
 Lizenz / robots.txt: Jeder Scraper berücksichtigt `robots.txt` und einen
 konfigurierbaren `User-Agent`. Vor produktivem Einsatz die AGB der jeweiligen

@@ -38,10 +38,12 @@ class BaseScraper:
 
     name: str = "base"
 
-    def __init__(self, base_url: str, name: str | None = None):
+    def __init__(self, base_url: str, name: str | None = None, config: dict | None = None):
         self.base_url = base_url.rstrip("/")
         if name:
             self.name = name
+        # Pro-Portal-Konfig (z.B. search_url, selectors, feed_urls).
+        self.config = config or {}
         # HTTP-Header muessen ASCII sein – nicht-ASCII Zeichen (z.B. Umlaute)
         # rauswerfen, statt UnicodeEncodeError beim Client-Init zu provozieren.
         ua = settings.scraper_user_agent.encode("ascii", "ignore").decode("ascii") \

@@ -119,9 +119,9 @@ def index(
     }
 
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "tenders": tenders,
             "total_count": total_count,
             "stats": stats,
@@ -151,8 +151,9 @@ def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
     if not tender:
         raise HTTPException(404, "Ausschreibung nicht gefunden")
     return templates.TemplateResponse(
+        request,
         "detail.html",
-        {"request": request, "tender": tender, "statuses": STATUS_VALUES},
+        {"tender": tender, "statuses": STATUS_VALUES},
     )
 
 

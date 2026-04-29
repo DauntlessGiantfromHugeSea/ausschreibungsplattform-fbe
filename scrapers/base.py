@@ -42,8 +42,12 @@ class BaseScraper:
         self.base_url = base_url.rstrip("/")
         if name:
             self.name = name
+        # HTTP-Header muessen ASCII sein – nicht-ASCII Zeichen (z.B. Umlaute)
+        # rauswerfen, statt UnicodeEncodeError beim Client-Init zu provozieren.
+        ua = settings.scraper_user_agent.encode("ascii", "ignore").decode("ascii") \
+            or "FBE-Ausschreibungsbot/1.0"
         self._client = httpx.Client(
-            headers={"User-Agent": settings.scraper_user_agent},
+            headers={"User-Agent": ua},
             timeout=settings.http_timeout,
             follow_redirects=True,
         )

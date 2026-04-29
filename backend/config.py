@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     high_relevance_threshold: int = 70
 
     scraper_user_agent: str = (
-        "FBE-Ausschreibungsbot/1.0 (+kontakt@flüssigboden-engineering.de)"
+        "FBE-Ausschreibungsbot/1.0 (+kontakt@fluessigboden-engineering.de)"
     )
     http_timeout: int = 30
 

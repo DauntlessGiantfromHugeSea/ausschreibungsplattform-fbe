@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -103,6 +103,20 @@ def index(
     portals_distinct = [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]]
     regions_distinct = [r[0] for r in db.query(Tender.region).distinct().all() if r[0]]
     total_count = db.query(Tender).count()
+    high_count = db.query(Tender).filter(Tender.relevance_level == "high").count()
+    interesting_count = db.query(Tender).filter(Tender.status == TenderStatus.INTERESSANT.value).count()
+    soon_count = (
+        db.query(Tender)
+        .filter(Tender.deadline >= datetime.utcnow())
+        .filter(Tender.deadline <= datetime.utcnow() + timedelta(days=14))
+        .count()
+    )
+    stats = {
+        "total": total_count,
+        "high": high_count,
+        "interesting": interesting_count,
+        "soon": soon_count,
+    }
 
     return templates.TemplateResponse(
         "index.html",
@@ -110,6 +124,7 @@ def index(
             "request": request,
             "tenders": tenders,
             "total_count": total_count,
+            "stats": stats,
             "portals": portals_distinct,
             "regions": regions_distinct,
             "statuses": STATUS_VALUES,

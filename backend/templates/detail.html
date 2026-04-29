@@ -2,70 +2,150 @@
 {% block title %}{{ tender.title }} – FBE Ausschreibungen{% endblock %}
 {% block content %}
 
-<div class="mb-3">
-  <a href="/" class="btn btn-sm btn-outline-secondary">← zurück zum Dashboard</a>
-</div>
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Ausschreibung #{{ tender.id }}</span>
+</nav>
 
-<div class="card shadow-sm mb-3">
-  <div class="card-body">
-    <div class="d-flex justify-content-between align-items-start">
-      <div>
-        <h3 class="mb-1">{{ tender.title }}</h3>
-        <div class="text-muted">
-          <span class="badge bg-light text-dark">{{ tender.portal }}</span>
-          {% if tender.contracting_authority %} · {{ tender.contracting_authority }}{% endif %}
-          {% if tender.region %} · {{ tender.region }}{% endif %}
+{% set lvl = tender.relevance_level %}
+{% set color =
+  'rose' if lvl == 'high'
+  else ('amber' if lvl == 'medium' else 'zinc') %}
+
+<div class="grid grid-cols-12 gap-6">
+
+  <!-- Hauptbereich -->
+  <div class="col-span-12 lg:col-span-8 space-y-6">
+
+    <div class="card p-6">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="pill bg-zinc-100 text-zinc-700">{{ tender.portal }}</span>
+            <span class="pill bg-{{ color }}-100 text-{{ color }}-800">
+              <span class="h-1.5 w-1.5 rounded-full bg-{{ color }}-500"></span>
+              Score {{ '%.0f' % tender.relevance_score }} · {{ lvl }}
+            </span>
+          </div>
+          <h1 class="text-xl font-semibold tracking-tight leading-snug">{{ tender.title }}</h1>
+        </div>
+        <a href="{{ tender.url }}" target="_blank" rel="noopener" class="btn-ghost shrink-0">
+          Original
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+            <path d="M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z" />
+          </svg>
+        </a>
+      </div>
+
+      {% if tender.description %}
+      <div class="mt-5 pt-5 border-t border-zinc-100">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Beschreibung</h3>
+        <p class="text-sm leading-relaxed text-zinc-700 whitespace-pre-line">{{ tender.description }}</p>
+      </div>
+      {% endif %}
+
+      {% if tender.matched_terms %}
+      <div class="mt-5 pt-5 border-t border-zinc-100">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Gefundene Suchbegriffe</h3>
+        <div class="flex flex-wrap gap-1.5">
+          {% for term in tender.matched_terms.split(';') %}
+            {% set t = term.strip() %}
+            {% if t %}
+              <span class="pill bg-brand-50 text-brand-700 border border-brand-100">{{ t }}</span>
+            {% endif %}
+          {% endfor %}
         </div>
       </div>
-      <div class="text-end">
-        <span class="relevance-dot dot-{{ tender.relevance_level }}"></span>
-        <span class="badge badge-{{ tender.relevance_level }} fs-6">
-          Score {{ '%.0f' % tender.relevance_score }} – {{ tender.relevance_level }}
-        </span>
-      </div>
+      {% endif %}
     </div>
 
-    <hr>
-
-    <div class="row">
-      <div class="col-md-6">
-        <dl class="row small mb-0">
-          <dt class="col-4">Ort</dt>          <dd class="col-8">{{ tender.location or '—' }}</dd>
-          <dt class="col-4">Veröffentlicht</dt> <dd class="col-8">{{ tender.publication_date.strftime('%d.%m.%Y') if tender.publication_date else '—' }}</dd>
-          <dt class="col-4">Frist</dt>        <dd class="col-8">{{ tender.deadline.strftime('%d.%m.%Y') if tender.deadline else '—' }}</dd>
-          <dt class="col-4">CPV-Codes</dt>    <dd class="col-8">{{ tender.cpv_codes or '—' }}</dd>
-          <dt class="col-4">Treffer</dt>      <dd class="col-8">{{ tender.matched_terms or '—' }}</dd>
-          <dt class="col-4">Link</dt>         <dd class="col-8"><a href="{{ tender.url }}" target="_blank" rel="noopener">{{ tender.url }}</a></dd>
-        </dl>
-      </div>
-      <div class="col-md-6">
-        <h6>Beschreibung</h6>
-        <p class="small">{{ tender.description or '—' }}</p>
-      </div>
+    <!-- Status-/Notiz-Form -->
+    <div class="card p-6">
+      <h3 class="text-base font-semibold mb-4">Bewerten</h3>
+      <form method="post" action="/tender/{{ tender.id }}/status" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-zinc-600 mb-1">Status</label>
+          <select class="input max-w-xs" name="status">
+            {% for s in statuses %}
+              <option value="{{ s }}" {% if tender.status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-600 mb-1">Notizen</label>
+          <textarea class="input min-h-[120px]" name="notes" placeholder="Interne Notizen, Ansprechpartner, Bewertung…">{{ tender.notes or '' }}</textarea>
+        </div>
+        <div class="flex gap-2">
+          <button type="submit" class="btn-primary">Speichern</button>
+          <a href="/" class="btn-ghost">Abbrechen</a>
+        </div>
+      </form>
     </div>
   </div>
-</div>
 
-<div class="card shadow-sm">
-  <div class="card-body">
-    <form method="post" action="/tender/{{ tender.id }}/status" class="row g-2">
-      <div class="col-md-3">
-        <label class="form-label small text-muted">Status</label>
-        <select class="form-select form-select-sm" name="status">
-          {% for s in statuses %}
-            <option value="{{ s }}" {% if tender.status == s %}selected{% endif %}>{{ s }}</option>
-          {% endfor %}
-        </select>
+  <!-- Seitenleiste -->
+  <aside class="col-span-12 lg:col-span-4 space-y-6">
+    <div class="card p-6">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Eckdaten</h3>
+      <dl class="space-y-3 text-sm">
+        <div class="flex justify-between gap-4">
+          <dt class="text-zinc-500">Auftraggeber</dt>
+          <dd class="text-zinc-900 text-right">{{ tender.contracting_authority or '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="text-zinc-500">Ort</dt>
+          <dd class="text-zinc-900 text-right">{{ tender.location or '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="text-zinc-500">Bundesland</dt>
+          <dd class="text-zinc-900 text-right">{{ tender.region or '—' }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="text-zinc-500">Veröffentlicht</dt>
+          <dd class="text-zinc-900 text-right">
+            {% if tender.publication_date %}{{ tender.publication_date.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+          </dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="text-zinc-500">Frist</dt>
+          <dd class="text-zinc-900 text-right">
+            {% if tender.deadline %}<strong>{{ tender.deadline.strftime('%d.%m.%Y') }}</strong>{% else %}—{% endif %}
+          </dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="text-zinc-500">CPV-Codes</dt>
+          <dd class="text-zinc-900 text-right text-xs">{{ tender.cpv_codes or '—' }}</dd>
+        </div>
+        <div class="pt-2 border-t border-zinc-100">
+          <dt class="text-zinc-500 mb-1 text-xs">Link</dt>
+          <dd>
+            <a href="{{ tender.url }}" target="_blank" rel="noopener" class="text-brand-700 hover:text-brand-800 text-xs break-all">
+              {{ tender.url }}
+            </a>
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="card p-6">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Schnellaktionen</h3>
+      <div class="space-y-2">
+        <form method="post" action="/tender/{{ tender.id }}/quick-status">
+          <input type="hidden" name="status" value="interessant">
+          <button class="btn-ghost w-full justify-start hover:!text-emerald-700 hover:!border-emerald-300">★ Als interessant markieren</button>
+        </form>
+        <form method="post" action="/tender/{{ tender.id }}/quick-status">
+          <input type="hidden" name="status" value="beworben">
+          <button class="btn-ghost w-full justify-start hover:!text-blue-700 hover:!border-blue-300">✓ Als beworben markieren</button>
+        </form>
+        <form method="post" action="/tender/{{ tender.id }}/quick-status">
+          <input type="hidden" name="status" value="archiviert">
+          <button class="btn-ghost w-full justify-start hover:!text-zinc-900">📦 Archivieren</button>
+        </form>
       </div>
-      <div class="col-md-9">
-        <label class="form-label small text-muted">Notizen</label>
-        <textarea class="form-control form-control-sm" name="notes" rows="3">{{ tender.notes or '' }}</textarea>
-      </div>
-      <div class="col-12">
-        <button class="btn btn-primary btn-sm" type="submit">Speichern</button>
-      </div>
-    </form>
-  </div>
+    </div>
+  </aside>
 </div>
 
 {% endblock %}

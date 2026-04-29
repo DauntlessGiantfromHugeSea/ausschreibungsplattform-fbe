@@ -1,0 +1,44 @@
+"""Zentrale Settings, geladen aus .env / Environment-Variablen."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(PROJECT_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    database_url: str = f"sqlite:///{PROJECT_ROOT / 'data' / 'tenders.db'}"
+    scheduler_hour: int = 7
+    scheduler_minute: int = 0
+
+    notify_email: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "ausschreibungsbot@example.com"
+
+    target_regions: str = "Sachsen,Brandenburg,Berlin,Sachsen-Anhalt,Thüringen"
+    high_relevance_threshold: int = 70
+
+    scraper_user_agent: str = (
+        "FBE-Ausschreibungsbot/1.0 (+kontakt@flüssigboden-engineering.de)"
+    )
+    http_timeout: int = 30
+
+    @property
+    def regions_list(self) -> List[str]:
+        return [r.strip() for r in self.target_regions.split(",") if r.strip()]
+
+
+settings = Settings()

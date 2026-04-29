@@ -1,0 +1,39 @@
+# Konfigurierte Ausschreibungsportale.
+#
+# strategy:
+#   api         - offizielle JSON/REST API
+#   rss         - RSS-Feed
+#   search_url  - serverseitig gerendertes HTML-Suchformular
+#   scrape      - generisches HTML-Scraping
+#
+# scraper: Modulname unter scrapers/ (ohne .py)
+
+portals:
+  - name: "bund.de Service-Portal"
+    enabled: true
+    scraper: "bund"
+    base_url: "https://www.service.bund.de"
+    strategy: "search_url"
+    notes: "Service-Portal des Bundes - HTML-Suche, ohne offizielle API."
+
+  - name: "TED - Tenders Electronic Daily"
+    enabled: true
+    scraper: "ted"
+    base_url: "https://api.ted.europa.eu"
+    strategy: "api"
+    notes: "Offizielle TED Search API v3. Volltextsuche + CPV-Filter."
+
+  # Beispiele fuer kuenftige Quellen (deaktiviert):
+  - name: "Deutsche eVergabe"
+    enabled: false
+    scraper: "deutsche_evergabe"
+    base_url: "https://www.deutsche-evergabe.de"
+    strategy: "api"
+    notes: "Registrierung & API-Key noetig."
+
+  - name: "DB Vergabeportal"
+    enabled: false
+    scraper: "db_vergabe"
+    base_url: "https://bieterportal.noncd.db.de"
+    strategy: "scrape"
+    notes: "JS-rendered, Playwright empfohlen."

@@ -1,0 +1,96 @@
+# Suchbegriffe gruppiert nach Themencluster.
+# weight: high (3) | medium (2) | low (1)
+# Synonyme werden case-insensitive geprueft.
+
+clusters:
+  - name: "Flüssigboden / ZFSV (Kernthema)"
+    weight: high
+    terms:
+      - "Flüssigboden"
+      - "Fluessigboden"
+      - "RSS-Flüssigboden"
+      - "RSS Flüssigboden"
+      - "ZFSV"
+      - "zeitweise fließfähiger selbstverdichtender Verfüllbaustoff"
+      - "fließfähiger Verfüllbaustoff"
+      - "selbstverdichtender Verfüllbaustoff"
+      - "zeitweise fließfähig"
+      - "ZTV-A StB"
+      - "RAL GZ 507"
+
+  - name: "Verfüllung / Hohlräume"
+    weight: high
+    terms:
+      - "Verfüllung"
+      - "Rückverfüllung"
+      - "Hohlraumverfüllung"
+      - "Bodenaustausch"
+      - "Verfüllbaustoff"
+
+  - name: "Leitungsbau"
+    weight: medium
+    terms:
+      - "Leitungsgraben"
+      - "Rohrgraben"
+      - "Kanalgraben"
+      - "Leitungsbau"
+      - "Kanalbau"
+      - "Erdkabel"
+      - "Stromtrasse"
+      - "Gasleitung"
+      - "Wasserleitung"
+      - "Wasserstoffleitung"
+      - "Fernwärme"
+      - "Wärmenetz"
+
+  - name: "Tiefbau / Baugruben"
+    weight: medium
+    terms:
+      - "Tiefbau"
+      - "Baugrube"
+      - "Baugrubenverfüllung"
+      - "Erdarbeiten"
+
+  - name: "Sonderthemen"
+    weight: medium
+    terms:
+      - "Deich"
+      - "Deichbau"
+      - "Hafenbau"
+      - "Bahnbau"
+      - "Quartiersentwicklung"
+      - "Denkmalschutz"
+      - "kontaminierte Böden"
+      - "Ersatzbaustoffverordnung"
+      - "Problemuntergrund"
+      - "Baugrundverbesserung"
+      - "Grundwasser"
+
+  - name: "Allgemein (niedrige Relevanz allein)"
+    weight: low
+    terms:
+      - "Straßenbau"
+      - "Erdbau"
+      - "Baugrund"
+
+# Begriffe, die fuer die Volltext-Suche an Portalen verwendet werden.
+# Reduziert auf Kernbegriffe um Trefferzahl klein zu halten.
+query_terms:
+  - "Flüssigboden"
+  - "ZFSV"
+  - "Verfüllbaustoff"
+  - "Verfüllung Leitungsgraben"
+  - "Fernwärme Verfüllung"
+  - "Hohlraumverfüllung"
+
+# CPV-Codes der EU – fuer TED-Filter (Tiefbau / Leitungsbau / Erdarbeiten)
+cpv_codes:
+  - "45112000"   # Aushub und Erdbewegungsarbeiten
+  - "45111240"   # Bodenstabilisierung
+  - "45232100"   # Wasserversorgungsleitungen
+  - "45231220"   # Gasleitungen
+  - "45231300"   # Wasser- und Abwasserleitungen
+  - "45232140"   # Fernwärmeleitungen
+  - "45232150"   # Wasserverteilleitungen
+  - "45233000"   # Bauarbeiten Straßen
+  - "45221250"   # Tiefbauarbeiten

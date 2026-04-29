@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ tender.title }} – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <a href="/" class="btn btn-sm btn-outline-secondary">← zurück zum Dashboard</a>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <h3 class="mb-1">{{ tender.title }}</h3>
+        <div class="text-muted">
+          <span class="badge bg-light text-dark">{{ tender.portal }}</span>
+          {% if tender.contracting_authority %} · {{ tender.contracting_authority }}{% endif %}
+          {% if tender.region %} · {{ tender.region }}{% endif %}
+        </div>
+      </div>
+      <div class="text-end">
+        <span class="relevance-dot dot-{{ tender.relevance_level }}"></span>
+        <span class="badge badge-{{ tender.relevance_level }} fs-6">
+          Score {{ '%.0f' % tender.relevance_score }} – {{ tender.relevance_level }}
+        </span>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="row">
+      <div class="col-md-6">
+        <dl class="row small mb-0">
+          <dt class="col-4">Ort</dt>          <dd class="col-8">{{ tender.location or '—' }}</dd>
+          <dt class="col-4">Veröffentlicht</dt> <dd class="col-8">{{ tender.publication_date.strftime('%d.%m.%Y') if tender.publication_date else '—' }}</dd>
+          <dt class="col-4">Frist</dt>        <dd class="col-8">{{ tender.deadline.strftime('%d.%m.%Y') if tender.deadline else '—' }}</dd>
+          <dt class="col-4">CPV-Codes</dt>    <dd class="col-8">{{ tender.cpv_codes or '—' }}</dd>
+          <dt class="col-4">Treffer</dt>      <dd class="col-8">{{ tender.matched_terms or '—' }}</dd>
+          <dt class="col-4">Link</dt>         <dd class="col-8"><a href="{{ tender.url }}" target="_blank" rel="noopener">{{ tender.url }}</a></dd>
+        </dl>
+      </div>
+      <div class="col-md-6">
+        <h6>Beschreibung</h6>
+        <p class="small">{{ tender.description or '—' }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" action="/tender/{{ tender.id }}/status" class="row g-2">
+      <div class="col-md-3">
+        <label class="form-label small text-muted">Status</label>
+        <select class="form-select form-select-sm" name="status">
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if tender.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-9">
+        <label class="form-label small text-muted">Notizen</label>
+        <textarea class="form-control form-control-sm" name="notes" rows="3">{{ tender.notes or '' }}</textarea>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary btn-sm" type="submit">Speichern</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

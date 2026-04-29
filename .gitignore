@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+data/*.db
+data/*.sqlite*
+exports/*.csv
+exports/*.xlsx
+.pytest_cache/
+.mypy_cache/
+.idea/
+.vscode/
+*.log

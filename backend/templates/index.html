@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<div class="card mb-4 shadow-sm">
+  <div class="card-body">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small text-muted">Volltextsuche</label>
+        <input class="form-control form-control-sm" type="text" name="q" value="{{ filters.q }}"
+               placeholder="Titel, Beschreibung, Auftraggeber...">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-muted">Portal</label>
+        <select class="form-select form-select-sm" name="portal">
+          <option value="">– alle –</option>
+          {% for p in portals %}
+            <option value="{{ p }}" {% if filters.portal == p %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-muted">Bundesland</label>
+        <select class="form-select form-select-sm" name="region">
+          <option value="">– alle –</option>
+          {% for r in regions %}
+            <option value="{{ r }}" {% if filters.region == r %}selected{% endif %}>{{ r }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small text-muted">Relevanz</label>
+        <select class="form-select form-select-sm" name="level">
+          <option value="">–</option>
+          {% for l in levels %}
+            <option value="{{ l }}" {% if filters.level == l %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small text-muted">Status</label>
+        <select class="form-select form-select-sm" name="status">
+          <option value="">– alle –</option>
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small text-muted">Frist von</label>
+        <input class="form-control form-control-sm" type="date" name="deadline_from" value="{{ filters.deadline_from }}">
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small text-muted">bis</label>
+        <input class="form-control form-control-sm" type="date" name="deadline_to" value="{{ filters.deadline_to }}">
+      </div>
+      <div class="col-12 d-flex gap-2 mt-2">
+        <button class="btn btn-sm btn-primary" type="submit">Filtern</button>
+        <a class="btn btn-sm btn-outline-secondary" href="/">Zurücksetzen</a>
+        <span class="ms-auto small text-muted">
+          <a href="/export/csv?{{ request.url.query }}">CSV</a> ·
+          <a href="/export/xlsx?{{ request.url.query }}">Excel</a>
+        </span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Relevanz</th>
+            <th>Titel</th>
+            <th>Portal</th>
+            <th>Auftraggeber</th>
+            <th>Region</th>
+            <th>Frist</th>
+            <th>Status</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for t in tenders %}
+          <tr>
+            <td>
+              <span class="relevance-dot dot-{{ t.relevance_level }}"></span>
+              <span class="badge badge-{{ t.relevance_level }}">{{ '%.0f' % t.relevance_score }}</span>
+            </td>
+            <td>
+              <a href="/tender/{{ t.id }}"><strong>{{ t.title }}</strong></a>
+              {% if t.matched_terms %}
+                <div class="small text-muted truncate-2">Treffer: {{ t.matched_terms }}</div>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-light text-dark">{{ t.portal }}</span></td>
+            <td class="small">{{ t.contracting_authority or '—' }}</td>
+            <td class="small">{{ t.region or t.location or '—' }}</td>
+            <td class="small">{{ t.deadline.strftime('%d.%m.%Y') if t.deadline else '—' }}</td>
+            <td><span class="badge bg-secondary">{{ t.status }}</span></td>
+            <td>
+              <form method="post" action="/tender/{{ t.id }}/quick-status" class="d-inline">
+                <input type="hidden" name="status" value="interessant">
+                <button class="btn btn-outline-success btn-sm" title="Als interessant markieren">★</button>
+              </form>
+              <form method="post" action="/tender/{{ t.id }}/quick-status" class="d-inline">
+                <input type="hidden" name="status" value="archiviert">
+                <button class="btn btn-outline-secondary btn-sm" title="Archivieren">🗄</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" class="text-center text-muted py-5">
+            Noch keine Treffer. <a href="/run-search">Suche starten</a> oder Filter zurücksetzen.
+          </td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer small text-muted">
+    {{ tenders|length }} Treffer · konfigurierte Quellen:
+    {% for p in configured_portals %}<span class="badge bg-light text-dark">{{ p.name }}</span> {% endfor %}
+  </div>
+</div>
+
+{% endblock %}

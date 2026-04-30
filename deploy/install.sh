@@ -31,6 +31,14 @@ pip install -r requirements.txt
 
 [[ -f .env ]] || cp .env.example .env
 
+echo "==> Optional: Playwright fuer JS-Portale (DTVP etc.)"
+read -r -p "Playwright + Chromium installieren (~250 MB)? [y/N] " yn || yn=N
+if [[ "$yn" =~ ^[YyJj]$ ]]; then
+  pip install -r requirements-playwright.txt
+  python -m playwright install chromium
+  python -m playwright install-deps chromium || true
+fi
+
 echo "==> systemd-Service installieren"
 install -m 0644 "$REPO_DIR/deploy/fbe-tender.service" "$SERVICE_FILE"
 systemctl daemon-reload

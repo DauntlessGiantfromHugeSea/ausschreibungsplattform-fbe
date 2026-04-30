@@ -302,7 +302,7 @@ def run_search_now(background_tasks: BackgroundTasks, format: Optional[str] = No
 
 
 # --- Admin: Portal-Verwaltung -----------------------------------------
-SCRAPER_CHOICES = ["bund", "ted", "rss_generic", "generic_html", "crawl_html", "nextjs"]
+SCRAPER_CHOICES = ["bund", "ted", "rss_generic", "generic_html", "crawl_html", "nextjs", "playwright_html"]
 
 
 def _portals_view_ctx(request: Request, flash: str | None = None, error: str | None = None) -> dict:

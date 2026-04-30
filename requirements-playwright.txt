@@ -1,0 +1,13 @@
+# Optionale Abhaengigkeit fuer den playwright_html-Scraper.
+# Nur installieren wenn JS-gerenderte Portale (DTVP, manche Cosinex-VMP-Setups,
+# einzelne kommunale Portale) gescraped werden sollen.
+#
+# Installation auf der VPS:
+#   source .venv/bin/activate
+#   pip install -r requirements-playwright.txt
+#   playwright install chromium
+#   playwright install-deps          # System-Libs fuer Chromium
+#
+# Belegt zusaetzlich ~250 MB Plattenplatz fuer den Browser.
+
+playwright>=1.45,<2.0

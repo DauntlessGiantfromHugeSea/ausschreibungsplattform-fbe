@@ -88,22 +88,36 @@ portals:
 
   - name: "DTVP - Deutsches Vergabeportal"
     enabled: true
-    scraper: "crawl_html"
+    scraper: "playwright_html"
     base_url: "https://www.dtvp.de"
     strategy: "scrape"
-    notes: "Healy-Hudson - Crawl-Modus."
+    notes: |
+      DTVP ist eine SPA - der Suchstand liegt in einem base64-codierten
+      Hash-Fragment, das clientseitig in eine API-Anfrage uebersetzt wird.
+      Wir nutzen Playwright (Headless-Chromium), bauen das Hash-JSON
+      pro Suchbegriff und lassen den Browser die Seite vollstaendig
+      rendern. Voraussetzung: pip install playwright && playwright install chromium.
     config:
-      listing_paths:
-        - "/Center/notices"
-      link_selector: "a[href*='/Center/notice/'], a[href*='/notice/']"
-      link_pattern: "/notice/[\\w-]+"
-      max_details: 60
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .notice-title, .title"
-      detail_authority_selector: ".buyer, .buyer-name, .organisation"
-      detail_location_selector: ".place, .location, .ort"
-      detail_deadline_selector: ".deadline, .submission-deadline, .frist"
-      detail_publication_selector: ".publication-date, .published"
+      search_path: "/Center/common/project/search.do?method=showExtendedSearch&fromExternal=true#{hash}"
+      hash_json:
+        cpvCodes: []
+        contractingRules: ["VOL", "VOB", "VSVGV", "SEKTVO", "OTHER"]
+        publicationTypes: ["Tender"]
+        distance: 0
+        postalCode: ""
+        order: "0"
+        page: "1"
+        searchText: "{term}"
+        sortField: "rank"
+      wait_for_selector: ".project-list, .search-result, table.results, [class*='result']"
+      wait_timeout_ms: 15000
+      filter_by_terms: false
+      result_selector: ".project-list-row, .search-result-row, tr.result, [class*='project-row'], [class*='result-row']"
+      title_selector: "a.project-title, a.notice-title, a.title, h2 a, h3 a, a"
+      authority_selector: ".buyer-name, .organisation, .buyer, .vergabestelle"
+      location_selector: ".place, .location, .ort"
+      deadline_selector: ".deadline, .submission-deadline, .frist, .angebotsfrist"
+      description_selector: ".description, .excerpt, .summary"
 
   # =====================================================================
   # Bundeslaender (alphabetisch)

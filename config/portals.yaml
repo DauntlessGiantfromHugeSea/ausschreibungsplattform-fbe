@@ -50,19 +50,23 @@ portals:
 
   - name: "evergabe.de (Cosinex)"
     enabled: true
-    scraper: "nextjs"
+    scraper: "generic_html"
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      Next.js-SPA. Statt das DOM zu parsen extrahieren wir das initiale
-      JSON aus <script id="__NEXT_DATA__"> der Suchergebnis-Seite.
-      Echte URL: /auftraege/auftrag-suchen?search[query]=... (Rails-Style).
-      {term} wird URL-encoded eingesetzt; je query_term ein Request.
-      Pagination optional via search[page]=N.
+      Next.js-SPA - aber serverseitig vorgerendert. Probe-Diagnose hat
+      bestaetigt: /auftraege/auftrag-suchen rendert die Trefferkarten
+      direkt in #results-list-container. Wir nehmen jedes direkte Kind
+      als Treffer und ziehen Felder per Label-Match aus dem Karten-Volltext.
+      Pro query_term ein Request mit ?search[query]=...
     config:
       search_path: "/auftraege/auftrag-suchen?search%5Bquery%5D={term}&search%5Bper_page%5D=50&search%5Bsort_order%5D=best"
-      # data_path und field_map werden heuristisch ermittelt; bei Bedarf
-      # ueber /admin/probe-Diagnose feinjustieren (siehe HTML-Auszug).
+      # Server filtert serverseitig auf {term}, Client-Filter spart die
+      # extra Pruefung - wir uebernehmen alle 50 Treffer pro Suche.
+      filter_by_terms: false
+      result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li"
+      title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, a[href*='/auftrag/']"
+      description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
 
   - name: "evergabe-online.de (BMI)"
     enabled: true

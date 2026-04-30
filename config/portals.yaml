@@ -298,21 +298,21 @@ portals:
 
   - name: "Vergabe Sachsen"
     enabled: true
-    scraper: "crawl_html"
+    scraper: "sachsen"
     base_url: "https://www.evergabe.sachsen.de"
-    strategy: "scrape"
-    notes: "Sachsen NetServer - Crawl-Modus."
+    strategy: "search_url"
+    notes: |
+      evergabe.sachsen.de NetServer (AI Informatics) - dedizierter Scraper.
+      Pro query_term ein Search.SearchPattern-Request auf
+      /NetServer/PublicationSearchControllerServlet, mit Pagination.
+      Wenn die Suche leer bleibt, faellt der Scraper auf das ungefilterte
+      InvitationToTender-Listing zurueck und filtert client-seitig auf
+      die Cluster-Begriffe.
     config:
-      listing_paths:
-        - "/NetServer/PublicationListServlet?function=ShowPublications"
-        - "/NetServer/PublicationSearchControllerServlet?function=SearchAndCount"
-      link_selector: "a[href*='/Publication'], a[href*='PublicationDisplay']"
-      max_details: 40
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .title, td.title"
-      detail_authority_selector: ".vergabestelle, .buyer"
-      detail_location_selector: ".ort, .place"
-      detail_deadline_selector: ".frist, .deadline"
+      search_path: "/NetServer/PublicationSearchControllerServlet?function=SearchPublications&Category=InvitationToTender&thContext=publications"
+      max_pages: 3
+      max_details: 0
+      request_delay_s: 0.4
 
   - name: "Vergabe Sachsen-Anhalt"
     enabled: true

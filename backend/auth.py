@@ -133,5 +133,5 @@ def install_auth(app) -> None:
         session_cookie="fbe_session",
         max_age=60 * 60 * 24 * 14,
         same_site="lax",
-        https_only=False,
+        https_only=settings.session_https_only,
     )

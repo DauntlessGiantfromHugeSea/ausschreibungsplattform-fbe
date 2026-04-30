@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # Wenn leer wird beim Start ein zufaelliger Wert gesetzt (Sessions
     # ueberleben dann allerdings keinen Restart).
     session_secret: str = ""
+    # True sobald HTTPS aktiv ist - Cookies werden dann nur noch ueber HTTPS
+    # gesendet. Vor dem ersten Cert auf False lassen, sonst sperrt man
+    # sich aus.
+    session_https_only: bool = False
 
     scraper_user_agent: str = (
         "FBE-Ausschreibungsbot/1.0 (+kontakt@fluessigboden-engineering.de)"

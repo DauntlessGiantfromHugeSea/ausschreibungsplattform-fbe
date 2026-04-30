@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Suchprofile – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Suchprofile</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Suchprofile</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      Speichere häufig genutzte Filter-Kombinationen und wende sie mit einem Klick an.
+    </p>
+  </div>
+  <a href="/profiles/new" class="btn-primary">+ Neues Profil</a>
+</div>
+
+{% if not profiles %}
+<div class="card p-10 text-center">
+  <div class="text-zinc-700 font-medium mb-1">Noch keine Suchprofile</div>
+  <p class="text-sm text-zinc-500 mb-4">
+    Lege ein Profil an für deine wichtigsten Filter — z.B. „Sachsen Tiefbau", „Hochrelevant Flüssigboden", „Frist diese Woche".
+  </p>
+  <a href="/profiles/new" class="btn-primary">+ Erstes Profil erstellen</a>
+</div>
+{% else %}
+<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  {% for p in profiles %}
+  <div class="card p-5 flex flex-col">
+    <div class="flex items-start justify-between mb-2">
+      <h3 class="font-semibold text-zinc-900">{{ p.name }}</h3>
+      {% if p.notify %}<span class="pill bg-amber-100 text-amber-800" title="Benachrichtigt bei neuen Treffern">📧</span>{% endif %}
+    </div>
+    {% if p.description %}
+      <p class="text-sm text-zinc-500 mb-3 line-clamp-2">{{ p.description }}</p>
+    {% endif %}
+
+    <ul class="text-xs text-zinc-600 space-y-1 mb-4 flex-1">
+      {% if p.query %}<li><span class="text-zinc-400">Suche:</span> <code>{{ p.query }}</code></li>{% endif %}
+      {% if p.portal %}<li><span class="text-zinc-400">Portal:</span> {{ p.portal }}</li>{% endif %}
+      {% if p.region %}<li><span class="text-zinc-400">Region:</span> {{ p.region }}</li>{% endif %}
+      {% if p.level %}<li><span class="text-zinc-400">Relevanz:</span> {{ p.level }}</li>{% endif %}
+      {% if p.status %}<li><span class="text-zinc-400">Status:</span> {{ p.status }}</li>{% endif %}
+      {% if p.score_min is not none or p.score_max is not none %}
+        <li><span class="text-zinc-400">Score:</span> {{ p.score_min or 0 }} – {{ p.score_max or 100 }}</li>
+      {% endif %}
+      {% if p.deadline_days %}<li><span class="text-zinc-400">Frist ≤</span> {{ p.deadline_days }} Tage</li>{% endif %}
+    </ul>
+
+    <div class="flex gap-2 pt-3 border-t border-zinc-100">
+      <a href="/profiles/{{ p.id }}/apply" class="btn-primary flex-1 justify-center">Anwenden</a>
+      <a href="/profiles/{{ p.id }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+      <form method="post" action="/profiles/{{ p.id }}/delete"
+            onsubmit="return confirm('Profil &quot;{{ p.name }}&quot; löschen?');">
+        <button class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Löschen">🗑</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card p-5 mt-8 text-sm">
+  <h3 class="font-semibold mb-2">Beispiele für nützliche Profile</h3>
+  <ul class="list-disc pl-5 text-zinc-600 space-y-1">
+    <li><strong>„Sachsen Tiefbau"</strong> — Region: Sachsen, Volltext: Tiefbau</li>
+    <li><strong>„Hochrelevant nächste 14 Tage"</strong> — Relevanz: high, Frist ≤ 14 Tage</li>
+    <li><strong>„Verfüllung deutschlandweit"</strong> — Volltext: Verfüllung, alle Regionen</li>
+    <li><strong>„Status interessant"</strong> — Status: interessant, sortiert nach Frist</li>
+  </ul>
+</div>
+
+{% endblock %}

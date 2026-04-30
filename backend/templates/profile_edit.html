@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Neues Profil' if is_new else 'Profil bearbeiten' }} – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/profiles" class="hover:text-zinc-900">Suchprofile</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">{{ 'Neu' if is_new else profile.name }}</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-6">
+  {{ 'Neues Suchprofil anlegen' if is_new else 'Profil bearbeiten' }}
+</h1>
+
+<form method="post" action="/profiles/save" class="space-y-6 max-w-3xl">
+  {% if not is_new %}
+    <input type="hidden" name="profile_id" value="{{ profile.id }}">
+  {% endif %}
+
+  <div class="card p-6 space-y-4">
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Name *</label>
+      <input class="input" type="text" name="name" required maxlength="100"
+             value="{{ profile.name if profile else '' }}"
+             placeholder="z.B. Sachsen Tiefbau">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Beschreibung</label>
+      <textarea class="input min-h-[60px]" name="description" maxlength="500"
+                placeholder="Optional: Wofür nutzt du dieses Profil?">{{ profile.description if profile else '' }}</textarea>
+    </div>
+  </div>
+
+  <div class="card p-6 space-y-4">
+    <h3 class="text-base font-semibold">Filter</h3>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Volltextsuche</label>
+      <input class="input" type="text" name="query" maxlength="500"
+             value="{{ profile.query if profile else '' }}"
+             placeholder="z.B. Verfüllung, Flüssigboden, Tiefbau">
+      <div class="text-xs text-zinc-400 mt-1">Sucht in Titel, Beschreibung, Auftraggeber, Treffer-Begriffe.</div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Portal / Plattform</label>
+        <select class="input" name="portal">
+          <option value="">– alle –</option>
+          {% for p in portals %}
+            <option value="{{ p }}" {% if profile and profile.portal == p %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Bundesland</label>
+        <select class="input" name="region">
+          <option value="">– alle –</option>
+          {% for r in regions %}
+            <option value="{{ r }}" {% if profile and profile.region == r %}selected{% endif %}>{{ r }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Relevanz</label>
+        <select class="input" name="level">
+          <option value="">– alle –</option>
+          {% for l in levels %}
+            <option value="{{ l }}" {% if profile and profile.level == l %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Status</label>
+        <select class="input" name="status">
+          <option value="">– alle –</option>
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if profile and profile.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Score min</label>
+        <input class="input" type="number" min="0" max="100" step="1" name="score_min"
+               value="{{ profile.score_min if profile and profile.score_min is not none else '' }}"
+               placeholder="0">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Score max</label>
+        <input class="input" type="number" min="0" max="100" step="1" name="score_max"
+               value="{{ profile.score_max if profile and profile.score_max is not none else '' }}"
+               placeholder="100">
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Frist innerhalb der nächsten N Tage</label>
+      <select class="input max-w-xs" name="deadline_days">
+        <option value="">– egal –</option>
+        {% set dd = profile.deadline_days if profile else None %}
+        <option value="7"  {% if dd == 7 %}selected{% endif %}>7 Tage</option>
+        <option value="14" {% if dd == 14 %}selected{% endif %}>14 Tage</option>
+        <option value="30" {% if dd == 30 %}selected{% endif %}>30 Tage</option>
+        <option value="60" {% if dd == 60 %}selected{% endif %}>60 Tage</option>
+        <option value="90" {% if dd == 90 %}selected{% endif %}>90 Tage</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Sortierung</label>
+      <select class="input max-w-md" name="sort">
+        {% set sv = profile.sort if profile else 'score_desc' %}
+        <option value="score_desc"    {% if sv=='score_desc' %}selected{% endif %}>Relevanz – höchste zuerst</option>
+        <option value="score_asc"     {% if sv=='score_asc' %}selected{% endif %}>Relevanz – niedrigste zuerst</option>
+        <option value="deadline_asc"  {% if sv=='deadline_asc' %}selected{% endif %}>Frist – nächste zuerst</option>
+        <option value="deadline_desc" {% if sv=='deadline_desc' %}selected{% endif %}>Frist – späteste zuerst</option>
+        <option value="created_desc"  {% if sv=='created_desc' %}selected{% endif %}>Neu zuerst</option>
+        <option value="title_asc"     {% if sv=='title_asc' %}selected{% endif %}>Titel A–Z</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card p-6">
+    <label class="inline-flex items-center gap-2">
+      <input type="checkbox" name="notify" {% if profile and profile.notify %}checked{% endif %}
+             class="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-500">
+      <span class="text-sm">E-Mail-Benachrichtigung bei neuen Treffern für dieses Profil</span>
+    </label>
+    <div class="text-xs text-zinc-400 mt-1 ml-6">
+      (Nur aktiv wenn SMTP in der .env konfiguriert ist)
+    </div>
+  </div>
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn-primary">Speichern</button>
+    <a href="/profiles" class="btn-ghost">Abbrechen</a>
+  </div>
+</form>
+
+{% endblock %}

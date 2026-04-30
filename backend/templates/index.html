@@ -90,7 +90,7 @@
 {% endif %}
 
 <!-- Quick-Filter Chips -->
-<div class="flex flex-wrap gap-2 mb-4">
+<div class="flex flex-wrap items-center gap-2 mb-4">
   {% set q = filters.quick %}
   <a href="/" class="chip {% if not q and not filters.status %}chip-active{% endif %}">Alle</a>
   <a href="/?quick=high" class="chip {% if q=='high' %}chip-active{% endif %}">★ Hochrelevant</a>
@@ -102,7 +102,42 @@
   <a href="/?quick=interessant"  class="chip {% if q=='interessant' %}chip-active{% endif %}">Interessant</a>
   <a href="/?quick=beworben"     class="chip {% if q=='beworben' %}chip-active{% endif %}">Beworben</a>
   <a href="/?quick=archiviert"   class="chip {% if q=='archiviert' %}chip-active{% endif %}">Archiviert</a>
+
+  <!-- Profile-Dropdown rechts -->
+  <div class="ml-auto relative" id="profile-menu">
+    <button type="button" class="chip"
+            onclick="document.getElementById('profile-dropdown').classList.toggle('hidden')">
+      📋 {% if profiles %}Profil ({{ profiles|length }}){% else %}Profil{% endif %}
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3">
+        <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+      </svg>
+    </button>
+    <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-72 card py-1 z-50 max-h-96 overflow-auto">
+      {% if profiles %}
+        {% for p in profiles %}
+          <a href="/profiles/{{ p.id }}/apply" class="block px-3 py-2 text-sm hover:bg-zinc-50">
+            <div class="font-medium text-zinc-900">{{ p.name }}</div>
+            {% if p.description %}<div class="text-xs text-zinc-500 line-clamp-1">{{ p.description }}</div>{% endif %}
+          </a>
+        {% endfor %}
+        <div class="border-t border-zinc-100 mt-1 pt-1">
+          <a href="/profiles" class="block px-3 py-2 text-xs text-zinc-500 hover:bg-zinc-50">Alle Profile verwalten</a>
+        </div>
+      {% else %}
+        <div class="px-3 py-3 text-sm text-zinc-500">Keine Profile angelegt.</div>
+      {% endif %}
+      <a href="/profiles/new" class="block px-3 py-2 text-sm text-brand-700 hover:bg-zinc-50 border-t border-zinc-100">+ Neues Profil</a>
+    </div>
+  </div>
 </div>
+
+<script>
+  document.addEventListener('click', (e) => {
+    const m = document.getElementById('profile-menu');
+    const d = document.getElementById('profile-dropdown');
+    if (m && d && !m.contains(e.target)) d.classList.add('hidden');
+  });
+</script>
 
 <!-- Erweiterter Filter -->
 <details class="card mb-6" {% if filters.q or filters.portal or filters.region or filters.score_min != '' or filters.score_max != '' %}open{% endif %}>

@@ -79,3 +79,53 @@ class Tender(Base):
             "cpv_codes": self.cpv_codes,
             "documents": self.documents,
         }
+
+
+class SearchProfile(Base):
+    """Gespeicherter Filter, der per Klick aufs Dashboard angewendet wird.
+
+    Felder mappen 1:1 auf die Filter-Parameter der Index-Route.
+    """
+    __tablename__ = "search_profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(String(500), nullable=True)
+
+    # Filterwerte (alle optional)
+    query = Column(String(500), nullable=True)        # Volltextsuche
+    portal = Column(String(200), nullable=True)
+    region = Column(String(100), nullable=True)
+    status = Column(String(30), nullable=True)
+    level = Column(String(20), nullable=True)         # high/medium/low
+    score_min = Column(Integer, nullable=True)
+    score_max = Column(Integer, nullable=True)
+    deadline_days = Column(Integer, nullable=True)    # naechste N Tage
+
+    sort = Column(String(30), default="score_desc")
+    notify = Column(Integer, default=0)               # 0/1: bei neuen Treffern mailen
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    def to_query_string(self) -> str:
+        """Liefert die URL-Parameter, die dieses Profil aufs Dashboard anwenden."""
+        from datetime import datetime as _dt, timedelta as _td
+        from urllib.parse import urlencode
+
+        params: dict[str, str] = {}
+        if self.query: params["q"] = self.query
+        if self.portal: params["portal"] = self.portal
+        if self.region: params["region"] = self.region
+        if self.status: params["status"] = self.status
+        if self.level: params["level"] = self.level
+        if self.score_min is not None: params["score_min"] = str(self.score_min)
+        if self.score_max is not None: params["score_max"] = str(self.score_max)
+        if self.deadline_days:
+            today = _dt.utcnow().date()
+            params["deadline_from"] = today.isoformat()
+            params["deadline_to"] = (today + _td(days=self.deadline_days)).isoformat()
+        if self.sort: params["sort"] = self.sort
+        return urlencode(params)

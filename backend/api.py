@@ -16,7 +16,7 @@ from .auth import install_auth, verify_credentials
 from .config import PROJECT_ROOT
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Tender, TenderStatus
+from .models import Tender, TenderStatus, SearchProfile
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -199,6 +199,7 @@ def index(
 
     last_run = load_run_state()
     next_run = next_run_time()
+    profiles = db.query(SearchProfile).order_by(SearchProfile.name).all()
 
     return templates.TemplateResponse(
         request,
@@ -231,6 +232,7 @@ def index(
             "next_run": next_run,
             "is_running": is_pipeline_running(),
             "user": request.session.get("user"),
+            "profiles": profiles,
         },
     )
 
@@ -681,6 +683,140 @@ def export_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="ausschreibungen.xlsx"'},
     )
+
+
+# --- Suchprofile -----------------------------------------------------
+@app.get("/profiles", response_class=HTMLResponse)
+def profiles_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    items = db.query(SearchProfile).order_by(SearchProfile.name).all()
+    return templates.TemplateResponse(
+        request, "profiles.html",
+        {
+            "profiles": items,
+            "user": request.session.get("user"),
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.get("/profiles/new", response_class=HTMLResponse)
+def profile_new(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(
+        request, "profile_edit.html",
+        {
+            "profile": None,
+            "is_new": True,
+            "portals": [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]],
+            "regions": [r[0] for r in db.query(Tender.region).distinct().all() if r[0]],
+            "statuses": STATUS_VALUES,
+            "levels": LEVEL_VALUES,
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.get("/profiles/{profile_id}/edit", response_class=HTMLResponse)
+def profile_edit(profile_id: int, request: Request, db: Session = Depends(get_db)):
+    profile = db.get(SearchProfile, profile_id)
+    if not profile:
+        raise HTTPException(404, "Profil nicht gefunden")
+    return templates.TemplateResponse(
+        request, "profile_edit.html",
+        {
+            "profile": profile,
+            "is_new": False,
+            "portals": [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]],
+            "regions": [r[0] for r in db.query(Tender.region).distinct().all() if r[0]],
+            "statuses": STATUS_VALUES,
+            "levels": LEVEL_VALUES,
+            "user": request.session.get("user"),
+        },
+    )
+
+
+def _to_int(s: str | None) -> int | None:
+    if s is None or s == "":
+        return None
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+
+@app.post("/profiles/save")
+def profile_save(
+    profile_id: str = Form(""),
+    name: str = Form(...),
+    description: str = Form(""),
+    query: str = Form(""),
+    portal: str = Form(""),
+    region: str = Form(""),
+    status: str = Form(""),
+    level: str = Form(""),
+    score_min: str = Form(""),
+    score_max: str = Form(""),
+    deadline_days: str = Form(""),
+    sort: str = Form("score_desc"),
+    notify: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    name = name.strip()
+    if not name:
+        return RedirectResponse(url="/profiles?error=Name ist erforderlich.", status_code=303)
+
+    pid = _to_int(profile_id)
+    profile = db.get(SearchProfile, pid) if pid else None
+    if not profile:
+        # Name-Eindeutigkeit pruefen (nur fuer neu)
+        if db.query(SearchProfile).filter(SearchProfile.name == name).first():
+            return RedirectResponse(
+                url=f"/profiles?error=Profil mit Name '{name}' existiert bereits.",
+                status_code=303,
+            )
+        profile = SearchProfile(name=name)
+        db.add(profile)
+
+    profile.name = name
+    profile.description = description.strip() or None
+    profile.query = query.strip() or None
+    profile.portal = portal.strip() or None
+    profile.region = region.strip() or None
+    profile.status = status.strip() or None
+    profile.level = level.strip() or None
+    profile.score_min = _to_int(score_min)
+    profile.score_max = _to_int(score_max)
+    profile.deadline_days = _to_int(deadline_days)
+    profile.sort = sort.strip() or "score_desc"
+    profile.notify = 1 if notify == "on" else 0
+
+    db.commit()
+    return RedirectResponse(url=f"/profiles?flash={name} gespeichert.", status_code=303)
+
+
+@app.post("/profiles/{profile_id}/delete")
+def profile_delete(profile_id: int, db: Session = Depends(get_db)):
+    profile = db.get(SearchProfile, profile_id)
+    if not profile:
+        return RedirectResponse(url="/profiles?error=Profil nicht gefunden", status_code=303)
+    name = profile.name
+    db.delete(profile)
+    db.commit()
+    return RedirectResponse(url=f"/profiles?flash={name} geloescht.", status_code=303)
+
+
+@app.get("/profiles/{profile_id}/apply")
+def profile_apply(profile_id: int, db: Session = Depends(get_db)):
+    profile = db.get(SearchProfile, profile_id)
+    if not profile:
+        raise HTTPException(404, "Profil nicht gefunden")
+    qs = profile.to_query_string()
+    return RedirectResponse(url=f"/?{qs}", status_code=303)
 
 
 # --- JSON-API -------------------------------------------------------

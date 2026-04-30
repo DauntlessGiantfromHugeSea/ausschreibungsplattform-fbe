@@ -12,11 +12,11 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .auth import install_auth, verify_credentials
+from .auth import authenticate, hash_password, install_auth, require_admin
 from .config import PROJECT_ROOT
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Tender, TenderStatus, SearchProfile
+from .models import Tender, TenderStatus, SearchProfile, User
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -136,8 +136,11 @@ def login_post(
     password: str = Form(...),
     next: str = Form("/"),
 ):
-    if verify_credentials(username, password):
-        request.session["user"] = username
+    user = authenticate(username, password)
+    if user:
+        request.session["user"] = user["username"]
+        request.session["role"] = user["role"]
+        request.session["user_id"] = user["id"]
         return RedirectResponse(next or "/", status_code=303)
     return templates.TemplateResponse(
         request, "login.html",
@@ -683,6 +686,129 @@ def export_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="ausschreibungen.xlsx"'},
     )
+
+
+# --- Admin: User-Verwaltung ------------------------------------------
+ROLES = ["admin", "viewer"]
+
+
+@app.get("/admin/users", response_class=HTMLResponse)
+def admin_users(
+    request: Request,
+    db: Session = Depends(get_db),
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    users = db.query(User).order_by(User.username).all()
+    return templates.TemplateResponse(
+        request, "users.html",
+        {
+            "users": users,
+            "user": request.session.get("user"),
+            "current_user_id": request.session.get("user_id"),
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.get("/admin/users/new", response_class=HTMLResponse)
+def admin_user_new(request: Request):
+    return templates.TemplateResponse(
+        request, "user_edit.html",
+        {
+            "edited": None, "is_new": True, "roles": ROLES,
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.get("/admin/users/{user_id}/edit", response_class=HTMLResponse)
+def admin_user_edit(user_id: int, request: Request, db: Session = Depends(get_db)):
+    edited = db.get(User, user_id)
+    if not edited:
+        return RedirectResponse(url="/admin/users?error=User nicht gefunden", status_code=303)
+    return templates.TemplateResponse(
+        request, "user_edit.html",
+        {
+            "edited": edited, "is_new": False, "roles": ROLES,
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.post("/admin/users/save")
+def admin_user_save(
+    request: Request,
+    user_id: str = Form(""),
+    username: str = Form(...),
+    password: str = Form(""),
+    role: str = Form("viewer"),
+    is_active: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    username = username.strip()
+    if not username:
+        return RedirectResponse(url="/admin/users?error=Username ist erforderlich.", status_code=303)
+    if role not in ROLES:
+        role = "viewer"
+
+    pid = int(user_id) if user_id and user_id.isdigit() else None
+    edited = db.get(User, pid) if pid else None
+
+    if edited:
+        # Update bestehender User
+        if edited.username != username:
+            # Username-Eindeutigkeit
+            if db.query(User).filter(User.username == username, User.id != edited.id).first():
+                return RedirectResponse(
+                    url=f"/admin/users?error=Username '{username}' ist vergeben.",
+                    status_code=303,
+                )
+            edited.username = username
+        edited.role = role
+        edited.is_active = is_active == "on"
+        if password.strip():
+            edited.password_hash = hash_password(password)
+        db.commit()
+        return RedirectResponse(url=f"/admin/users?flash={username} aktualisiert.", status_code=303)
+
+    # Neu anlegen - Passwort erforderlich
+    if not password.strip():
+        return RedirectResponse(
+            url="/admin/users?error=Passwort ist beim Anlegen erforderlich.",
+            status_code=303,
+        )
+    if db.query(User).filter(User.username == username).first():
+        return RedirectResponse(
+            url=f"/admin/users?error=Username '{username}' ist vergeben.",
+            status_code=303,
+        )
+    new_user = User(
+        username=username,
+        password_hash=hash_password(password),
+        role=role,
+        is_active=is_active == "on" or is_active is None,
+    )
+    db.add(new_user)
+    db.commit()
+    return RedirectResponse(url=f"/admin/users?flash={username} angelegt.", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/delete")
+def admin_user_delete(user_id: int, request: Request, db: Session = Depends(get_db)):
+    if request.session.get("user_id") == user_id:
+        return RedirectResponse(
+            url="/admin/users?error=Du kannst dich nicht selbst loeschen.",
+            status_code=303,
+        )
+    edited = db.get(User, user_id)
+    if not edited:
+        return RedirectResponse(url="/admin/users?error=User nicht gefunden", status_code=303)
+    name = edited.username
+    db.delete(edited)
+    db.commit()
+    return RedirectResponse(url=f"/admin/users?flash={name} geloescht.", status_code=303)
 
 
 # --- Suchprofile -----------------------------------------------------

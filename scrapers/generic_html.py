@@ -38,6 +38,18 @@ log = logging.getLogger(__name__)
 
 DATE_DE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
 
+# Fallback-Pfade fuer Auto-Discovery wenn das konfigurierte Listing leer ist.
+DEFAULT_LISTING_FALLBACKS = [
+    "/aktuell",
+    "/ausschreibungen",
+    "/auftraege",
+    "/bekanntmachungen",
+    "/notices",
+    "/notice/list",
+    "/VMPSatellite/notice",
+    "/VMPCenter/notice",
+]
+
 # Standard-Labels die ein Card-Volltext nach 'Label: Wert' absucht
 DEFAULT_LABELS = {
     "deadline":    ["Angebotsfrist", "Abgabefrist", "Frist", "Submission deadline"],
@@ -94,6 +106,23 @@ class GenericHtmlScraper(BaseScraper):
                 items.update(self._fetch_one(p))
             except Exception as exc:  # pragma: no cover – Netzwerk
                 log.warning("[%s] Fehler bei %s: %s", self.name, p, exc)
+
+        # Auto-Discovery: wenn die konfigurierten Pfade nichts gebracht haben,
+        # gaengige Fallback-Pfade durchprobieren.
+        if not items and self.config.get("auto_discover", True):
+            for fallback in DEFAULT_LISTING_FALLBACKS:
+                if fallback in paths:
+                    continue
+                try:
+                    found = self._fetch_one(fallback)
+                except Exception:  # pragma: no cover
+                    continue
+                if found:
+                    log.info("[%s] Auto-Discovery: %s lieferte %d Treffer",
+                             self.name, fallback, len(found))
+                    items.update(found)
+                    break
+
         if self.config.get("filter_by_terms", True):
             match_terms = self._match_terms(terms)
             items = {u: it for u, it in items.items() if _matches_any(it, match_terms)}

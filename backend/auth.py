@@ -1,40 +1,105 @@
-"""Einfache, sessionbasierte Authentifizierung.
+"""Sessionbasierte Authentifizierung mit DB-Usern + Env-Fallback.
 
-Single-Admin-Modell: Username + Passwort kommen aus .env
-(`ADMIN_USERNAME`, `ADMIN_PASSWORD`). Session-Cookie via
-Starlette `SessionMiddleware`. Wer nicht eingeloggt ist, wird auf
-`/login` umgeleitet.
+Strategie:
+  1. Lookup in der users-Tabelle (mit bcrypt).
+  2. Wenn kein DB-User passt: Fallback auf ADMIN_USERNAME/ADMIN_PASSWORD
+     aus der .env. Das gilt vor allem fuer den Erst-Login direkt nach
+     der Installation - sobald ein Admin-User in der DB existiert,
+     sollte das Env-Passwort weggenommen oder geaendert werden.
+
+Rollen:
+  admin   - alles (Portale, Suchbegriffe, User-Verwaltung)
+  viewer  - nur Lesen (kein /admin/* erlaubt)
 """
 from __future__ import annotations
 
+import logging
 import secrets
+from datetime import datetime
 from typing import Awaitable, Callable
 
+import bcrypt
 from fastapi import Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import settings
+from .database import SessionLocal
 
+
+log = logging.getLogger(__name__)
 
 PUBLIC_PATHS = {"/login", "/logout", "/api/health"}
 PUBLIC_PREFIXES = ("/static",)
+ADMIN_PREFIXES = ("/admin/",)
 
 
-def verify_credentials(username: str, password: str) -> bool:
-    user_ok = secrets.compare_digest(username or "", settings.admin_username)
-    pass_ok = secrets.compare_digest(password or "", settings.admin_password)
-    return user_ok and pass_ok
+# ---------------------------------------------------------------------------
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
+
+
+# ---------------------------------------------------------------------------
+def authenticate(username: str, password: str) -> dict | None:
+    """Liefert dict mit username/role/id oder None."""
+    from .models import User
+
+    if not username or not password:
+        return None
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if user and user.is_active and verify_password(password, user.password_hash):
+            user.last_login_at = datetime.utcnow()
+            db.commit()
+            return {"username": user.username, "role": user.role, "id": user.id}
+    finally:
+        db.close()
+
+    # Env-Fallback: nur wenn DB keinen Eintrag hat oder noch keine User
+    # angelegt sind. Erlaubt First-Boot ohne DB-User.
+    if (settings.admin_username
+            and settings.admin_password
+            and secrets.compare_digest(username, settings.admin_username)
+            and secrets.compare_digest(password, settings.admin_password)):
+        return {"username": username, "role": "admin", "id": 0}
+
+    return None
+
+
+def has_any_user() -> bool:
+    """True wenn die users-Tabelle mindestens einen aktiven User hat."""
+    from .models import User
+    db = SessionLocal()
+    try:
+        return db.query(User.id).filter(User.is_active == True).first() is not None  # noqa: E712
+    finally:
+        db.close()
 
 
 def is_authenticated(request: Request) -> bool:
     return bool(request.session.get("user"))
 
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    """Schuetzt alle Routen ausser den oeffentlichen via Redirect."""
+def current_role(request: Request) -> str:
+    return request.session.get("role") or "viewer"
 
+
+def require_admin(request: Request) -> bool:
+    return current_role(request) == "admin"
+
+
+# ---------------------------------------------------------------------------
+class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self,
         request: Request,
@@ -42,24 +107,31 @@ class AuthMiddleware(BaseHTTPMiddleware):
     ):
         path = request.url.path
         is_public = path in PUBLIC_PATHS or any(path.startswith(p) for p in PUBLIC_PREFIXES)
+
         if not is_public and not is_authenticated(request):
-            # Bei API-Aufrufen 401, sonst Redirect zur Login-Seite.
             if path.startswith("/api/"):
-                from fastapi.responses import JSONResponse
                 return JSONResponse({"error": "unauthenticated"}, status_code=401)
             return RedirectResponse(url=f"/login?next={path}", status_code=303)
+
+        # Admin-Bereich: viewer wird auf Dashboard umgeleitet
+        if any(path.startswith(p) for p in ADMIN_PREFIXES) and is_authenticated(request):
+            if not require_admin(request):
+                return RedirectResponse(
+                    url="/?error=Nur Admins haben Zugriff auf diesen Bereich.",
+                    status_code=303,
+                )
+
         return await call_next(request)
 
 
 def install_auth(app) -> None:
-    """SessionMiddleware + AuthMiddleware in der richtigen Reihenfolge."""
     secret = settings.session_secret or secrets.token_urlsafe(32)
     app.add_middleware(AuthMiddleware)
     app.add_middleware(
         SessionMiddleware,
         secret_key=secret,
         session_cookie="fbe_session",
-        max_age=60 * 60 * 24 * 14,  # 14 Tage
+        max_age=60 * 60 * 24 * 14,
         same_site="lax",
-        https_only=False,  # auf True setzen, sobald HTTPS aktiv
+        https_only=False,
     )

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Neuer Benutzer' if is_new else 'Benutzer bearbeiten' }} – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/admin/users" class="hover:text-zinc-900">Benutzer</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">{{ 'Neu' if is_new else edited.username }}</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-6">
+  {{ 'Neuen Benutzer anlegen' if is_new else 'Benutzer bearbeiten' }}
+</h1>
+
+<form method="post" action="/admin/users/save" class="space-y-6 max-w-xl">
+  {% if not is_new %}
+    <input type="hidden" name="user_id" value="{{ edited.id }}">
+  {% endif %}
+
+  <div class="card p-6 space-y-4">
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Username *</label>
+      <input class="input" type="text" name="username" required maxlength="80"
+             value="{{ edited.username if edited else '' }}"
+             placeholder="z.B. mueller">
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">
+        Passwort {% if is_new %}*{% else %}(leer lassen, um nicht zu ändern){% endif %}
+      </label>
+      <input class="input" type="password" name="password"
+             {% if is_new %}required{% endif %}
+             autocomplete="new-password"
+             placeholder="{{ 'Mindestens 6 Zeichen' if is_new else '••••••• (unverändert)' }}">
+      <div class="text-xs text-zinc-400 mt-1">
+        Wird mit bcrypt gehasht — Klartext landet nicht in der DB.
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Rolle</label>
+      <select class="input max-w-xs" name="role">
+        {% for r in roles %}
+          <option value="{{ r }}" {% if edited and edited.role == r %}selected{% endif %}>
+            {{ r }}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="text-xs text-zinc-400 mt-1">
+        <strong>admin</strong>: alles · <strong>viewer</strong>: kein Zugriff auf /admin/*
+      </div>
+    </div>
+
+    <div>
+      <label class="inline-flex items-center gap-2">
+        <input type="checkbox" name="is_active" {% if edited is none or edited.is_active %}checked{% endif %}
+               class="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-500">
+        <span class="text-sm">Aktiv (kann sich anmelden)</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn-primary">Speichern</button>
+    <a href="/admin/users" class="btn-ghost">Abbrechen</a>
+  </div>
+</form>
+
+{% endblock %}

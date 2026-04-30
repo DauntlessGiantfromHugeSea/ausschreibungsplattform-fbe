@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Benutzer – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Benutzer</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Benutzer verwalten</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      {{ users|length }} Konten · Rollen: <strong>admin</strong> (volle Rechte) · <strong>viewer</strong> (nur Lesen).
+    </p>
+  </div>
+  <a href="/admin/users/new" class="btn-primary">+ Neuer Benutzer</a>
+</div>
+
+{% if not users %}
+<div class="card p-10 text-center">
+  <div class="text-zinc-700 font-medium mb-1">Noch keine Benutzer in der Datenbank</div>
+  <p class="text-sm text-zinc-500 mb-4">
+    Aktuell ist nur der Admin aus der <code>.env</code> aktiv (<code>ADMIN_USERNAME</code> / <code>ADMIN_PASSWORD</code>).
+    Sobald hier ein User angelegt ist, kann sich auch der einloggen.
+  </p>
+  <a href="/admin/users/new" class="btn-primary">+ Ersten Benutzer anlegen</a>
+</div>
+{% else %}
+<div class="card overflow-hidden">
+  <table class="dashboard">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Username</th>
+        <th>Rolle</th>
+        <th>Erstellt</th>
+        <th>Letzter Login</th>
+        <th class="text-right pr-4">Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>
+          {% if u.is_active %}
+            <span class="pill bg-emerald-100 text-emerald-800">aktiv</span>
+          {% else %}
+            <span class="pill bg-zinc-100 text-zinc-600">gesperrt</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="font-medium">{{ u.username }}</div>
+          {% if u.id == current_user_id %}
+            <div class="text-xs text-brand-700">— das bist du</div>
+          {% endif %}
+        </td>
+        <td>
+          {% if u.role == 'admin' %}
+            <span class="pill bg-rose-100 text-rose-800">admin</span>
+          {% else %}
+            <span class="pill bg-zinc-100 text-zinc-700">viewer</span>
+          {% endif %}
+        </td>
+        <td class="text-xs text-zinc-500">{{ u.created_at.strftime('%d.%m.%Y') if u.created_at else '—' }}</td>
+        <td class="text-xs text-zinc-500">
+          {% if u.last_login_at %}{{ u.last_login_at.strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}
+        </td>
+        <td class="text-right whitespace-nowrap">
+          <a href="/admin/users/{{ u.id }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+          {% if u.id != current_user_id %}
+          <form method="post" action="/admin/users/{{ u.id }}/delete" class="inline"
+                onsubmit="return confirm('User &quot;{{ u.username }}&quot; löschen?');">
+            <button class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Löschen">🗑</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card p-5 mt-6 text-sm">
+  <h3 class="font-semibold mb-2">Hinweise</h3>
+  <ul class="list-disc pl-5 text-zinc-600 space-y-1">
+    <li>Passwörter werden mit <strong>bcrypt</strong> gehasht — nie im Klartext gespeichert.</li>
+    <li>Der Admin aus der <code>.env</code> ist immer als Notfall-Zugang aktiv. Sobald ein DB-User angelegt ist, kann das Env-Passwort entfernt werden.</li>
+    <li>Du kannst dich selbst nicht löschen. Falls du dein eigenes Passwort vergisst, setze es per <code>.env</code> (<code>ADMIN_USERNAME</code>/<code>ADMIN_PASSWORD</code>) und melde dich damit an.</li>
+  </ul>
+</div>
+
+{% endblock %}

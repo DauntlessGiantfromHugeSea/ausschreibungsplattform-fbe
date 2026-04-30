@@ -6,12 +6,38 @@ from __future__ import annotations
 
 import logging
 
-from .database import SessionLocal
+from sqlalchemy import inspect, text
+
+from .database import SessionLocal, engine
 from .models import Tender
 from .region_resolver import infer_region
 
 
 log = logging.getLogger(__name__)
+
+
+def _column_exists(table: str, column: str) -> bool:
+    insp = inspect(engine)
+    if table not in insp.get_table_names():
+        return False
+    return any(c["name"] == column for c in insp.get_columns(table))
+
+
+def add_score_breakdown_column() -> bool:
+    """Fuegt die Spalte tenders.score_breakdown bei Bestandsdatenbanken nach.
+
+    Liefert True wenn die Spalte angelegt wurde.
+    """
+    if _column_exists("tenders", "score_breakdown"):
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE tenders ADD COLUMN score_breakdown TEXT"))
+        log.info("Migration: Spalte tenders.score_breakdown hinzugefuegt.")
+        return True
+    except Exception as exc:  # pragma: no cover
+        log.exception("Migration score_breakdown fehlgeschlagen: %s", exc)
+        return False
 
 
 def backfill_regions() -> int:
@@ -47,5 +73,6 @@ def backfill_regions() -> int:
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
+        "score_breakdown_added": add_score_breakdown_column(),
         "regions_backfilled": backfill_regions(),
     }

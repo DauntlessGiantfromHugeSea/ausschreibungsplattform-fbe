@@ -8,13 +8,14 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
     Float,
     Index,
 )
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, relationship
 
 
 class Base(DeclarativeBase):
@@ -51,6 +52,8 @@ class Tender(Base):
     cpv_codes = Column(String(500), nullable=True)
     documents = Column(Text, nullable=True)            # JSON-encoded list
     fingerprint = Column(String(64), nullable=False, unique=True, index=True)
+    # JSON-Liste mit Score-Komponenten: [{"label":..., "points":..., "detail":...}, ...]
+    score_breakdown = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -148,3 +151,23 @@ class SearchProfile(Base):
             params["deadline_to"] = (today + _td(days=self.deadline_days)).isoformat()
         if self.sort: params["sort"] = self.sort
         return urlencode(params)
+
+
+class Comment(Base):
+    """Kommentar zu einer Ausschreibung.
+
+    username wird denormalisiert mitgespeichert, damit Kommentare auch
+    erhalten bleiben, wenn ein User-Account spaeter geloescht wird.
+    """
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tender_id = Column(Integer, ForeignKey("tenders.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"),
+                     nullable=True, index=True)
+    username = Column(String(80), nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    tender = relationship("Tender", backref="comments")

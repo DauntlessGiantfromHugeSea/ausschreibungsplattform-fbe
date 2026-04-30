@@ -110,15 +110,16 @@
         </button>
       </form>
       {% if user %}
+      {% set _uname = user.username if user is mapping else user %}
       <div class="relative" id="user-menu">
         <button class="btn-ghost" onclick="document.getElementById('user-dropdown').classList.toggle('hidden')">
           <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-xs font-semibold">
-            {{ user[:1]|upper }}
+            {{ _uname[:1]|upper }}
           </span>
-          <span class="hidden sm:inline">{{ user }}</span>
+          <span class="hidden sm:inline">{{ _uname }}</span>
         </button>
         <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-44 card py-1 z-50">
-          <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">Angemeldet als <strong class="text-zinc-700">{{ user }}</strong></div>
+          <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">Angemeldet als <strong class="text-zinc-700">{{ _uname }}</strong></div>
           <a href="/logout" class="block px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50">Abmelden</a>
         </div>
       </div>

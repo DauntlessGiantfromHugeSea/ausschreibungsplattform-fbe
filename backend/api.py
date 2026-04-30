@@ -18,7 +18,7 @@ from . import branding
 from .config import PROJECT_ROOT
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Tender, TenderStatus, SearchProfile, User
+from .models import Comment, Tender, TenderStatus, SearchProfile, User
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -55,6 +55,22 @@ def _startup():
 # --- Helpers --------------------------------------------------------
 STATUS_VALUES = [s.value for s in TenderStatus]
 LEVEL_VALUES = ["high", "medium", "low"]
+
+
+def _session_user(request: Request) -> dict | None:
+    """Liefert den eingeloggten User als dict {username, role, id} oder None.
+
+    Die Login-Route schreibt username/role/user_id getrennt in die Session;
+    Templates und Comment-Routen erwarten ein dict - hier zentralisiert.
+    """
+    username = request.session.get("user")
+    if not username:
+        return None
+    return {
+        "username": username,
+        "role": request.session.get("role") or "viewer",
+        "id": request.session.get("user_id") or 0,
+    }
 
 SORT_OPTIONS = {
     "score_desc": (Tender.relevance_score.desc(), Tender.created_at.desc()),
@@ -196,7 +212,12 @@ def index(
     )
     tenders = _apply_sort(query, sort).limit(500).all()
 
-    portals_distinct = [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]]
+    # Portal-Filter zeigt ALLE konfigurierten + alle in der DB vorhandenen
+    # Portale - nicht nur die mit bisherigen Treffern. Sonst sieht der User
+    # vor dem ersten Lauf nur ein einziges Portal im Dropdown.
+    portals_in_db = {r[0] for r in db.query(Tender.portal).distinct().all() if r[0]}
+    portals_configured = {p.name for p in load_portals() if p.name}
+    portals_distinct = sorted(portals_in_db | portals_configured, key=str.lower)
     regions_distinct = [r[0] for r in db.query(Tender.region).distinct().all() if r[0]]
     total_count = db.query(Tender).count()
     high_count = db.query(Tender).filter(Tender.relevance_level == "high").count()
@@ -259,10 +280,88 @@ def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
     tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "Ausschreibung nicht gefunden")
+
+    breakdown: list = []
+    if tender.score_breakdown:
+        try:
+            import json as _json
+            breakdown = _json.loads(tender.score_breakdown) or []
+        except Exception:
+            breakdown = []
+
+    comments = (
+        db.query(Comment)
+        .filter(Comment.tender_id == tender_id)
+        .order_by(Comment.created_at.asc())
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "detail.html",
-        {"tender": tender, "statuses": STATUS_VALUES, "user": request.session.get("user")},
+        {
+            "tender": tender,
+            "statuses": STATUS_VALUES,
+            "user": _session_user(request),
+            "score_breakdown": breakdown,
+            "comments": comments,
+        },
+    )
+
+
+@app.post("/tender/{tender_id}/comments")
+def add_comment(
+    tender_id: int,
+    request: Request,
+    body: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = _session_user(request)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    tender = db.get(Tender, tender_id)
+    if not tender:
+        raise HTTPException(404, "Ausschreibung nicht gefunden")
+
+    body = (body or "").strip()
+    if not body:
+        return RedirectResponse(url=f"/tender/{tender_id}", status_code=303)
+    if len(body) > 5000:
+        body = body[:5000]
+
+    user_id = user["id"] if user["id"] > 0 else None
+    db.add(Comment(
+        tender_id=tender_id,
+        user_id=user_id,
+        username=user["username"][:80],
+        body=body,
+    ))
+    db.commit()
+    return RedirectResponse(
+        url=f"/tender/{tender_id}#comments", status_code=303,
+    )
+
+
+@app.post("/tender/{tender_id}/comments/{comment_id}/delete")
+def delete_comment(
+    tender_id: int,
+    comment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = _session_user(request)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    comment = db.get(Comment, comment_id)
+    if not comment or comment.tender_id != tender_id:
+        raise HTTPException(404, "Kommentar nicht gefunden")
+    is_admin = user["role"] == "admin"
+    is_author = user["username"] == comment.username
+    if not (is_admin or is_author):
+        raise HTTPException(403, "Nur eigene Kommentare oder Admin")
+    db.delete(comment)
+    db.commit()
+    return RedirectResponse(
+        url=f"/tender/{tender_id}#comments", status_code=303,
     )
 
 

@@ -137,6 +137,8 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
     )
     matched_str = "; ".join(sr.matched_terms) if sr.matched_terms else None
 
+    breakdown_json = json.dumps(sr.breakdown_dicts(), ensure_ascii=False)
+
     db = SessionLocal()
     try:
         existing = db.query(Tender).filter(Tender.fingerprint == fp).first()
@@ -144,6 +146,7 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
             existing.relevance_score = sr.score
             existing.relevance_level = sr.level
             existing.matched_terms = matched_str
+            existing.score_breakdown = breakdown_json
             if item.deadline:
                 existing.deadline = item.deadline
             db.commit()
@@ -162,6 +165,7 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
             matched_terms=matched_str,
             relevance_score=sr.score,
             relevance_level=sr.level,
+            score_breakdown=breakdown_json,
             status=TenderStatus.NEU.value,
             cpv_codes=";".join(item.cpv_codes) if item.cpv_codes else None,
             documents=json.dumps(item.documents) if item.documents else None,

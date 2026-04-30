@@ -33,11 +33,14 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["has_logo"] = branding.has_logo
 
 app = FastAPI(title="FBE Ausschreibungsplattform", version="0.2.0")
-app.mount(
-    "/static",
-    StaticFiles(directory=str(Path(__file__).parent / "static")),
-    name="static",
-)
+
+# Static-Ordner muss existieren bevor StaticFiles mountet, sonst crasht
+# der Service-Start mit RuntimeError ("Directory does not exist") - der
+# Ordner wird im Repo per .gitkeep getrackt, aber wir sichern hier zusaetzlich
+# fuer Worktrees ohne den Marker ab.
+_STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 install_auth(app)
 
 

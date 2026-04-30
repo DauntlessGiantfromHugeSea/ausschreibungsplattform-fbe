@@ -1,33 +1,41 @@
-# Konfigurierte Ausschreibungsportale.
+# =====================================================================
+# Konfigurierte Ausschreibungsportale - DEUTSCHLAND
+# =====================================================================
 #
-# strategy:
-#   api         - offizielle JSON/REST API
-#   rss         - RSS-Feed
-#   search_url  - serverseitig gerendertes HTML-Suchformular
-#   scrape      - generisches HTML-Scraping
+# Architektur-Hinweis:
+#   Viele Laenderportale teilen sich eine Backend-Engine. Selektoren sind
+#   deshalb pro "Engine-Familie" sehr aehnlich. Im Zweifel direkt im
+#   Browser (F12 -> Element untersuchen) auf der Trefferseite pruefen
+#   und ueber /admin/portals/{name}/edit anpassen.
 #
-# scraper-Module sind unter scrapers/<modul>.py.
-# Klassenname-Konvention: snake_case -> CamelCase + 'Scraper'
-#   z.B. 'rss_generic' -> 'RssGenericScraper'
+#   Engine-Familien:
+#     1. Cosinex VMP Satellite -> /VMPSatellite/notice/search?searchTerm=X
+#        Brandenburg, Sachsen-Anhalt, Thueringen, Schleswig-Holstein,
+#        Mecklenburg-Vorpommern (teilweise)
+#     2. Cosinex VMP Center    -> /VMPCenter/notice/search?searchTerm=X
+#        NRW, Rheinland-Pfalz, Saarland, Hamburg
+#     3. Vergabemarktplatz Berlin (Spezial)
+#     4. evergabe.sachsen.de (NetServer)
+#     5. DTVP (Healy-Hudson)
+#     6. evergabe.de / evergabe-online.de (Bund/Cosinex)
+#     7. Auftragsboerse Bayern
 #
-# Hinweis fuer alle generic_html-Eintraege:
-#   Die search_path / Selektoren sind aktuelle, aber ungetestete
-#   Annahmen. Wenn ein Portal sein Layout aendert, einfach im Browser
-#   die Suchergebnis-Seite oeffnen, F12 -> Element untersuchen, und
-#   den passenden CSS-Selektor hier eintragen.
+# Felder:
+#   strategy : api | rss | search_url | scrape
+#   scraper  : Modulname unter scrapers/ (snake_case -> CamelCaseScraper)
 
 portals:
 
-  # =========================================================
-  # Bund / EU - solide implementiert
-  # =========================================================
+  # =====================================================================
+  # Bund / EU - hochwertig, eigene Scraper
+  # =====================================================================
 
   - name: "bund.de Service-Portal"
     enabled: true
     scraper: "bund"
     base_url: "https://www.service.bund.de"
     strategy: "search_url"
-    notes: "Service-Portal des Bundes - eigener Scraper, stabil."
+    notes: "Bekanntmachungen des Bundes - eigener Scraper, stabil."
 
   - name: "TED - Tenders Electronic Daily"
     enabled: true
@@ -36,166 +44,146 @@ portals:
     strategy: "api"
     notes: "Offizielle TED Search API v3 - kein Key noetig."
 
-  # =========================================================
-  # Bund / Bundesweit
-  # =========================================================
+  # =====================================================================
+  # Bundesweite Cosinex / Bekanntmachungs-Portale
+  # =====================================================================
 
-  - name: "evergabe-online.de (Bund)"
+  - name: "evergabe.de (Cosinex)"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.evergabe.de"
+    strategy: "search_url"
+    notes: "Cosinex Deutsche eVergabe - oeffentliche Auftragsbekanntmachungen."
+    config:
+      search_path: "/auftraege?fulltext={term}"
+      result_selector: "li.auftrag, div.auftrag, article.tender, div.search-result, tr.tender-row"
+      title_selector: "a.title, h3 a, a.tender-link, .auftrag-title a"
+      authority_selector: ".buyer, .vergabestelle, .auftraggeber, .organisation"
+      location_selector: ".place, .ort, .location, .ausschreibungsort"
+      deadline_selector: ".deadline, .frist, .submission-deadline, .angebotsfrist"
+      publication_selector: ".published, .veroeffentlicht, .publication-date"
+      description_selector: ".excerpt, .description, .teaser, .summary"
+
+  - name: "evergabe-online.de (BMI)"
     enabled: true
     scraper: "generic_html"
     base_url: "https://www.evergabe-online.de"
     strategy: "search_url"
-    notes: "Bundesweite Plattform der BMI. Selektoren ggf. nachziehen."
+    notes: "Bund-Laender-Plattform der Beschaffungsstelle des BMI."
     config:
       search_path: "/search.html?searchScope=ANNOUNCEMENT&inputSearchterm={term}"
-      result_selector: "div.result, li.search-result, tr.searchResult"
-      title_selector: "a.title, h3 a, a.search-result-title"
-      authority_selector: ".authority, .vergabestelle, .buyer"
+      result_selector: "div.searchResultItem, li.searchResult, tr.searchResultRow, div.result"
+      title_selector: "a.searchResultLink, h3 a, a.title"
+      authority_selector: ".authority, .buyer, .vergabestelle"
       location_selector: ".place, .ort, .location"
-      deadline_selector: ".deadline, .frist, .endTime"
-      publication_selector: ".publication, .veroeffentlicht"
-      description_selector: ".excerpt, .description"
+      deadline_selector: ".deadline, .frist, .submissionDeadline, .endTime"
+      publication_selector: ".publicationDate, .publication, .veroeffentlicht"
+      description_selector: ".excerpt, .description, .teaser"
 
   - name: "DTVP - Deutsches Vergabeportal"
     enabled: true
     scraper: "generic_html"
     base_url: "https://www.dtvp.de"
     strategy: "search_url"
-    notes: "Healy-Hudson-Portal, oeffentliche Suche."
+    notes: "Healy-Hudson Vergabeportal."
     config:
-      search_path: "/Center/notices?fulltext={term}"
-      result_selector: "div.notice-tile, tr.notice-row, li.notice"
-      title_selector: "a.title, a.notice-title, h3 a"
-      authority_selector: ".buyer-name, .organisation"
-      location_selector: ".place, .location"
-      deadline_selector: ".deadline, .submission-deadline"
+      search_path: "/Center/notices/search?fulltext={term}"
+      result_selector: "div.notice-tile, tr.notice-row, li.notice, div.search-result"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer-name, .organisation, .buyer"
+      location_selector: ".place, .location, .ort"
+      deadline_selector: ".deadline, .submission-deadline, .frist"
+      publication_selector: ".publication-date, .published"
+      description_selector: ".description, .excerpt"
 
-  # =========================================================
-  # Laenderportale (Schwerpunkt Mittel-/Ostdeutschland fuer FBE)
-  # =========================================================
+  # =====================================================================
+  # Bundeslaender (alphabetisch)
+  # =====================================================================
 
-  - name: "Vergabemarktplatz Brandenburg"
+  - name: "Vergabe Baden-Württemberg"
     enabled: true
     scraper: "generic_html"
-    base_url: "https://vergabemarktplatz.brandenburg.de"
+    base_url: "https://vergabe.bwl.de"
     strategy: "search_url"
-    notes: "Vergabemarktplatz-Engine (AI Informatics)."
+    notes: "Vergabeplattform Baden-Wuerttemberg."
     config:
-      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
-      result_selector: "div.notice-result, tr.notice"
-      title_selector: "a.notice-title, a.title"
+      search_path: "/?searchterm={term}"
+      result_selector: "div.search-result, li.notice, article.tender"
+      title_selector: "a.title, h3 a"
       authority_selector: ".buyer, .vergabestelle"
       location_selector: ".place, .ort"
       deadline_selector: ".deadline, .frist"
+      description_selector: ".excerpt, .description"
+
+  - name: "Auftragsbörse Bayern"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.auftraege.bayern.de"
+    strategy: "search_url"
+    notes: "Bayerische Auftragsboerse."
+    config:
+      search_path: "/index.php?searchterm={term}"
+      result_selector: "tr.bekanntmachung, div.search-result, li.notice"
+      title_selector: "a.title, td.title a, h3 a"
+      authority_selector: ".buyer, .vergabestelle, td.auftraggeber"
+      location_selector: ".place, .ort, td.ort"
+      deadline_selector: ".deadline, .frist, td.frist"
 
   - name: "Vergabeplattform Berlin"
     enabled: true
     scraper: "generic_html"
     base_url: "https://vergabeplattform.berlin.de"
     strategy: "search_url"
-    notes: "Vergabemarktplatz-Engine."
+    notes: "Vergabe Berlin (VMP Satellite)."
+    config:
+      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice, div.search-hit"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+      publication_selector: ".publication-date"
+      description_selector: ".excerpt, .description"
+
+  - name: "Vergabemarktplatz Brandenburg"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://vergabemarktplatz.brandenburg.de"
+    strategy: "search_url"
+    notes: "Brandenburg (VMP Satellite)."
+    config:
+      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice, div.search-hit"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+      description_selector: ".excerpt, .description"
+
+  - name: "Vergabe Bremen"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://vergabe.bremen.de"
+    strategy: "search_url"
+    notes: "Bremen Vergabe."
+    config:
+      search_path: "/?searchterm={term}"
+      result_selector: "div.search-result, li.notice, tr.tender-row"
+      title_selector: "a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+
+  - name: "Vergabe Hamburg"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://vergabe.hamburg.de"
+    strategy: "search_url"
+    notes: "Hamburg Vergabe (VMP Center)."
     config:
       search_path: "/VMPCenter/notice/search?searchTerm={term}"
-      result_selector: "div.notice-result, tr.notice"
-      title_selector: "a.notice-title, a.title"
-      authority_selector: ".buyer, .vergabestelle"
-      location_selector: ".place, .ort"
-      deadline_selector: ".deadline, .frist"
-
-  - name: "Vergabeplattform Sachsen"
-    enabled: true
-    scraper: "generic_html"
-    base_url: "https://www.evergabe.sachsen.de"
-    strategy: "search_url"
-    notes: "evergabe.sachsen.de"
-    config:
-      search_path: "/NetServer/PublicationSearchControllerServlet?function=SearchPublications&searchterm={term}"
-      result_selector: "tr.publication-row, div.notice-result"
-      title_selector: "a.publication-title, a.title"
-      authority_selector: "td.buyer, .vergabestelle"
-      location_selector: "td.place, .ort"
-      deadline_selector: "td.deadline, .frist"
-
-  - name: "Vergabe Sachsen-Anhalt"
-    enabled: true
-    scraper: "generic_html"
-    base_url: "https://www.evergabe.sachsen-anhalt.de"
-    strategy: "search_url"
-    notes: "Sachsen-Anhalt Vergabemarktplatz."
-    config:
-      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
-      result_selector: "div.notice-result, tr.notice"
-      title_selector: "a.notice-title, a.title"
-      authority_selector: ".buyer, .vergabestelle"
-      location_selector: ".place, .ort"
-      deadline_selector: ".deadline"
-
-  - name: "Vergabeplattform Thueringen"
-    enabled: true
-    scraper: "generic_html"
-    base_url: "https://www.evergabe-thueringen.de"
-    strategy: "search_url"
-    notes: "Thueringen Vergabe."
-    config:
-      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
-      result_selector: "div.notice-result, tr.notice"
-      title_selector: "a.notice-title, a.title"
-      authority_selector: ".buyer, .vergabestelle"
-      location_selector: ".place, .ort"
-      deadline_selector: ".deadline"
-
-  - name: "Vergabe Mecklenburg-Vorpommern"
-    enabled: true
-    scraper: "generic_html"
-    base_url: "https://www.service.mv-regierung.de"
-    strategy: "search_url"
-    notes: "Vergabeplattform MV. URL-Pattern moeglicherweise abweichend."
-    config:
-      search_path: "/Vergabe/_search?q={term}"
-      result_selector: "div.search-result, li.notice"
-      title_selector: "a.title, h3 a"
-      authority_selector: ".buyer, .vergabestelle"
-      location_selector: ".place, .ort"
-      deadline_selector: ".deadline, .frist"
-
-  - name: "Vergabeplattform NRW"
-    enabled: true
-    scraper: "generic_html"
-    base_url: "https://www.evergabe.nrw.de"
-    strategy: "search_url"
-    notes: "Vergabe NRW (Cosinex)."
-    config:
-      search_path: "/VMPCenter/notice/search?fulltext={term}"
-      result_selector: "div.notice-result, tr.notice"
-      title_selector: "a.notice-title, a.title"
-      authority_selector: ".buyer, .vergabestelle"
-      location_selector: ".place, .ort"
-      deadline_selector: ".deadline, .frist"
-
-  - name: "Vergabe Niedersachsen"
-    enabled: true
-    scraper: "generic_html"
-    base_url: "https://www.vergabe.niedersachsen.de"
-    strategy: "search_url"
-    notes: "Niedersachsen Vergabe."
-    config:
-      search_path: "/Veroeffentlichungen?searchterm={term}"
-      result_selector: "div.search-result, li.notice"
-      title_selector: "a.title, h3 a"
-      authority_selector: ".buyer, .vergabestelle"
-      location_selector: ".place, .ort"
-      deadline_selector: ".deadline, .frist"
-
-  - name: "Vergabe Bayern"
-    enabled: true
-    scraper: "generic_html"
-    base_url: "https://www.vergabe.bayern.de"
-    strategy: "search_url"
-    notes: "Bayern Auftragsboerse."
-    config:
-      search_path: "/auftragsboerse/?q={term}"
-      result_selector: "article.search-result, li.notice, div.result"
-      title_selector: "a.title, h3 a"
+      result_selector: "div.notice-result, tr.notice, li.notice"
+      title_selector: "a.notice-title, a.title, h3 a"
       authority_selector: ".buyer, .vergabestelle"
       location_selector: ".place, .ort"
       deadline_selector: ".deadline, .frist"
@@ -208,15 +196,143 @@ portals:
     notes: "Hessen Vergabe."
     config:
       search_path: "/?searchterm={term}"
-      result_selector: "div.search-result, li.result"
+      result_selector: "div.search-result, li.notice, article.tender"
+      title_selector: "a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+      description_selector: ".excerpt, .description"
+
+  - name: "Vergabe Mecklenburg-Vorpommern"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.vergabe-mv.de"
+    strategy: "search_url"
+    notes: "MV Vergabe."
+    config:
+      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+
+  - name: "Vergabe Niedersachsen"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.vergabe.niedersachsen.de"
+    strategy: "search_url"
+    notes: "Niedersachsen Vergabe."
+    config:
+      search_path: "/Veroeffentlichungen?searchterm={term}"
+      result_selector: "div.search-result, li.notice, article.tender, tr.tender-row"
       title_selector: "a.title, h3 a"
       authority_selector: ".buyer, .vergabestelle"
       location_selector: ".place, .ort"
       deadline_selector: ".deadline, .frist"
 
-  # =========================================================
-  # Spaeter / mit Spezial-Scraper
-  # =========================================================
+  - name: "Vergabe Nordrhein-Westfalen"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.evergabe.nrw.de"
+    strategy: "search_url"
+    notes: "NRW Vergabe (VMP Center)."
+    config:
+      search_path: "/VMPCenter/notice/search?fulltext={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice, div.search-hit"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+      description_selector: ".excerpt, .description"
+
+  - name: "Vergabe Rheinland-Pfalz"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://vergabe.rlp.de"
+    strategy: "search_url"
+    notes: "RLP Vergabe (VMP Center)."
+    config:
+      search_path: "/VMPCenter/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+
+  - name: "Vergabe Saarland"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://vergabe.saarland.de"
+    strategy: "search_url"
+    notes: "Saarland Vergabe (VMP Center)."
+    config:
+      search_path: "/VMPCenter/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+
+  - name: "Vergabe Sachsen"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.evergabe.sachsen.de"
+    strategy: "search_url"
+    notes: "Sachsen (NetServer)."
+    config:
+      search_path: "/NetServer/PublicationSearchControllerServlet?function=SearchPublications&searchterm={term}"
+      result_selector: "tr.publication-row, div.notice-result, tr.searchResult"
+      title_selector: "a.publication-title, a.title, td.title a"
+      authority_selector: "td.buyer, .vergabestelle"
+      location_selector: "td.place, .ort"
+      deadline_selector: "td.deadline, .frist"
+
+  - name: "Vergabe Sachsen-Anhalt"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.evergabe.sachsen-anhalt.de"
+    strategy: "search_url"
+    notes: "Sachsen-Anhalt (VMP Satellite)."
+    config:
+      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+
+  - name: "Vergabe Schleswig-Holstein"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.vergabe-sh.de"
+    strategy: "search_url"
+    notes: "SH Vergabe (VMP Satellite)."
+    config:
+      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+
+  - name: "Vergabe Thüringen"
+    enabled: true
+    scraper: "generic_html"
+    base_url: "https://www.evergabe-thueringen.de"
+    strategy: "search_url"
+    notes: "Thueringen (VMP Satellite)."
+    config:
+      search_path: "/VMPSatellite/notice/search?searchTerm={term}"
+      result_selector: "div.notice-result, tr.notice, li.notice"
+      title_selector: "a.notice-title, a.title, h3 a"
+      authority_selector: ".buyer, .vergabestelle"
+      location_selector: ".place, .ort"
+      deadline_selector: ".deadline, .frist"
+
+  # =====================================================================
+  # Login-/JS-pflichtig - spaeter mit Spezial-Scraper
+  # =====================================================================
 
   - name: "Subreport ELViS"
     enabled: false
@@ -224,13 +340,6 @@ portals:
     base_url: "https://www.subreport.de"
     strategy: "scrape"
     notes: "Login/Account erforderlich. Spezial-Scraper noetig."
-
-  - name: "Deutsche eVergabe (cosinex)"
-    enabled: false
-    scraper: "deutsche_evergabe"
-    base_url: "https://www.deutsche-evergabe.de"
-    strategy: "api"
-    notes: "Registrierung & API-Key noetig."
 
   - name: "DB Vergabeportal"
     enabled: false
@@ -244,7 +353,7 @@ portals:
     scraper: "generic_html"
     base_url: "https://www.vergabe24.de"
     strategy: "search_url"
-    notes: "Funktioniert oft erst nach Cookie/Session - Selektoren testen."
+    notes: "Sessions/Cookies oft erforderlich. Selektoren testen."
     config:
       search_path: "/?searchterm={term}"
       result_selector: "div.notice-result, li.result"

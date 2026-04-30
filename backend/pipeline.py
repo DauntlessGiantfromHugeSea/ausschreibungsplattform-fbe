@@ -1,4 +1,12 @@
-"""Orchestrierung: Scraper -> Scoring -> Dedup -> DB -> Notify."""
+"""Orchestrierung: Scraper -> Scoring -> Dedup -> DB -> Notify.
+
+Robustheit:
+- Jede Portal-Iteration in try/except.
+- Jeder einzelne Item-Insert in try/except + per-Item-Commit, damit
+  ein einzelner Fehler nicht die ganze Portal-Charge zurueckrollt.
+- Sonderfaelle (leere Titel/URLs, Fingerprint-Kollisionen, DB-Fehler)
+  werden geloggt aber unterbrechen den Lauf nicht.
+"""
 from __future__ import annotations
 
 import importlib
@@ -7,8 +15,10 @@ import logging
 from datetime import datetime
 from typing import List
 
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
 from .config import settings
-from .database import session_scope
+from .database import SessionLocal
 from .dedup import fingerprint
 from .models import Tender, TenderStatus
 from .portal_config import PortalConfig, enabled_portals
@@ -29,7 +39,6 @@ def _load_scraper(portal: PortalConfig):
     class_name = "".join(p.capitalize() for p in portal.scraper.split("_")) + "Scraper"
     if hasattr(module, class_name):
         return getattr(module, class_name)
-    # Fallback: erste BaseScraper-Subklasse im Modul.
     from scrapers.base import BaseScraper
     for attr in dir(module):
         obj = getattr(module, attr)
@@ -39,18 +48,28 @@ def _load_scraper(portal: PortalConfig):
 
 
 def run_pipeline() -> dict:
-    """Fuehrt einen vollstaendigen Lauf aus. Liefert Statistik-Dict."""
+    """Fuehrt einen vollstaendigen Lauf aus. Liefert Statistik-Dict.
+
+    Garantiert: kein einzelner Portal- oder Item-Fehler bricht den Lauf ab.
+    """
     cfg = load_search_config()
-    stats = {"started_at": datetime.utcnow().isoformat(), "portals": [], "new": 0, "updated": 0, "errors": 0}
+    stats = {
+        "started_at": datetime.utcnow().isoformat(),
+        "portals": [],
+        "new": 0,
+        "updated": 0,
+        "errors": 0,
+    }
     new_high_relevance: List[Tender] = []
 
     for portal in enabled_portals():
-        portal_stats = {"name": portal.name, "fetched": 0, "new": 0, "errors": 0}
+        portal_stats = {"name": portal.name, "fetched": 0, "new": 0, "updated": 0, "errors": 0}
         try:
             ScraperCls = _load_scraper(portal)
         except Exception as exc:
-            log.exception("Konnte Scraper fuer %s nicht laden: %s", portal.name, exc)
+            log.exception("[%s] Konnte Scraper nicht laden: %s", portal.name, exc)
             portal_stats["errors"] = 1
+            portal_stats["error_msg"] = str(exc)[:200]
             stats["errors"] += 1
             stats["portals"].append(portal_stats)
             continue
@@ -59,8 +78,9 @@ def run_pipeline() -> dict:
             with ScraperCls(base_url=portal.base_url, name=portal.name, config=portal.config) as scraper:
                 items = scraper.fetch(cfg.query_terms)
         except Exception as exc:
-            log.exception("Scraper %s fehlgeschlagen: %s", portal.name, exc)
+            log.exception("[%s] Scraper.fetch fehlgeschlagen: %s", portal.name, exc)
             portal_stats["errors"] = 1
+            portal_stats["error_msg"] = f"{type(exc).__name__}: {str(exc)[:180]}"
             stats["errors"] += 1
             stats["portals"].append(portal_stats)
             continue
@@ -68,51 +88,20 @@ def run_pipeline() -> dict:
         portal_stats["fetched"] = len(items)
         log.info("[%s] %d Treffer", portal.name, len(items))
 
-        with session_scope() as db:
-            for item in items:
-                fp = fingerprint(item.url, item.title, item.contracting_authority, item.deadline)
-                existing = db.query(Tender).filter(Tender.fingerprint == fp).first()
-                sr = score_text(
-                    title=item.title,
-                    description=item.description,
-                    cpv_codes=item.cpv_codes,
-                    region=item.region,
-                    deadline=item.deadline,
-                    config=cfg,
-                )
-                matched_str = "; ".join(sr.matched_terms)
-                if existing:
-                    # Aktualisieren, falls Frist/Score sich geaendert haben
-                    existing.relevance_score = sr.score
-                    existing.relevance_level = sr.level
-                    existing.matched_terms = matched_str
-                    if item.deadline:
-                        existing.deadline = item.deadline
+        for item in items:
+            try:
+                result = _save_item(item, cfg, new_high_relevance)
+                if result == "new":
+                    portal_stats["new"] += 1
+                    stats["new"] += 1
+                elif result == "updated":
+                    portal_stats["updated"] += 1
                     stats["updated"] += 1
-                    continue
-                tender = Tender(
-                    title=item.title[:1000],
-                    portal=item.portal,
-                    contracting_authority=item.contracting_authority,
-                    location=item.location,
-                    region=item.region,
-                    publication_date=item.publication_date,
-                    deadline=item.deadline,
-                    url=item.url,
-                    description=item.description,
-                    matched_terms=matched_str,
-                    relevance_score=sr.score,
-                    relevance_level=sr.level,
-                    status=TenderStatus.NEU.value,
-                    cpv_codes=";".join(item.cpv_codes) if item.cpv_codes else None,
-                    documents=json.dumps(item.documents) if item.documents else None,
-                    fingerprint=fp,
-                )
-                db.add(tender)
-                portal_stats["new"] += 1
-                stats["new"] += 1
-                if sr.score >= settings.high_relevance_threshold:
-                    new_high_relevance.append(tender)
+            except Exception as exc:
+                log.warning("[%s] Item '%s' konnte nicht gespeichert werden: %s",
+                            portal.name, (item.title or "")[:80], exc)
+                portal_stats["errors"] += 1
+
         stats["portals"].append(portal_stats)
 
     stats["finished_at"] = datetime.utcnow().isoformat()
@@ -124,3 +113,69 @@ def run_pipeline() -> dict:
             log.warning("Mailversand fehlgeschlagen: %s", exc)
 
     return stats
+
+
+# ---------------------------------------------------------------------------
+def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
+    """Speichert einen einzelnen TenderItem. Liefert 'new' | 'updated' | None."""
+    if not item.title or not item.url:
+        log.debug("Skip Item ohne Titel/URL")
+        return None
+
+    fp = fingerprint(item.url, item.title, item.contracting_authority, item.deadline)
+    sr = score_text(
+        title=item.title,
+        description=item.description,
+        cpv_codes=item.cpv_codes,
+        region=item.region,
+        deadline=item.deadline,
+        config=cfg,
+    )
+    matched_str = "; ".join(sr.matched_terms) if sr.matched_terms else None
+
+    db = SessionLocal()
+    try:
+        existing = db.query(Tender).filter(Tender.fingerprint == fp).first()
+        if existing:
+            existing.relevance_score = sr.score
+            existing.relevance_level = sr.level
+            existing.matched_terms = matched_str
+            if item.deadline:
+                existing.deadline = item.deadline
+            db.commit()
+            return "updated"
+
+        tender = Tender(
+            title=(item.title or "")[:1000],
+            portal=item.portal,
+            contracting_authority=(item.contracting_authority or None),
+            location=(item.location or None),
+            region=(item.region or None),
+            publication_date=item.publication_date,
+            deadline=item.deadline,
+            url=item.url,
+            description=item.description,
+            matched_terms=matched_str,
+            relevance_score=sr.score,
+            relevance_level=sr.level,
+            status=TenderStatus.NEU.value,
+            cpv_codes=";".join(item.cpv_codes) if item.cpv_codes else None,
+            documents=json.dumps(item.documents) if item.documents else None,
+            fingerprint=fp,
+        )
+        db.add(tender)
+        try:
+            db.commit()
+        except IntegrityError:
+            # Fingerprint-Kollision (race condition): kein Fehler, einfach skippen.
+            db.rollback()
+            log.debug("Fingerprint-Kollision: %s", item.url)
+            return None
+        if sr.score >= settings.high_relevance_threshold:
+            new_high_relevance.append(tender)
+        return "new"
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise
+    finally:
+        db.close()

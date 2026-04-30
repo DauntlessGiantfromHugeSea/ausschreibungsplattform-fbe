@@ -149,8 +149,8 @@ portals:
         - "/VMPSatellite/notice"
         - "/VMPSatellite/notice?page=2"
       filter_by_terms: true
-      result_selector: "div.notice-result, tr.notice, li.notice, article, [class*='notice-item']"
-      title_selector: "a.notice-title, a.title, h2 a, h3 a, h2, h3, a"
+      result_selector: "tr.publication, table.publications tbody tr, div.notice-result, tr.notice, li.notice, article, [class*='notice-item'], [class*='publication']"
+      title_selector: "a.notice-title, a.title, td a, h2 a, h3 a, h2, h3, a"
       description_selector: ".description, .excerpt, p"
 
   - name: "Vergabemarktplatz Brandenburg"
@@ -164,8 +164,8 @@ portals:
         - "/VMPSatellite/notice"
         - "/VMPSatellite/notice?page=2"
       filter_by_terms: true
-      result_selector: "div.notice-result, tr.notice, li.notice, article, [class*='notice-item']"
-      title_selector: "a.notice-title, a.title, h2 a, h3 a, h2, h3, a"
+      result_selector: "tr.publication, table.publications tbody tr, div.notice-result, tr.notice, li.notice, article, [class*='notice-item'], [class*='publication']"
+      title_selector: "a.notice-title, a.title, td a, h2 a, h3 a, h2, h3, a"
       description_selector: ".description, .excerpt, p"
 
   - name: "Vergabe Bremen"
@@ -250,8 +250,8 @@ portals:
         - "/VMPCenter/notice"
         - "/VMPCenter/notice?page=2"
       filter_by_terms: true
-      result_selector: "div.notice-result, tr.notice, li.notice, article, [class*='notice-item']"
-      title_selector: "a.notice-title, a.title, h2 a, h3 a, h2, h3, a"
+      result_selector: "tr.publication, table.publications tbody tr, div.notice-result, tr.notice, li.notice, article, [class*='notice-item'], [class*='publication']"
+      title_selector: "a.notice-title, a.title, td a, h2 a, h3 a, h2, h3, a"
       description_selector: ".description, .excerpt, p"
 
   - name: "Vergabe Rheinland-Pfalz"

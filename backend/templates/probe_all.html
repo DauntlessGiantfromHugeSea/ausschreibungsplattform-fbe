@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Alle Portale testen – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/admin/portals" class="hover:text-zinc-900">Portale</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Alle testen</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2">Alle Portale auf einmal testen</h1>
+<p class="text-sm text-zinc-500 mb-6">
+  Schickt einen Suchbegriff parallel an jedes aktivierte Portal und zeigt
+  dir auf einen Blick, wer Treffer liefert und wer nicht.
+  Dauer: typisch 1–3 Minuten je nach Portalanzahl.
+</p>
+
+<form method="post" action="/admin/probe-all" class="card p-5 mb-6 flex items-end gap-3 flex-wrap"
+      onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerText='Teste alle Portale…';">
+  <div class="flex-1 min-w-[200px]">
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Suchbegriff</label>
+    <input class="input" type="text" name="term" value="{{ term or 'Tiefbau' }}" required>
+    <div class="text-xs text-zinc-400 mt-1">
+      Tipp: <code>Tiefbau</code> oder <code>Verfüllung</code> – generelle Begriffe haben oft mehr Treffer als <code>Flüssigboden</code>.
+    </div>
+  </div>
+  <button type="submit" class="btn-primary">Alle testen</button>
+</form>
+
+{% if results %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold">{{ summary.total }}</div>
+    <div class="text-xs text-zinc-500 uppercase tracking-wider">aktive Portale</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold text-emerald-700">{{ summary.ok }}</div>
+    <div class="text-xs text-emerald-700 uppercase tracking-wider">liefern Treffer</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold text-amber-700">{{ summary.empty }}</div>
+    <div class="text-xs text-amber-700 uppercase tracking-wider">0 Treffer</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold text-rose-700">{{ summary.error }}</div>
+    <div class="text-xs text-rose-700 uppercase tracking-wider">Fehler</div>
+  </div>
+</div>
+
+<div class="card overflow-hidden">
+  <table class="dashboard">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Portal</th>
+        <th>Scraper</th>
+        <th class="text-right">Treffer</th>
+        <th class="text-right">Dauer</th>
+        <th>Erste Titel / Fehler</th>
+        <th class="text-right pr-4">Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in results %}
+      <tr>
+        <td>
+          {% if r.skipped %}
+            <span class="pill bg-zinc-100 text-zinc-500">deaktiviert</span>
+          {% elif r.error %}
+            <span class="pill bg-rose-100 text-rose-800">Fehler</span>
+          {% elif r.count > 0 %}
+            <span class="pill bg-emerald-100 text-emerald-800">{{ r.count }} OK</span>
+          {% else %}
+            <span class="pill bg-amber-100 text-amber-800">0 Treffer</span>
+          {% endif %}
+        </td>
+        <td><div class="font-medium">{{ r.name }}</div></td>
+        <td><code class="text-xs">{{ r.scraper }}</code></td>
+        <td class="text-right font-medium {% if r.count > 0 %}text-emerald-700{% endif %}">
+          {{ r.count if not r.skipped else '—' }}
+        </td>
+        <td class="text-right text-xs text-zinc-500">{{ '%.1f' % (r.elapsed_ms / 1000) }}s</td>
+        <td class="text-xs">
+          {% if r.error %}
+            <code class="text-rose-700">{{ r.error }}</code>
+          {% elif r.first_titles %}
+            <ul class="text-zinc-600 space-y-0.5">
+              {% for t in r.first_titles %}<li>· {{ t }}</li>{% endfor %}
+            </ul>
+          {% elif r.skipped %}
+            <span class="text-zinc-400">übersprungen</span>
+          {% else %}
+            <span class="text-zinc-400">—</span>
+          {% endif %}
+        </td>
+        <td class="text-right whitespace-nowrap">
+          <a href="/admin/probe?portal={{ r.name|urlencode }}" class="btn-icon" title="Detail-Probe">🔍</a>
+          <a href="/admin/portals/{{ r.name|urlencode }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card p-5 mt-6 text-sm">
+  <h3 class="font-semibold mb-2">Was tun mit den Ergebnissen?</h3>
+  <ul class="list-disc pl-5 text-zinc-600 space-y-1">
+    <li><strong>OK / Treffer &gt; 0</strong> — Portal liefert; nichts zu tun.</li>
+    <li><strong>0 Treffer (gelb)</strong> — Server antwortet, aber Selektor / URL findet keine Karten.
+      Auf 🔍 klicken → Detail-Probe → HTML-Auszug ansehen → Selektor anpassen.</li>
+    <li><strong>Fehler (rot)</strong> — meist falsche URL (404), Timeout oder robots.txt-Block.
+      Fehlermeldung lesen, base_url / search_path in <a href="/admin/portals" class="text-brand-700 hover:underline">/admin/portals</a> korrigieren.</li>
+    <li><strong>deaktiviert</strong> — übersprungen. Im UI aktivierbar wenn der Scraper soweit ist.</li>
+  </ul>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -499,6 +499,68 @@ def admin_probe_post(request: Request, portal: str = Form(...), term: str = Form
     )
 
 
+@app.get("/admin/probe-all", response_class=HTMLResponse)
+def admin_probe_all_get(request: Request):
+    return templates.TemplateResponse(
+        request, "probe_all.html",
+        {
+            "portals": load_portals(),
+            "results": None,
+            "user": request.session.get("user"),
+        },
+    )
+
+
+@app.post("/admin/probe-all", response_class=HTMLResponse)
+def admin_probe_all_post(request: Request, term: str = Form("Tiefbau")):
+    """Testet jedes konfigurierte Portal sequentiell mit demselben Suchbegriff."""
+    results = []
+    for portal in load_portals():
+        if not portal.enabled:
+            results.append({
+                "name": portal.name, "scraper": portal.scraper,
+                "enabled": False, "count": 0, "error": None,
+                "elapsed_ms": 0, "skipped": True,
+            })
+            continue
+
+        entry = {
+            "name": portal.name, "scraper": portal.scraper,
+            "enabled": True, "count": 0, "error": None,
+            "elapsed_ms": 0, "skipped": False,
+            "first_titles": [],
+        }
+        t0 = datetime.utcnow()
+        try:
+            ScraperCls = _load_scraper(portal)
+            with ScraperCls(base_url=portal.base_url, name=portal.name, config=portal.config) as sc:
+                items = sc.fetch([term])
+            entry["count"] = len(items)
+            entry["first_titles"] = [it.title[:80] for it in items[:3]]
+        except Exception as exc:
+            log.exception("Probe-All %s fehlgeschlagen: %s", portal.name, exc)
+            entry["error"] = f"{type(exc).__name__}: {str(exc)[:160]}"
+        entry["elapsed_ms"] = int((datetime.utcnow() - t0).total_seconds() * 1000)
+        results.append(entry)
+
+    summary = {
+        "total": len([r for r in results if not r.get("skipped")]),
+        "ok": len([r for r in results if r["count"] > 0]),
+        "empty": len([r for r in results if not r.get("skipped") and r["count"] == 0 and not r["error"]]),
+        "error": len([r for r in results if r["error"]]),
+    }
+    return templates.TemplateResponse(
+        request, "probe_all.html",
+        {
+            "portals": load_portals(),
+            "results": results,
+            "summary": summary,
+            "term": term,
+            "user": request.session.get("user"),
+        },
+    )
+
+
 def _probe_diagnostic(scraper, portal_cfg) -> dict:
     """Holt rohe Listing-Antwort + analysiert Struktur fuer das UI."""
     cfg = portal_cfg.config or {}

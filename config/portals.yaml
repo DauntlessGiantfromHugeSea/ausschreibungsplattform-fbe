@@ -50,23 +50,19 @@ portals:
 
   - name: "evergabe.de (Cosinex)"
     enabled: true
-    scraper: "generic_html"
+    scraper: "nextjs"
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      Listing-Modus: Detailseiten brauchen Login, aber die Listing-Seite
-      zeigt Titel, Beschreibung, Ort, Frist, Kategorie. Die Karten liegen
-      in #results-list-container; wir nehmen jedes direkte Kind als
-      Treffer und filtern client-seitig auf unsere Cluster-Begriffe.
+      Next.js-SPA. Statt das DOM zu parsen extrahieren wir das initiale
+      JSON aus <script id="__NEXT_DATA__"> der Suchergebnis-Seite.
+      Echte URL: /auftraege/auftrag-suchen?search[query]=... (Rails-Style).
+      {term} wird URL-encoded eingesetzt; je query_term ein Request.
+      Pagination optional via search[page]=N.
     config:
-      listing_paths:
-        - "/auftraege"
-        - "/auftraege?seite=2"
-        - "/auftraege?seite=3"
-      filter_by_terms: true
-      result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > li, #results-list-container > section"
-      title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, [class*='title'], a"
-      description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
+      search_path: "/auftraege/auftrag-suchen?search%5Bquery%5D={term}&search%5Bper_page%5D=50&search%5Bsort_order%5D=best"
+      # data_path und field_map werden heuristisch ermittelt; bei Bedarf
+      # ueber /admin/probe-Diagnose feinjustieren (siehe HTML-Auszug).
 
   - name: "evergabe-online.de (BMI)"
     enabled: true

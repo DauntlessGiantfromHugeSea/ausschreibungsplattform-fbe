@@ -46,10 +46,18 @@ class BaseScraper:
         self.config = config or {}
         # HTTP-Header muessen ASCII sein – nicht-ASCII Zeichen (z.B. Umlaute)
         # rauswerfen, statt UnicodeEncodeError beim Client-Init zu provozieren.
-        ua = settings.scraper_user_agent.encode("ascii", "ignore").decode("ascii") \
+        # Per-Portal-User-Agent ueberschreibt den globalen (manche Portale
+        # blocken den FBE-Bot-UA mit 403).
+        ua_raw = self.config.get("user_agent") or settings.scraper_user_agent
+        ua = ua_raw.encode("ascii", "ignore").decode("ascii") \
             or "FBE-Ausschreibungsbot/1.0"
+        headers = {
+            "User-Agent": ua,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "de-DE,de;q=0.9,en;q=0.7",
+        }
         self._client = httpx.Client(
-            headers={"User-Agent": ua},
+            headers=headers,
             timeout=settings.http_timeout,
             follow_redirects=True,
         )

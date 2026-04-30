@@ -50,24 +50,26 @@ portals:
 
   - name: "evergabe.de (Cosinex)"
     enabled: true
-    scraper: "crawl_html"
+    scraper: "generic_html"
     base_url: "https://www.evergabe.de"
-    strategy: "scrape"
-    notes: "Crawlt /auftraege Listing + Detailseiten und filtert per Volltext."
+    strategy: "search_url"
+    notes: |
+      Listing-Modus: Detailseiten brauchen Login, aber die Listing-Seite
+      zeigt schon Titel, Beschreibung, Ort, Frist, Kategorie. Wir filtern
+      die Karten client-seitig auf unsere Cluster-Begriffe.
+      Wenn das Layout sich aendert: F12 auf einer Karte -> CSS-Klasse
+      kopieren -> in result_selector hier ergaenzen.
     config:
       listing_paths:
         - "/auftraege"
-        - "/auftraege?p=2"
-        - "/auftraege?p=3"
-      link_selector: "a[href*='/auftrag/'], a[href*='/auftraege/']"
-      link_pattern: "/auftr(ag|aege)/[\\w-]+"
-      max_details: 60
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .auftrag-title, .title, .ausschreibung-title"
-      detail_authority_selector: ".vergabestelle, .auftraggeber, .buyer"
-      detail_location_selector: ".ort, .place, .ausfuehrungsort"
-      detail_deadline_selector: ".angebotsfrist, .frist, .deadline, .submission-deadline"
-      detail_publication_selector: ".veroeffentlicht, .published, .publication-date"
+        - "/auftraege?seite=2"
+        - "/auftraege?seite=3"
+      filter_by_terms: true
+      result_selector: "article, [class*='tender-card'], [class*='auftrag-card'], [class*='result-item'], [class*='search-result'], div.bg-white.rounded, li[class*='auftrag'], section[class*='auftrag']"
+      title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, [class*='title'], a"
+      description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
+      # Authority/Location/Deadline kommen automatisch aus den Labels
+      # 'Auftraggeber:' / 'Ausführungsort:' / 'Angebotsfrist:' im Karten-Volltext.
 
   - name: "evergabe-online.de (BMI)"
     enabled: true
@@ -141,41 +143,33 @@ portals:
 
   - name: "Vergabeplattform Berlin"
     enabled: true
-    scraper: "crawl_html"
+    scraper: "generic_html"
     base_url: "https://vergabeplattform.berlin.de"
-    strategy: "scrape"
-    notes: "Berlin VMP Satellite - Crawl-Modus."
+    strategy: "search_url"
+    notes: "Berlin VMP Satellite - Listing-Modus mit Volltext-Filter."
     config:
       listing_paths:
         - "/VMPSatellite/notice"
-        - "/VMPSatellite/notice/list"
-      link_selector: "a[href*='/VMPSatellite/notice/']"
-      link_pattern: "/notice/[\\w-]+"
-      max_details: 40
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .notice-title, .title"
-      detail_authority_selector: ".buyer, .vergabestelle"
-      detail_location_selector: ".place, .ort"
-      detail_deadline_selector: ".deadline, .frist"
+        - "/VMPSatellite/notice?page=2"
+      filter_by_terms: true
+      result_selector: "div.notice-result, tr.notice, li.notice, article, [class*='notice-item']"
+      title_selector: "a.notice-title, a.title, h2 a, h3 a, h2, h3, a"
+      description_selector: ".description, .excerpt, p"
 
   - name: "Vergabemarktplatz Brandenburg"
     enabled: true
-    scraper: "crawl_html"
+    scraper: "generic_html"
     base_url: "https://vergabemarktplatz.brandenburg.de"
-    strategy: "scrape"
-    notes: "Brandenburg VMP Satellite - Crawl-Modus."
+    strategy: "search_url"
+    notes: "Brandenburg VMP Satellite - Listing-Modus mit Volltext-Filter."
     config:
       listing_paths:
         - "/VMPSatellite/notice"
-        - "/VMPSatellite/notice/list"
-      link_selector: "a[href*='/VMPSatellite/notice/']"
-      link_pattern: "/notice/[\\w-]+"
-      max_details: 40
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .notice-title, .title"
-      detail_authority_selector: ".buyer, .vergabestelle"
-      detail_location_selector: ".place, .ort"
-      detail_deadline_selector: ".deadline, .frist"
+        - "/VMPSatellite/notice?page=2"
+      filter_by_terms: true
+      result_selector: "div.notice-result, tr.notice, li.notice, article, [class*='notice-item']"
+      title_selector: "a.notice-title, a.title, h2 a, h3 a, h2, h3, a"
+      description_selector: ".description, .excerpt, p"
 
   - name: "Vergabe Bremen"
     enabled: true
@@ -250,22 +244,18 @@ portals:
 
   - name: "Vergabe Nordrhein-Westfalen"
     enabled: true
-    scraper: "crawl_html"
+    scraper: "generic_html"
     base_url: "https://www.evergabe.nrw.de"
-    strategy: "scrape"
-    notes: "NRW VMP Center - Crawl-Modus."
+    strategy: "search_url"
+    notes: "NRW VMP Center - Listing-Modus mit Volltext-Filter."
     config:
       listing_paths:
         - "/VMPCenter/notice"
-        - "/VMPCenter/notice/list"
-      link_selector: "a[href*='/VMPCenter/notice/']"
-      link_pattern: "/notice/[\\w-]+"
-      max_details: 40
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .notice-title, .title"
-      detail_authority_selector: ".buyer, .vergabestelle"
-      detail_location_selector: ".place, .ort"
-      detail_deadline_selector: ".deadline, .frist"
+        - "/VMPCenter/notice?page=2"
+      filter_by_terms: true
+      result_selector: "div.notice-result, tr.notice, li.notice, article, [class*='notice-item']"
+      title_selector: "a.notice-title, a.title, h2 a, h3 a, h2, h3, a"
+      description_selector: ".description, .excerpt, p"
 
   - name: "Vergabe Rheinland-Pfalz"
     enabled: true

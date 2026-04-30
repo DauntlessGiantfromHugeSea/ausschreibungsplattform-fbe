@@ -94,3 +94,75 @@ def test_generic_html_parser_extracts_records():
     # Externer Link blieb absolut:
     other = next(i for i in items.values() if "Strassenbau" in i.title)
     assert other.url.startswith("https://other.example/")
+
+
+# Card-Layout im evergabe.de-Stil: Felder als 'Label: Wert' im Karten-Volltext,
+# kein klickbarer Detail-Link (Login erforderlich).
+EVERGABE_CARD_FIXTURE = """
+<html><body>
+<div>
+  <article class="tender-card">
+    <h2>Bahnhof Markranstädt Bauleistungen zur Herstellung eines Aufzugschachtes auf Mittelbahnsteig</h2>
+    <p>bauzeitlichen Rückbau des Bahnsteigdachs, Baugrubensicherung mit einer Wand aus Spundwand mit Verfüllung der Baugrube</p>
+    <span>Aufzüge/Rolltreppen</span>
+    Angebotsfrist: 07.05.2026 08:00 Uhr
+    Ausführungsort: 04420 Markranstädt
+    Auftraggeber: Nach Freischalten sichtbar
+    Leistungszeit: Nach Freischalten sichtbar
+    Auftragsart: Privatrecht (BGB)
+  </article>
+
+  <article class="tender-card">
+    <h2>Reinigung Bürogebäude</h2>
+    <p>Allgemeine Reinigungsleistungen für ein Verwaltungsgebäude.</p>
+    Angebotsfrist: 30.06.2026
+    Ausführungsort: 10115 Berlin
+    Auftraggeber: Nach Freischalten sichtbar
+  </article>
+</div>
+</body></html>
+"""
+
+
+def test_listing_extracts_via_labels_and_skips_hidden_fields():
+    cfg = {
+        "result_selector": "article.tender-card",
+        "title_selector": "h2",
+    }
+    items = GenericHtmlScraper.parse_html(
+        EVERGABE_CARD_FIXTURE,
+        base_url="https://www.evergabe.de",
+        portal_name="evergabe.de",
+        config=cfg,
+    )
+    assert len(items) == 2
+    bahn = next(i for i in items.values() if "Bahnhof" in i.title)
+    # Label-Extraktion zieht Frist + Ort aus dem Volltext
+    assert bahn.deadline is not None
+    assert bahn.deadline.year == 2026 and bahn.deadline.month == 5 and bahn.deadline.day == 7
+    assert bahn.location and "Markranstädt" in bahn.location
+    # Hidden-Werte ("Nach Freischalten sichtbar") muessen rausgefiltert werden
+    assert bahn.contracting_authority is None
+    # URL ist synthetisch (kein <a>) aber stabil
+    assert bahn.url.startswith("https://www.evergabe.de#card-")
+
+
+def test_listing_filter_by_terms_keeps_only_matches():
+    cfg = {
+        "result_selector": "article.tender-card",
+        "title_selector": "h2",
+        "filter_by_terms": True,
+    }
+    items = GenericHtmlScraper.parse_html(
+        EVERGABE_CARD_FIXTURE,
+        base_url="https://www.evergabe.de",
+        portal_name="evergabe.de",
+        config=cfg,
+    )
+    # Wir filtern nicht in parse_html selbst (das macht fetch), aber wir
+    # pruefen die helper-Funktion separat:
+    from scrapers.generic_html import _matches_any
+    bahn = next(i for i in items.values() if "Bahnhof" in i.title)
+    reinigung = next(i for i in items.values() if "Reinigung" in i.title)
+    assert _matches_any(bahn, ["Baugrube", "Verfüllung"]) is True
+    assert _matches_any(reinigung, ["Baugrube", "Verfüllung"]) is False

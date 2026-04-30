@@ -6,6 +6,7 @@ venv/
 .env
 data/*.db
 data/*.sqlite*
+data/last_run.json
 exports/*.csv
 exports/*.xlsx
 .pytest_cache/

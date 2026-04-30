@@ -22,6 +22,7 @@ from .database import SessionLocal
 from .dedup import fingerprint
 from .models import Tender, TenderStatus
 from .portal_config import PortalConfig, enabled_portals
+from .region_resolver import infer_region
 from .scoring import score_text
 from .search_terms import load_search_config
 from . import notify
@@ -121,6 +122,9 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
     if not item.title or not item.url:
         log.debug("Skip Item ohne Titel/URL")
         return None
+
+    # Bundesland aus PLZ/Ort ableiten falls noch nicht gesetzt.
+    item.region = infer_region(item.location, item.region)
 
     fp = fingerprint(item.url, item.title, item.contracting_authority, item.deadline)
     sr = score_text(

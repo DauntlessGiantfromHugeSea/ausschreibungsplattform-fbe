@@ -36,6 +36,8 @@ install_auth(app)
 @app.on_event("startup")
 def _startup():
     init_db()
+    from . import migrations
+    migrations.run_all()
 
 
 # --- Helpers --------------------------------------------------------

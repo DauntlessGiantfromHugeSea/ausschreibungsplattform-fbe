@@ -64,7 +64,11 @@ def run_pipeline() -> dict:
     new_high_relevance: List[Tender] = []
 
     for portal in enabled_portals():
-        portal_stats = {"name": portal.name, "fetched": 0, "new": 0, "updated": 0, "errors": 0}
+        portal_stats = {
+            "name": portal.name, "scraper": portal.scraper, "base_url": portal.base_url,
+            "fetched": 0, "new": 0, "updated": 0, "errors": 0,
+            "http_log": [], "sample_titles": [], "error_msg": None,
+        }
         try:
             ScraperCls = _load_scraper(portal)
         except Exception as exc:
@@ -78,15 +82,24 @@ def run_pipeline() -> dict:
         try:
             with ScraperCls(base_url=portal.base_url, name=portal.name, config=portal.config) as scraper:
                 items = scraper.fetch(cfg.query_terms)
+                # HTTP-Diagnose: was wurde wirklich gehit?
+                # Nur die letzten 5 Requests behalten - reicht fuer das Dashboard.
+                portal_stats["http_log"] = list(scraper.http_log)[-5:]
         except Exception as exc:
             log.exception("[%s] Scraper.fetch fehlgeschlagen: %s", portal.name, exc)
             portal_stats["errors"] = 1
-            portal_stats["error_msg"] = f"{type(exc).__name__}: {str(exc)[:180]}"
+            portal_stats["error_msg"] = "{}: {}".format(type(exc).__name__, str(exc)[:180])
+            # HTTP-Log auch im Fehlerfall, falls einzelne Requests durchgekommen sind.
+            try:
+                portal_stats["http_log"] = list(scraper.http_log)[-5:]  # type: ignore[name-defined]
+            except Exception:
+                pass
             stats["errors"] += 1
             stats["portals"].append(portal_stats)
             continue
 
         portal_stats["fetched"] = len(items)
+        portal_stats["sample_titles"] = [(it.title or "")[:120] for it in items[:3]]
         log.info("[%s] %d Treffer", portal.name, len(items))
 
         for item in items:

@@ -44,6 +44,10 @@ class BaseScraper:
             self.name = name
         # Pro-Portal-Konfig (z.B. search_url, selectors, feed_urls).
         self.config = config or {}
+        # Diagnose pro Lauf: jede HTTP-Antwort wird hier aufgesammelt, damit
+        # die Pipeline + das Dashboard zeigen koennen, was wirklich gecrawlt
+        # wurde - auch wenn 0 Treffer extrahiert wurden.
+        self.http_log: list[dict] = []
         # HTTP-Header muessen ASCII sein – nicht-ASCII Zeichen (z.B. Umlaute)
         # rauswerfen, statt UnicodeEncodeError beim Client-Init zu provozieren.
         # Per-Portal-User-Agent ueberschreibt den globalen (manche Portale
@@ -89,9 +93,28 @@ class BaseScraper:
     # --- HTTP --------------------------------------------------------
     def get(self, url: str, **kwargs) -> httpx.Response:
         if not self.can_fetch(url):
+            self.http_log.append({
+                "url": url, "status": None, "size": 0,
+                "error": "robots.txt verbietet Abruf",
+            })
             raise PermissionError(f"robots.txt verbietet Abruf: {url}")
         log.debug("[%s] GET %s", self.name, url)
-        return self._client.get(url, **kwargs)
+        try:
+            resp = self._client.get(url, **kwargs)
+            self.http_log.append({
+                "url": url,
+                "final_url": str(resp.url) if str(resp.url) != url else None,
+                "status": resp.status_code,
+                "size": len(resp.content) if resp.content else 0,
+                "error": None,
+            })
+            return resp
+        except Exception as exc:
+            self.http_log.append({
+                "url": url, "status": None, "size": 0,
+                "error": "{}: {}".format(type(exc).__name__, str(exc)[:160]),
+            })
+            raise
 
     # --- Lifecycle ---------------------------------------------------
     def close(self) -> None:

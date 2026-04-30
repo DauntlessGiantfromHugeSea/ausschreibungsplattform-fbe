@@ -27,7 +27,7 @@ import logging
 import re
 from datetime import datetime
 from typing import Iterable, List
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 from bs4 import BeautifulSoup
 
@@ -74,7 +74,9 @@ class GenericHtmlScraper(BaseScraper):
         items: dict[str, TenderItem] = {}
         for term in terms:
             try:
-                items.update(self._fetch_one(path.replace("{term}", term)))
+                # URL-encode term, damit Umlaute & Sonderzeichen den Server
+                # nicht stoeren (Flüssigboden -> Fl%C3%BCssigboden).
+                items.update(self._fetch_one(path.replace("{term}", quote(term, safe=""))))
             except Exception as exc:  # pragma: no cover – Netzwerk
                 log.warning("[%s] Fehler bei '%s': %s", self.name, term, exc)
         if self.config.get("filter_by_terms"):

@@ -31,7 +31,7 @@ from .database import SessionLocal
 log = logging.getLogger(__name__)
 
 PUBLIC_PATHS = {"/login", "/logout", "/api/health"}
-PUBLIC_PREFIXES = ("/static",)
+PUBLIC_PREFIXES = ("/static", "/.well-known")
 ADMIN_PREFIXES = ("/admin/",)
 
 

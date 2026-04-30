@@ -476,9 +476,13 @@ def admin_probe_post(request: Request, portal: str = Form(...), term: str = Form
         raise HTTPException(404, "Portal nicht gefunden")
 
     result = {"name": chosen.name, "term": term, "items": [], "error": None, "count": 0}
+    diagnostic = None
     try:
         ScraperCls = _load_scraper(chosen)
         with ScraperCls(base_url=chosen.base_url, name=chosen.name, config=chosen.config) as sc:
+            # Diagnose-Fetch der Listing-URL (zeigt Status, HTML-Groesse,
+            # Container, Selector-Treffer im rohen HTML)
+            diagnostic = _probe_diagnostic(sc, chosen)
             items = sc.fetch([term])
         result["count"] = len(items)
         result["items"] = items[:5]
@@ -489,8 +493,75 @@ def admin_probe_post(request: Request, portal: str = Form(...), term: str = Form
     return templates.TemplateResponse(
         request, "probe.html",
         {"portals": load_portals(), "selected": portal,
-         "result": result, "term": term, "user": request.session.get("user")},
+         "result": result, "term": term,
+         "diagnostic": diagnostic,
+         "user": request.session.get("user")},
     )
+
+
+def _probe_diagnostic(scraper, portal_cfg) -> dict:
+    """Holt rohe Listing-Antwort + analysiert Struktur fuer das UI."""
+    cfg = portal_cfg.config or {}
+    candidates: list[str] = []
+    if cfg.get("listing_paths"):
+        candidates.extend(cfg["listing_paths"])
+    elif cfg.get("search_path"):
+        candidates.append(cfg["search_path"].replace("{term}", "test"))
+
+    if not candidates:
+        return {"reason": "Keine listing_paths / search_path konfiguriert."}
+
+    from urllib.parse import urljoin
+    from bs4 import BeautifulSoup
+
+    out = {"requests": []}
+    for path in candidates[:2]:  # max 2 Requests
+        url = urljoin(portal_cfg.base_url + "/", path.lstrip("/"))
+        entry = {"url": url, "status": None, "final_url": None,
+                 "html_length": 0, "container_found": False,
+                 "container_children": 0, "result_selector_hits": 0,
+                 "looks_like_spa": False, "html_excerpt": "",
+                 "error": None}
+        try:
+            resp = scraper.get(url)
+            entry["status"] = resp.status_code
+            entry["final_url"] = str(resp.url)
+            html = resp.text
+            entry["html_length"] = len(html)
+            entry["html_excerpt"] = html[:2500]
+            soup = BeautifulSoup(html, "lxml")
+
+            # Container-Heuristik
+            for cid in ("results-list-container", "results", "tender-list", "search-results"):
+                node = soup.find(id=cid)
+                if node:
+                    entry["container_found"] = True
+                    entry["container_id"] = cid
+                    entry["container_children"] = len([c for c in node.children if getattr(c, "name", None)])
+                    break
+
+            # Result-Selector pruefen
+            sel = cfg.get("result_selector")
+            if sel:
+                try:
+                    entry["result_selector_hits"] = len(soup.select(sel))
+                except Exception as exc:
+                    entry["result_selector_error"] = str(exc)
+
+            # SPA-Heuristik: leerer Body, viele <script>, zentrale Mount-Points
+            scripts = soup.find_all("script")
+            mount_points = soup.find_all(id=lambda v: v in ("app", "root", "__next"))
+            visible_text_len = len(soup.get_text(strip=True))
+            entry["scripts"] = len(scripts)
+            entry["visible_text_length"] = visible_text_len
+            if (entry["html_length"] > 5000 and visible_text_len < 1500) or mount_points:
+                entry["looks_like_spa"] = True
+
+        except Exception as exc:
+            entry["error"] = f"{type(exc).__name__}: {exc}"
+        out["requests"].append(entry)
+
+    return out
 
 
 # --- Export ---------------------------------------------------------

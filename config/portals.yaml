@@ -55,21 +55,18 @@ portals:
     strategy: "search_url"
     notes: |
       Listing-Modus: Detailseiten brauchen Login, aber die Listing-Seite
-      zeigt schon Titel, Beschreibung, Ort, Frist, Kategorie. Wir filtern
-      die Karten client-seitig auf unsere Cluster-Begriffe.
-      Wenn das Layout sich aendert: F12 auf einer Karte -> CSS-Klasse
-      kopieren -> in result_selector hier ergaenzen.
+      zeigt Titel, Beschreibung, Ort, Frist, Kategorie. Die Karten liegen
+      in #results-list-container; wir nehmen jedes direkte Kind als
+      Treffer und filtern client-seitig auf unsere Cluster-Begriffe.
     config:
       listing_paths:
         - "/auftraege"
         - "/auftraege?seite=2"
         - "/auftraege?seite=3"
       filter_by_terms: true
-      result_selector: "article, [class*='tender-card'], [class*='auftrag-card'], [class*='result-item'], [class*='search-result'], div.bg-white.rounded, li[class*='auftrag'], section[class*='auftrag']"
+      result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > li, #results-list-container > section"
       title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, [class*='title'], a"
       description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
-      # Authority/Location/Deadline kommen automatisch aus den Labels
-      # 'Auftraggeber:' / 'Ausführungsort:' / 'Angebotsfrist:' im Karten-Volltext.
 
   - name: "evergabe-online.de (BMI)"
     enabled: true

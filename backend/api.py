@@ -8,11 +8,13 @@ from typing import Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .auth import authenticate, hash_password, install_auth, require_admin
+from . import branding
 from .config import PROJECT_ROOT
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
@@ -28,8 +30,14 @@ from . import yaml_store
 log = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates.env.globals["has_logo"] = branding.has_logo
 
 app = FastAPI(title="FBE Ausschreibungsplattform", version="0.2.0")
+app.mount(
+    "/static",
+    StaticFiles(directory=str(Path(__file__).parent / "static")),
+    name="static",
+)
 install_auth(app)
 
 
@@ -38,6 +46,7 @@ def _startup():
     init_db()
     from . import migrations
     migrations.run_all()
+    branding.ensure_logo()
 
 
 # --- Helpers --------------------------------------------------------

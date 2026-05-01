@@ -36,10 +36,11 @@ portals:
     base_url: "https://www.service.bund.de"
     strategy: "search_url"
     notes: |
-      Bekanntmachungen des Bundes. Listing liefert mit einem Request 100
-      frische Items, sortiert nach Veroeffentlichungsdatum. URL ist die
-      vom User vorgegebene mit nn=4641482. Browser-UA, weil der FBE-Bot-UA
-      vom Server abgelehnt wird (Connection-Reset).
+      Bekanntmachungen des Bundes, gefiltert auf Bauleistungen
+      (cl2Categories_LeistungenErzeugnisse=leistung-bauleistungen). Liefert
+      mit einem Request 100 frische Bauauftraege, sortiert nach Veroeffent-
+      lichungsdatum. Browser-UA, weil der FBE-Bot-UA vom Server abgelehnt
+      wird (Connection-Reset). filter_by_terms verfeinert client-seitig.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       max_pages: 2
@@ -48,9 +49,12 @@ portals:
       request_delay_s: 1.0
       listing_params:
         nn: "4641482"
+        ambit_distance: "10"
+        type: "0"
         resultsPerPage: 100
         sortOrder: "dateOfIssue_dt desc"
-        pageLocale: "de"
+        cl2Categories_LeistungenErzeugnisse: "leistung-bauleistungen"
+        jobsrss: "true"
 
   - name: "TED - Tenders Electronic Daily"
     enabled: true

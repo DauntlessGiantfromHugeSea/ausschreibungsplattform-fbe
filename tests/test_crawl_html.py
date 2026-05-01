@@ -92,6 +92,36 @@ def test_aggressive_fallback_can_be_disabled():
     assert links == []
 
 
+def test_aggressive_fallback_accepts_long_titles_without_url_match():
+    """Wenn der URL-Pfad nicht nach Bekanntmachung aussieht, aber der Linktext
+    substantiell ist (>= 25 Zeichen), wird der Link trotzdem als Treffer
+    akzeptiert. Deckt Portale ab, die seltsame URL-Strukturen verwenden
+    aber sprechende Linktitel haben."""
+    html = """
+    <html><body>
+    <main>
+      <a href="/x/y/z?p=1">Verfuellung Leitungsgraben Ortsdurchfahrt Magdeburg</a>
+      <a href="/x/y/z?p=2">Tiefbauarbeiten und Asphaltierung Hauptstrasse Berlin</a>
+      <a href="/?menu=home">Startseite</a>
+      <a href="/login">Login</a>
+      <a href="/static/main.css">stylesheet-link-laenger-als-25-zeichen</a>
+      <a href="https://external.example/x">Externer Link mit langem Titel</a>
+    </main>
+    </body></html>
+    """
+    cfg = {"link_selector": "a.does-not-match"}
+    links = CrawlHtmlScraper._extract_links(
+        html, base_url="https://example.de", config=cfg,
+    )
+    assert any("/x/y/z?p=1" in u for u in links)
+    assert any("/x/y/z?p=2" in u for u in links)
+    # Junk muss raus: kurze Titel, Login, Asset-Endung, externer Link
+    assert not any("/?menu=home" in u for u in links)
+    assert not any("/login" in u for u in links)
+    assert not any("main.css" in u for u in links)
+    assert not any("external.example" in u for u in links)
+
+
 def test_parse_detail_keeps_only_matching():
     cfg = {
         "detail_title_selector": "h1",

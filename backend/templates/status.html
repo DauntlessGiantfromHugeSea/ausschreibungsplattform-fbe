@@ -88,21 +88,28 @@
       {% if p and p.http_log %}
       <ul class="mt-2 space-y-1 text-xs">
         {% for h in p.http_log %}
-        <li class="flex items-center gap-1.5">
-          {% if h.status == 200 %}
-            <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-          {% elif h.status %}
-            <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
-          {% else %}
-            <span class="inline-block h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0"></span>
+        <li>
+          <div class="flex items-center gap-1.5">
+            {% if h.status == 200 %}
+              <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+            {% elif h.status %}
+              <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
+            {% else %}
+              <span class="inline-block h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0"></span>
+            {% endif %}
+            <span class="font-mono text-zinc-700 shrink-0">
+              HTTP {{ h.status or '—' }}
+              {% if h.size %}· {{ (h.size / 1024)|round(0)|int }} KB{% endif %}
+            </span>
+            <span class="truncate text-zinc-500 min-w-0" title="{{ h.url }}">
+              {{ h.url|replace(cp.base_url, '') or '/' }}
+            </span>
+          </div>
+          {% if h.error %}
+          <div class="mt-0.5 ml-3 font-mono text-rose-700 break-words">
+            ↳ {{ h.error }}
+          </div>
           {% endif %}
-          <span class="font-mono text-zinc-700 shrink-0">
-            HTTP {{ h.status or '—' }}
-            {% if h.size %}· {{ (h.size / 1024)|round(0)|int }} KB{% endif %}
-          </span>
-          <span class="truncate text-zinc-500 min-w-0" title="{{ h.url }}">
-            {{ h.url|replace(cp.base_url, '') or '/' }}
-          </span>
         </li>
         {% endfor %}
       </ul>
@@ -137,6 +144,19 @@
     <li><strong>Fehler</strong> (rot) — meist falsche URL (404), Timeout oder robots.txt-Block. URL in <em>bearbeiten</em> korrigieren.</li>
     <li><strong>noch nicht</strong> (grau) — war im letzten Lauf nicht dabei (neu hinzugefügt oder Lauf vorzeitig abgebrochen).</li>
   </ul>
+</div>
+
+<div class="card p-5 mt-4 text-sm bg-blue-50/40 border-blue-200">
+  <h3 class="font-semibold mb-2">HTML-Dump aller Portale erzeugen</h3>
+  <p class="text-zinc-600 mb-2">
+    Wenn ein Portal HTTP&nbsp;200 mit einigen KB liefert, aber 0 Treffer hat,
+    stimmt der Parser nicht zur tatsächlichen DOM-Struktur. So bekommst du
+    die rohen HTML-Antworten zum Anschauen / Versenden:
+  </p>
+<pre class="bg-white border border-zinc-200 rounded-md p-3 text-xs overflow-x-auto"><code>cd /root/ausschreibungsplattform-fbe
+source .venv/bin/activate
+python tools/dump_portal_html.py
+# Erzeugt /tmp/portal-debug.zip mit allen rohen HTML-Antworten</code></pre>
 </div>
 
 {% endblock %}

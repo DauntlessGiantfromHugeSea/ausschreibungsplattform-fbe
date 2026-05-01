@@ -150,8 +150,9 @@ class CrawlHtmlScraper(BaseScraper):
             out.append(full)
 
         # Aggressiver Fallback: wenn der konfigurierte Selektor 0 Links bringt,
-        # akzeptiere jeden internen Anchor, dessen Pfad+Query nach Bekanntmachung
-        # aussieht. Pattern wird absichtlich nur auf Path+Query angewendet, weil
+        # akzeptiere jeden internen Anchor mit plausiblem Bekanntmachungs-Pfad
+        # ODER mit langem sichtbaren Linktext (echte Tender-Titel haben 30+
+        # Zeichen, Menue-Eintraege < 25). Pattern nur auf Path+Query, weil
         # Hostnames wie 'evergabe-online.de' selbst schon 'vergabe' enthalten.
         if not out and config.get("aggressive_fallback", True):
             from urllib.parse import urlsplit
@@ -161,17 +162,30 @@ class CrawlHtmlScraper(BaseScraper):
                 r"[?&]id=[A-Za-z0-9])",
                 re.IGNORECASE,
             )
+            asset_re = re.compile(
+                r"\.(css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|pdf)(\?|$)",
+                re.IGNORECASE,
+            )
+            junk_titles = {"hier", "weiter", "zurueck", "zurück", "merken",
+                           "drucken", "details", "mehr", "anmelden",
+                           "login", "kontakt", "impressum", "home"}
             for a in soup.find_all("a", href=True):
                 href = a["href"].strip()
                 if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
                     continue
-                # nur interne / relative Links
                 if href.startswith("http") and not href.startswith(base_url):
                     continue
                 full = urljoin(base_url, href)
                 parts = urlsplit(full)
                 pq = parts.path + ("?" + parts.query if parts.query else "")
-                if not broad.search(pq):
+                if asset_re.search(pq):
+                    continue
+                title = a.get_text(" ", strip=True)
+                if title and title.lower() in junk_titles:
+                    continue
+                # Akzeptiere wenn URL nach Bekanntmachung aussieht ODER der
+                # sichtbare Linktext substantiell ist.
+                if not (broad.search(pq) or (title and len(title) >= 25)):
                     continue
                 out.append(full)
         return out

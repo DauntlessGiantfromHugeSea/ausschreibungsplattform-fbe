@@ -234,14 +234,21 @@ class CosinexScraper(BaseScraper):
                 url_full = urljoin(base_url, href)
                 parts = urlsplit(url_full)
                 pq = parts.path + ("?" + parts.query if parts.query else "")
-                if not BROAD_NOTICE_RE.search(pq):
-                    continue
                 title = a.get_text(" ", strip=True)
                 if not title or len(title) < 8:
                     continue
                 # Junk-Titel rauswerfen
                 if title.lower() in {"hier", "weiter", "zurueck", "zurück", "merken",
-                                     "drucken", "details", "mehr"}:
+                                     "drucken", "details", "mehr", "anmelden", "login"}:
+                    continue
+                # Akzeptiere wenn URL nach Bekanntmachung aussieht ODER der
+                # sichtbare Linktext lang genug ist, um ein realer Titel zu sein
+                # (Menue-Eintraege sind in der Regel <25 Zeichen).
+                if not (BROAD_NOTICE_RE.search(pq) or len(title) >= 25):
+                    continue
+                # Asset-Endungen abweisen (auch wenn Text lang waere).
+                if re.search(r"\.(css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|pdf)(\?|$)",
+                             pq, re.IGNORECASE):
                     continue
                 out.setdefault(url_full, TenderItem(
                     title=title[:500],

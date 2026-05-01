@@ -54,19 +54,24 @@ class TedScraper(BaseScraper):
 
     def fetch(self, terms: List[str]) -> List[TenderItem]:
         # TED v3 lehnt komplexe Query-Strings mit ~= teilweise mit HTTP 400
-        # ab. Robuster Ansatz: ein einziger Request mit reinem Country-Filter,
-        # dann client-seitig nach Cluster-Begriffen filtern. So ueberleben
-        # wir API-Format-Aenderungen.
-        try:
-            payload = self._build_payload()
-        except Exception as exc:  # pragma: no cover
-            log.warning("[TED] Payload-Bau fehlgeschlagen: %s", exc)
-            return []
-        try:
-            items = self._search(payload)
-        except Exception as exc:  # pragma: no cover - Netzwerk
-            log.warning("[TED] Suche fehlgeschlagen: %s", exc)
-            return []
+        # ab. Robuster Ansatz: Country-Filter + Pagination, dann client-
+        # seitig nach Cluster-Begriffen filtern.
+        max_pages = int(self.config.get("max_pages", 4))
+        items: dict[str, TenderItem] = {}
+        for page in range(1, max_pages + 1):
+            try:
+                payload = self._build_payload(page=page)
+                page_items = self._search(payload)
+            except Exception as exc:  # pragma: no cover - Netzwerk
+                log.warning("[TED] Suche page %d fehlgeschlagen: %s", page, exc)
+                break
+            if not page_items:
+                break
+            before = len(items)
+            items.update(page_items)
+            # Wenn die neue Seite keinen einzigen neuen Eintrag bringt -> Ende.
+            if len(items) == before:
+                break
 
         match_terms = self._match_terms(terms)
         if match_terms:
@@ -74,13 +79,13 @@ class TedScraper(BaseScraper):
         return list(items.values())
 
     # ------------------------------------------------------------------
-    def _build_payload(self) -> dict:
+    def _build_payload(self, page: int = 1) -> dict:
         # Minimale, stabile Query: alle aktiven Bekanntmachungen aus DE.
         return {
             "query": f'buyer-country="{COUNTRY_FILTER}"',
             "fields": DEFAULT_FIELDS,
-            "page": 1,
-            "limit": int(self.config.get("limit", 100)),
+            "page": page,
+            "limit": int(self.config.get("limit", 250)),
             "scope": "ACTIVE",
         }
 

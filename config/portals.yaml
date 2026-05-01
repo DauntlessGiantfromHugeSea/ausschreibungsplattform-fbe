@@ -43,7 +43,8 @@ portals:
       wird (Connection-Reset). filter_by_terms verfeinert client-seitig.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      max_pages: 2
+      # Mehr Volumen: 5 Seiten a 100 Items = bis zu 500 Bauleistungen pro Lauf.
+      max_pages: 5
       enable_keyword_search: false
       filter_by_terms: true
       request_delay_s: 1.0
@@ -81,7 +82,8 @@ portals:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       timeout: 90
       auto_discover: false
-      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=50"
+      # Volumen: 100 Items pro Seite, sortiert nach neuesten zuerst.
+      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest"
       filter_by_terms: true
       result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li, [class*='auftrag-card'], li[class*='card']"
       title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, a[href*='/auftrag/']"
@@ -93,27 +95,26 @@ portals:
     base_url: "https://www.evergabe-online.de"
     strategy: "scrape"
     notes: |
-      Bund-Laender-Plattform der Beschaffungsstelle des BMI.
-      Crawl-Modus auf der oeffentlichen Suche (publishDateRange=ALL).
-      Selektor zielt strikt auf die Result-Tabelle - kein 'id='-Substring,
-      sonst werden Header-/Login-/Modal-Links mit ?id=... aufgenommen.
+      Bund-Laender-Plattform der Beschaffungsstelle des BMI. Listing
+      hat 1262+ Bekanntmachungen total. Wir crawlen die ersten
+      max_details Detailseiten und filtern client-seitig auf die
+      Cluster-Begriffe.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
         - "/search.html?publishDateRange=ALL"
         - "/search.html?1"
         - "/search.html"
-      # NUR die Result-Tabelle - vermeidet Header/Footer/Modal-Links.
       link_selector: >
         table.table-advanced td a,
         table.table-striped td a,
         a.searchResultLink,
         a.publicationLink,
         a.notice-link
-      # Nur echte Such-Result-Pfade, kein generisches id=-Pattern.
       link_pattern: "(searchPanel-results|/notice|/announcement|/tender)"
-      max_details: 60
-      request_delay_s: 0.4
+      # Mehr Volumen: 200 Detail-Crawls pro Lauf (vorher 60).
+      max_details: 200
+      request_delay_s: 0.3
       detail_title_selector: "h1, .title, .announcement-title, .notice-title"
       detail_authority_selector: ".authority, .buyer, .vergabestelle, .auftraggeber"
       detail_location_selector: ".place, .location, .ort, .erfuellungsort"
@@ -226,7 +227,7 @@ portals:
       vorhanden).
     config:
       variant: "satellite"
-      max_pages: 3
+      max_pages: 5
       filter_by_terms: true
 
   - name: "Vergabe Bremen"
@@ -264,7 +265,7 @@ portals:
       anpassen + enabled: true setzen.
     config:
       variant: "center"
-      max_pages: 3
+      max_pages: 5
       filter_by_terms: true
 
   - name: "Vergabe Hessen (HAD)"
@@ -300,7 +301,7 @@ portals:
       MV-Vergabeplattform recherchieren und base_url anpassen.
     config:
       variant: "satellite"
-      max_pages: 3
+      max_pages: 5
       filter_by_terms: true
 
   - name: "Vergabe Niedersachsen"
@@ -343,7 +344,7 @@ portals:
         - "/VMPCenter/company/welcome.do"
         - "/"
         - "/VMPCenter/company/announcements/categoryOverview.do?method=show"
-      max_pages: 1
+      max_pages: 3
       filter_by_terms: true
 
   - name: "Vergabe Rheinland-Pfalz"
@@ -359,7 +360,7 @@ portals:
         - "/VMPCenter/company/welcome.do"
         - "/"
         - "/VMPCenter/company/announcements/categoryOverview.do?method=show"
-      max_pages: 1
+      max_pages: 3
       filter_by_terms: true
 
   - name: "Vergabe Saarland"
@@ -373,7 +374,7 @@ portals:
       recherchieren und base_url anpassen.
     config:
       variant: "center"
-      max_pages: 3
+      max_pages: 5
       filter_by_terms: true
 
   - name: "Vergabe Sachsen"
@@ -390,7 +391,8 @@ portals:
       die Cluster-Begriffe.
     config:
       search_path: "/NetServer/PublicationSearchControllerServlet?function=SearchPublications&Category=InvitationToTender&thContext=publications"
-      max_pages: 3
+      # Pro Page liefert NetServer 50 Eintraege - 6 Seiten = bis 300 Tender.
+      max_pages: 6
       max_details: 0
       request_delay_s: 0.4
 
@@ -422,7 +424,7 @@ portals:
       Vergabeplattform recherchieren und base_url anpassen.
     config:
       variant: "satellite"
-      max_pages: 3
+      max_pages: 5
       filter_by_terms: true
 
   - name: "Vergabe Thüringen"
@@ -436,7 +438,7 @@ portals:
       auf neue Domain.
     config:
       variant: "satellite"
-      max_pages: 3
+      max_pages: 5
       filter_by_terms: true
 
   # =====================================================================

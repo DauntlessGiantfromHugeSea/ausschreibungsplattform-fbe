@@ -54,3 +54,29 @@ def test_ted_parses_notice_payload():
     assert item.deadline is not None
     assert item.publication_date is not None
     assert item.url.startswith("https://ted.europa.eu")
+
+
+def test_ted_payload_is_minimal_country_filter():
+    """TED v3 lehnt komplexe Queries oft mit HTTP 400 ab. Wir schicken
+    deshalb nur den Country-Filter und filtern client-seitig."""
+    s = TedScraper(base_url="https://api.ted.europa.eu",
+                   name="TED - Tenders Electronic Daily", config={})
+    try:
+        payload = s._build_payload()
+        assert payload["scope"] == "ACTIVE"
+        # Genau das simple Country-Filter, kein notice-title~= o.ae.
+        assert payload["query"] == 'buyer-country="DEU"'
+        assert payload["limit"] >= 50
+    finally:
+        s.close()
+
+
+def test_ted_uses_portal_name_from_yaml():
+    notices = [{
+        "publication-number": "2026/S 1-1",
+        "notice-title": {"deu": "X"},
+        "links": {"html": {"DEU": "https://ted.europa.eu/x"}},
+    }]
+    items = TedScraper.parse_results(notices, portal_name="TED - Tenders Electronic Daily")
+    assert len(items) == 1
+    assert next(iter(items.values())).portal == "TED - Tenders Electronic Daily"

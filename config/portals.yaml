@@ -36,17 +36,21 @@ portals:
     base_url: "https://www.service.bund.de"
     strategy: "search_url"
     notes: |
-      Bekanntmachungen des Bundes. Standard-Listing liefert mit einem
-      Request 100 frische Items, sortiert nach Veroeffentlichungsdatum.
-      Per query_term wird zusaetzlich serverseitig gefiltert.
+      Bekanntmachungen des Bundes. Listing liefert mit einem Request 100
+      frische Items, sortiert nach Veroeffentlichungsdatum. URL ist die
+      vom User vorgegebene mit nn=4641482. Browser-UA, weil der FBE-Bot-UA
+      vom Server abgelehnt wird (Connection-Reset).
     config:
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       max_pages: 2
-      enable_keyword_search: true
+      enable_keyword_search: false
       filter_by_terms: true
-      request_delay_s: 0.4
+      request_delay_s: 1.0
       listing_params:
+        nn: "4641482"
         resultsPerPage: 100
         sortOrder: "dateOfIssue_dt desc"
+        pageLocale: "de"
 
   - name: "TED - Tenders Electronic Daily"
     enabled: true
@@ -65,16 +69,15 @@ portals:
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      Next.js-SPA - aber serverseitig vorgerendert. Probe-Diagnose hat
-      bestaetigt: /auftraege/auftrag-suchen rendert die Trefferkarten
-      direkt in #results-list-container. Wir nehmen jedes direkte Kind
-      als Treffer und ziehen Felder per Label-Match aus dem Karten-Volltext.
-      Pro query_term ein Request mit ?search[query]=...
+      Next.js-SPA, serverseitig vorgerendert. Vorher: per query_term ein
+      Request - das fuehrte zu 5x HTTP 503 (Rate-Limit). Jetzt: ein einziger
+      Listing-Request, danach client-seitig auf Cluster-Begriffe filtern.
+      Browser-UA verhindert Bot-Block.
     config:
-      search_path: "/auftraege/auftrag-suchen?search%5Bquery%5D={term}&search%5Bper_page%5D=50&search%5Bsort_order%5D=best"
-      # Server filtert serverseitig auf {term}, Client-Filter spart die
-      # extra Pruefung - wir uebernehmen alle 50 Treffer pro Suche.
-      filter_by_terms: false
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
+      # Listing-Pfad ohne {term} = nur ein Request pro Lauf.
+      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest"
+      filter_by_terms: true
       result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li"
       title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, a[href*='/auftrag/']"
       description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
@@ -160,18 +163,18 @@ portals:
   - name: "Vergabe Baden-Württemberg"
     enabled: true
     scraper: "crawl_html"
-    base_url: "https://vergabe.bwl.de"
+    base_url: "https://vergabe.service-bw.de"
     strategy: "scrape"
     notes: |
-      Baden-Wuerttemberg hat keine offene URL-Suche. Wir crawlen die
-      Landingpage und uebliche Listing-Pfade, folgen Detail-Links und
-      filtern client-seitig auf die Cluster-Begriffe.
+      Baden-Wuerttemberg-Vergabe (Service-BW). vergabe.bwl.de existiert
+      nicht mehr. Crawl-Modus auf der oeffentlichen Bekanntmachungsliste,
+      dann client-seitig auf Cluster-Begriffe filtern.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
+        - "/Ausschreibungen.aspx"
+        - "/Vergabesuche.aspx"
         - "/"
-        - "/ausschreibungen"
-        - "/bekanntmachungen"
       link_selector: "a[href]"
       link_pattern: "(ausschreibung|bekanntmachung|notice|tender|vergabe|auftrag)"
       max_details: 30

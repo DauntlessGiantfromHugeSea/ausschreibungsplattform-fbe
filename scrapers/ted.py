@@ -53,29 +53,46 @@ class TedScraper(BaseScraper):
     name = "TED"
 
     def fetch(self, terms: List[str]) -> List[TenderItem]:
-        items: dict[str, TenderItem] = {}
-        # 1) Volltext-Suche pro Begriff (geblockt auf Deutschland)
-        for term in terms:
-            try:
-                payload = self._build_payload(term=term)
-                items.update(self._search(payload))
-            except Exception as exc:  # pragma: no cover – Netzwerk
-                log.warning("[TED] Fehler bei '%s': %s", term, exc)
+        # TED v3 lehnt komplexe Query-Strings mit ~= teilweise mit HTTP 400
+        # ab. Robuster Ansatz: ein einziger Request mit reinem Country-Filter,
+        # dann client-seitig nach Cluster-Begriffen filtern. So ueberleben
+        # wir API-Format-Aenderungen.
+        try:
+            payload = self._build_payload()
+        except Exception as exc:  # pragma: no cover
+            log.warning("[TED] Payload-Bau fehlgeschlagen: %s", exc)
+            return []
+        try:
+            items = self._search(payload)
+        except Exception as exc:  # pragma: no cover - Netzwerk
+            log.warning("[TED] Suche fehlgeschlagen: %s", exc)
+            return []
+
+        match_terms = self._match_terms(terms)
+        if match_terms:
+            items = {u: it for u, it in items.items() if _matches_any(it, match_terms)}
         return list(items.values())
 
     # ------------------------------------------------------------------
-    def _build_payload(self, term: str) -> dict:
-        # Query: Volltextsuche mit deutschem Sprachfeld + Country=DEU.
-        # TED-Querysprache erlaubt 'AND' / 'OR' / Field-Filter.
-        safe_term = term.replace('"', '\\"')
-        query = f'(notice-title~="{safe_term}" OR description-lot~="{safe_term}") AND buyer-country="{COUNTRY_FILTER}"'
+    def _build_payload(self) -> dict:
+        # Minimale, stabile Query: alle aktiven Bekanntmachungen aus DE.
         return {
-            "query": query,
+            "query": f'buyer-country="{COUNTRY_FILTER}"',
             "fields": DEFAULT_FIELDS,
             "page": 1,
-            "limit": 50,
+            "limit": int(self.config.get("limit", 100)),
             "scope": "ACTIVE",
         }
+
+    # ------------------------------------------------------------------
+    def _match_terms(self, query_terms: List[str]) -> List[str]:
+        if "match_terms" in self.config:
+            return list(self.config["match_terms"])
+        try:
+            from backend.search_terms import load_search_config
+            return load_search_config().all_terms() or list(query_terms)
+        except Exception:
+            return list(query_terms)
 
     # ------------------------------------------------------------------
     def _search(self, payload: dict) -> dict[str, TenderItem]:
@@ -174,3 +191,18 @@ def _as_list(value):
     if isinstance(value, list):
         return value
     return [value]
+
+
+def _matches_any(item: TenderItem, terms) -> bool:
+    hay = " ".join([
+        item.title or "",
+        item.description or "",
+        item.contracting_authority or "",
+        item.location or "",
+    ]).lower()
+    if not hay:
+        return False
+    for t in terms:
+        if t and t.lower() in hay:
+            return True
+    return False

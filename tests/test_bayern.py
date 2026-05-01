@@ -90,3 +90,85 @@ def test_falls_back_to_class_when_id_webticker_missing():
     """
     items = BayernScraper.parse_webticker(html, BASE, "x", BASE + "/")
     assert len(items) == 1
+
+
+# ---------------------------------------------------------------------------
+DASHBOARD_HTML = """
+<html><body>
+<table class="results">
+  <thead>
+    <tr><th>Datum</th><th>Auftrag</th><th>Vergabestelle</th><th>Frist</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>01.05.2026</td>
+      <td><a href="/auftrag/12345-tiefbau-passau">Tiefbauarbeiten Passau Hauptstrasse</a></td>
+      <td>Stadt Passau</td>
+      <td>22.05.2026</td>
+    </tr>
+    <tr>
+      <td>02.05.2026</td>
+      <td><a href="/auftrag/22222-spundwand-augsburg">Spundwandarbeiten Hafen Augsburg</a></td>
+      <td>Bayerische Staatsforsten AöR</td>
+      <td>30.05.2026</td>
+    </tr>
+    <tr>
+      <td>03.05.2026</td>
+      <td><a href="#sortable">Sortieren</a></td>
+      <td>—</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+</body></html>
+"""
+
+
+def test_parse_dashboard_extracts_table_rows():
+    items = BayernScraper.parse_dashboard(
+        DASHBOARD_HTML, base_url=BASE, portal_name="Auftragsbörse Bayern",
+        landing_url=BASE + "/Dashboards/Dashboard_off?BL=09",
+    )
+    assert len(items) == 2
+    titles = [it.title for it in items.values()]
+    assert any("Tiefbauarbeiten Passau" in t for t in titles)
+    assert any("Spundwandarbeiten" in t for t in titles)
+    # Sortier-Link wurde abgewiesen
+    assert not any(t == "Sortieren" for t in titles)
+
+
+def test_parse_dashboard_extracts_authority_from_buyer_column():
+    items = BayernScraper.parse_dashboard(
+        DASHBOARD_HTML, BASE, "x", BASE + "/Dashboards/Dashboard_off?BL=09",
+    )
+    passau = next(it for it in items.values() if "Passau" in it.title)
+    assert passau.contracting_authority == "Stadt Passau"
+    assert passau.region == "Bayern"
+
+
+def test_parse_dashboard_extracts_first_date_as_deadline():
+    items = BayernScraper.parse_dashboard(
+        DASHBOARD_HTML, BASE, "x", BASE + "/Dashboards/Dashboard_off?BL=09",
+    )
+    passau = next(it for it in items.values() if "Passau" in it.title)
+    assert passau.deadline is not None
+    # Erstes Datum in der Zeile = Veroeffentlichung 01.05., dieses
+    # wird heuristisch als Frist gespeichert (User kann das ggf. besser
+    # mappen sobald wir ein Live-DOM haben).
+    assert passau.deadline.year == 2026
+
+
+def test_parse_dashboard_fallback_when_no_table():
+    """Wenn keine Tabelle vorhanden ist, sammeln wir alle plausiblen
+    Anchors als Karten."""
+    html = """
+    <main>
+      <a href="/auftrag/9876">Verfuellung Leitungsgraben Muenchen Innenstadt</a>
+      <a href="/help">Hilfe</a>
+      <a href="/auftrag/1234">Tiefbauarbeiten Westring Nuernberg</a>
+    </main>
+    """
+    items = BayernScraper.parse_dashboard(html, BASE, "x")
+    assert len(items) == 2
+    assert any("Verfuellung Leitungsgraben" in it.title for it in items.values())
+    assert not any("Hilfe" in it.title for it in items.values())

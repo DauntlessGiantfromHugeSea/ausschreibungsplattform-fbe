@@ -208,14 +208,17 @@ portals:
     base_url: "https://www.auftraege.bayern.de"
     strategy: "scrape"
     notes: |
-      Bayerische Auftragsboerse. Dedizierter Parser fuer den WebTicker
-      <ul id="webTicker"> auf der Landingpage - dieser enthaelt direkt
-      50+ aktuelle Bekanntmachungen mit Titel und Vergabestelle in
-      Klammern. Keine Detail-Links pro Item (echte Detailseiten sind
-      Login-pflichtig auf vst.deutsche-evergabe.de).
+      Bayerische Auftragsboerse. Zwei Quellen werden kombiniert:
+        1. Landingpage / mit <ul id="webTicker"> (50+ aktuelle Auftraege)
+        2. /Dashboards/Dashboard_off?BL=09 mit ASP.NET-Tabelle der
+           ausfuehrlicheren Auftragsliste
+      Beide werden client-seitig auf Cluster-Begriffe gefiltert.
     config:
       filter_by_terms: true
       listing_path: "/"
+      crawl_dashboard: true
+      dashboard_path: "/Dashboards/Dashboard_off?BL=09"
+      request_delay_s: 0.5
 
   - name: "Vergabeplattform Berlin"
     enabled: true

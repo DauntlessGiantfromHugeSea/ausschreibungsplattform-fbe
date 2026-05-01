@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 PORTALS_PATH = PROJECT_ROOT / "config" / "portals.yaml"
 PORTALS_LOCAL_PATH = PROJECT_ROOT / "config" / "portals.local.yaml"
 TERMS_PATH = PROJECT_ROOT / "config" / "search_terms.yaml"
+TERMS_LOCAL_PATH = PROJECT_ROOT / "config" / "search_terms.local.yaml"
 
 
 def read_portals_raw() -> dict:
@@ -36,6 +37,16 @@ def read_portals_raw() -> dict:
 
 
 def read_terms_raw() -> dict:
+    """Liest search_terms.yaml + optionalen lokalen Override.
+
+    search_terms.local.yaml ueberschreibt komplett (nicht feldweise),
+    damit der User Cluster/Query-Terms/CPV-Codes lokal anpassen kann
+    ohne git-pull-Konflikte. Wenn nicht vorhanden -> Base-Datei.
+    """
+    if TERMS_LOCAL_PATH.exists():
+        local = _load(TERMS_LOCAL_PATH)
+        if local:
+            return local
     return _load(TERMS_PATH)
 
 
@@ -57,7 +68,15 @@ def write_portals(data: dict) -> None:
 
 
 def write_terms(data: dict) -> None:
-    _dump(TERMS_PATH, data)
+    """Admin-UI-Edits fuer Suchbegriffe gehen in search_terms.local.yaml,
+    damit die getrackte Base-Datei nicht durch UI-Toggles veraendert wird.
+    Wenn die Daten identisch zur Base sind, wird der Override geloescht."""
+    base = _load(TERMS_PATH)
+    if data == base:
+        if TERMS_LOCAL_PATH.exists():
+            TERMS_LOCAL_PATH.unlink()
+    else:
+        _dump(TERMS_LOCAL_PATH, data)
     _invalidate_terms_cache()
 
 

@@ -70,22 +70,30 @@ portals:
 
   - name: "evergabe.de (Cosinex)"
     enabled: true
-    scraper: "generic_html"
+    scraper: "nextjs"
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      evergabe.de Suchportal. Cloudflare blockt aktuell die VPS-IP
-      (HTTP 503). Auto-Discovery aus, damit nicht 5 sinnlose 404er
-      pro Lauf entstehen. Wenn der Server irgendwann antwortet, greift
-      der Selektor #results-list-container.
+      evergabe.de hat auf Next.js-Client-Side-Rendering umgestellt -
+      die Tender-Cards sind nicht mehr im SSR-HTML, sondern werden via
+      JS aus dem __NEXT_DATA__-JSON gerendert. Der nextjs-Scraper zieht
+      die Liste direkt aus diesem JSON-Block. Damit kommen die alten
+      ~130 Treffer wieder zurueck, ohne Headless-Browser zu brauchen.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      auto_discover: false
-      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest"
+      timeout: 90
+      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest&search%5Bquery%5D={term}"
       filter_by_terms: true
-      result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li"
-      title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, a[href*='/auftrag/']"
-      description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
+      url_template: "/auftrag/{slug}"
+      field_map:
+        title:       ["title", "name", "subject", "bezeichnung", "kurzbezeichnung"]
+        url:         ["url", "link", "href", "permalink"]
+        slug:        ["slug", "id", "uuid", "auftrag_id"]
+        deadline:    ["deadline", "submission_deadline", "angebotsfrist", "frist", "deadline_at"]
+        location:    ["location", "place", "place_of_performance", "ausfuehrungsort", "ort", "location_text"]
+        authority:   ["buyer", "buyer_name", "vergabestelle", "auftraggeber", "buyer_organisation"]
+        description: ["description", "excerpt", "summary", "beschreibung", "short_description"]
+        publication: ["published_at", "publication_date", "veroeffentlicht", "created_at"]
 
   - name: "evergabe-online.de (BMI)"
     enabled: true

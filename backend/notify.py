@@ -71,13 +71,21 @@ def _send_to(
 
     rcpt = list(to) + list(cc) + list(bcc)
     port = int(settings.smtp_port or 587)
+    # Connect-Timeout 10s (schnelles Feedback bei Provider-Sperre wie
+    # Hetzner-Port-25-Block), Send-Operation insgesamt bis 30s.
+    connect_timeout = 10
 
     try:
         # Port 465 = implizites SSL, sonst STARTTLS auf 587/25.
         if port == 465:
-            smtp = smtplib.SMTP_SSL(settings.smtp_host, port, timeout=30)
+            smtp = smtplib.SMTP_SSL(settings.smtp_host, port, timeout=connect_timeout)
         else:
-            smtp = smtplib.SMTP(settings.smtp_host, port, timeout=30)
+            smtp = smtplib.SMTP(settings.smtp_host, port, timeout=connect_timeout)
+        # Nach erfolgreichem Connect den Timeout aufs Send-Limit anheben.
+        try:
+            smtp.sock.settimeout(30)
+        except (AttributeError, OSError):
+            pass
         try:
             smtp.ehlo()
             if port != 465:

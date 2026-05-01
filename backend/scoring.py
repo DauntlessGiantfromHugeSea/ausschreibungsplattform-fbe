@@ -24,7 +24,10 @@ from .config import settings
 from .search_terms import SearchConfig, load_search_config
 
 
-WEIGHTS = {"high": 15, "medium": 8, "low": 3}
+# Cluster-Punkte. Hoch genug, dass ein einzelner High-Cluster-Treffer
+# (z.B. ZFSV oder Tiefbau) zusammen mit Kernthema-Bonus + Frist-Bonus
+# bereits den HIGH-Score-Bereich erreicht (>= 60).
+WEIGHTS = {"high": 20, "medium": 10, "low": 4}
 MAX_HITS_PER_CLUSTER = 2
 
 
@@ -93,13 +96,15 @@ def score_text(
             if cluster.weight == "high":
                 has_high_match = True
 
-    # Baseline-Bonus, wenn das Kernthema (Fluessigboden / ZFSV / Verfuellung) getroffen ist.
+    # Baseline-Bonus, wenn ein High-Cluster matcht (Fluessigboden, ZFSV,
+    # Verfuellung, Tiefbau, Leitungsbau, Spundwand). Damit kommt auch ein
+    # einzelner Tiefbau-Treffer zusammen mit Frist >= 7d auf 60+ Punkte.
     if has_high_match:
-        score += 25
+        score += 30
         breakdown.append(ScoreComponent(
             label="Kernthema-Bonus",
-            points=25,
-            detail="Mindestens ein Treffer im high-Cluster (Fluessigboden/ZFSV/...)",
+            points=30,
+            detail="High-Cluster-Treffer (FBE-Kernthemen)",
         ))
 
     # CPV-Codes
@@ -141,8 +146,11 @@ def score_text(
                 detail="Frist liegt {} Tage in der Vergangenheit - kein Bonus".format(-days_left),
             ))
 
-    # Zielregion
-    if region:
+    # Zielregion: nur dann werten, wenn der Nutzer ueberhaupt Zielregionen
+    # konfiguriert hat. Default ist 'bundesweit' = leere Liste = kein Bonus
+    # und keine Strafe. Damit kommt z.B. eine Tiefbau-Ausschreibung in NRW
+    # genauso hoch wie eine in Sachsen.
+    if region and settings.regions_list:
         region_l = region.lower()
         if any(r.lower() == region_l for r in settings.regions_list):
             score += 10
@@ -195,6 +203,6 @@ def _term_matches(term: str, text: str) -> bool:
 def _level_for(score: float) -> str:
     if score >= settings.high_relevance_threshold:
         return "high"
-    if score >= 40:
+    if score >= 30:
         return "medium"
     return "low"

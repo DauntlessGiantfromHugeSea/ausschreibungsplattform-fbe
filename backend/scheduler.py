@@ -55,6 +55,26 @@ def start_scheduler() -> BackgroundScheduler:
         coalesce=True,
         next_run_time=datetime.now(),  # gleich beim Start einmal laufen
     )
+
+    # Taegliche Zusammenfassung um SUMMARY_HOUR (default 7:00 lokal).
+    # Nur einplanen wenn SMTP konfiguriert ist - sonst Job-Spam in den Logs.
+    if settings.notify_email and settings.smtp_host:
+        from . import notify
+        sched.add_job(
+            lambda: notify.send_daily_summary(days=1),
+            trigger=CronTrigger(
+                hour=settings.summary_hour,
+                minute=settings.summary_minute,
+            ),
+            id="daily_summary",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        log.info("Tages-Mail: taeglich %02d:%02d an %s",
+                 settings.summary_hour, settings.summary_minute,
+                 settings.notify_email)
+
     sched.start()
     _scheduler = sched
     return sched

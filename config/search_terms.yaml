@@ -54,7 +54,7 @@ clusters:
       - "Bohrlochverpressung"
 
   - name: "Leitungsbau / Rohrleitungen"
-    weight: medium
+    weight: high
     terms:
       - "Leitungsgraben"
       - "Rohrgraben"
@@ -79,7 +79,7 @@ clusters:
       - "Dükerbau"
 
   - name: "Tiefbau / Baugruben / Erdarbeiten"
-    weight: medium
+    weight: high
     terms:
       - "Tiefbau"
       - "Tiefbauarbeiten"

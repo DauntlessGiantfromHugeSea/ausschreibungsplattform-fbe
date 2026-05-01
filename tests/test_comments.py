@@ -258,6 +258,62 @@ def test_default_dashboard_hides_expired_tenders(auth_client, db_session):
         db_session.commit()
 
 
+def test_admin_test_mail_blocked_when_not_configured(auth_client):
+    """Ohne SMTP-Konfig liefert /admin/test-mail eine klare Fehlermeldung."""
+    r = auth_client.post("/admin/test-mail", follow_redirects=False)
+    assert r.status_code == 303
+    assert "/admin/settings?error=" in r.headers["location"]
+    assert "SMTP" in r.headers["location"]
+
+
+def test_admin_send_summary_blocked_when_not_configured(auth_client):
+    r = auth_client.post("/admin/send-summary",
+                         data={"days": "7"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "/admin/settings?error=SMTP" in r.headers["location"]
+
+
+def test_notify_format_plain_lists_tenders():
+    from backend import notify
+    from backend.models import Tender, TenderStatus
+    from datetime import datetime, timedelta
+    items = [
+        Tender(title="Verfuellung Magdeburg", portal="bund.de",
+               url="https://x.example/1", contracting_authority="Stadt Magdeburg",
+               location="Magdeburg", relevance_score=85,
+               deadline=datetime.utcnow() + timedelta(days=10),
+               fingerprint="fp-mail-1", status=TenderStatus.NEU.value),
+        Tender(title="Tiefbau Leipzig", portal="evergabe-online.de",
+               url="https://x.example/2", contracting_authority="Stadt Leipzig",
+               relevance_score=72, fingerprint="fp-mail-2",
+               status=TenderStatus.NEU.value),
+    ]
+    body = notify._format_plain(items, header="Test:")
+    assert "Verfuellung Magdeburg" in body
+    assert "Tiefbau Leipzig" in body
+    assert "85" in body  # Score
+    assert "72" in body
+    assert "https://x.example/1" in body
+    assert "Stadt Magdeburg" in body
+
+
+def test_notify_format_html_escapes_and_sorts():
+    from backend import notify
+    from backend.models import Tender, TenderStatus
+    items = [
+        Tender(title="<script>alert(1)</script>", portal="P",
+               url="https://x.example/x", relevance_score=50,
+               fingerprint="fp-mail-x", status=TenderStatus.NEU.value),
+    ]
+    html = notify._format_html(items, header="X")
+    # Title-Escape
+    assert "<script>alert" not in html
+    assert "&lt;script&gt;" in html
+    # Korrekte Struktur
+    assert "<table" in html
+    assert "https://x.example/x" in html
+
+
 def test_admin_run_search_button_triggers_pipeline(auth_client):
     """Der separate 'Suche starten'-Button triggert einen Lauf, ohne
     dass der User RESET tippen muss."""

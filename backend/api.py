@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from .auth import authenticate, hash_password, install_auth, require_admin
 from . import branding
-from .config import PROJECT_ROOT
+from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
 from .models import Comment, Tender, TenderStatus, SearchProfile, User
@@ -690,12 +690,20 @@ def admin_settings(
     }
     backups = db_backup.list_backups()
     db_path = db_backup._db_file()
+    from . import notify as notify_mod
     health = {
         "is_running": is_pipeline_running(),
         "db_size_kb": (db_path.stat().st_size // 1024) if db_path else 0,
         "db_path": str(db_path) if db_path else "(non-SQLite)",
         "backups_count": len(backups),
         "last_backup": backups[0] if backups else None,
+    }
+    mail = {
+        "configured": notify_mod.is_configured(),
+        "to": settings.notify_email,
+        "from": settings.smtp_from,
+        "host": "{}:{}".format(settings.smtp_host, settings.smtp_port) if settings.smtp_host else "",
+        "summary_time": "{:02d}:{:02d}".format(settings.summary_hour, settings.summary_minute),
     }
     return templates.TemplateResponse(
         request, "settings.html",
@@ -704,6 +712,7 @@ def admin_settings(
             "counts": counts,
             "is_running": is_pipeline_running(),
             "health": health,
+            "mail": mail,
             "backups": backups[:5],
             "flash": flash,
             "error": error,
@@ -719,6 +728,53 @@ def admin_release_lock(request: Request):
         raise HTTPException(403, "Nur Admin")
     was_held = force_release_lock()
     msg = "Lock freigegeben." if was_held else "Kein aktiver Lock - nichts zu tun."
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/test-mail")
+def admin_test_mail(request: Request):
+    """Sendet eine kurze Test-Mail an NOTIFY_EMAIL um die SMTP-Konfig
+    zu pruefen."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import notify
+    if not notify.is_configured():
+        return RedirectResponse(
+            url="/admin/settings?error=SMTP+nicht+konfiguriert+(NOTIFY_EMAIL+/+SMTP_HOST+leer)",
+            status_code=303,
+        )
+    ok = notify.send_test_mail()
+    msg = ("Test-Mail an {} versendet.".format(settings.notify_email) if ok
+           else "Versand fehlgeschlagen - Logs pruefen.")
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/send-summary")
+def admin_send_summary(request: Request, days: int = Form(1)):
+    """Sendet die Tageszusammenfassung sofort, unabhaengig vom Cron."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import notify
+    if not notify.is_configured():
+        return RedirectResponse(
+            url="/admin/settings?error=SMTP+nicht+konfiguriert",
+            status_code=303,
+        )
+    days = max(1, min(int(days or 1), 30))
+    ok = notify.send_daily_summary(days=days)
+    if ok:
+        msg = "Zusammenfassung der letzten {} Tage versendet.".format(days)
+    else:
+        msg = ("Keine neuen Treffer in den letzten {} Tagen oder Versand "
+               "fehlgeschlagen.".format(days))
     return RedirectResponse(
         url="/admin/settings?flash=" + msg.replace(" ", "+"),
         status_code=303,

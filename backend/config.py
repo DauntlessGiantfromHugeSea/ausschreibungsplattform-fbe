@@ -31,9 +31,18 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "ausschreibungsbot@example.com"
+    # Tageszusammenfassung: Versandzeit (lokal). Default 7:00.
+    summary_hour: int = 7
+    summary_minute: int = 0
 
-    target_regions: str = "Sachsen,Brandenburg,Berlin,Sachsen-Anhalt,Thüringen"
-    high_relevance_threshold: int = 70
+    # Default: leer = bundesweit, kein Region-Bonus/Strafe im Scoring.
+    # Per .env auf Bundeslaender-Liste setzen, wenn man Region-Praeferenz
+    # haben will (z.B. 'Sachsen,Sachsen-Anhalt,Thüringen').
+    target_regions: str = ""
+    # Schwelle ab der ein Tender als 'high' eingestuft wird. 60 erlaubt es,
+    # dass ein einzelner Kernthema-Treffer (z.B. nur 'Tiefbau' im Titel,
+    # ohne ZFSV/Fluessigboden) bereits HIGH-relevant wird.
+    high_relevance_threshold: int = 60
 
     # ---- Auth ---------------------------------------------------------
     admin_username: str = "admin"

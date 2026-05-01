@@ -166,6 +166,37 @@ RSS_HTML = b"""<?xml version="1.0" encoding="utf-8"?>
 </rss>
 """
 
+# Echtes Format vom Live-Server (mit CDATA, <strong>-Tags, HTML-Entities,
+# Erfuellungsort statt Ort, Angebotsfrist statt Frist).
+RSS_REAL_BUND = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>service.bund.de - Ausschreibungen</title>
+    <item>
+      <title>OTH MZH Heizunganlagen</title>
+      <link>https://www.service.bund.de/IMPORTE/Ausschreibungen/obb/2026/05/193785.html#track=feed-callforbids</link>
+      <description><![CDATA[
+   Erf&uuml;llungsort: <strong>92224 Amberg</strong>
+<br />Vergabestelle: <strong>Staatl. Bauamt Amberg-Sulzbach</strong><br />
+<br />Angebotsfrist:  <strong>22.05.2026 08:30</strong> <br />Ver&ouml;ffentlichungsende:  <strong>22.05.2026 08:29</strong>  <br />
+]]></description>
+      <pubDate>Fri, 1 May 2026 15:06:33 +0200</pubDate>
+      <guid>https://www.service.bund.de/IMPORTE/Ausschreibungen/obb/2026/05/193785.html</guid>
+    </item>
+    <item>
+      <title>00 PH 2023-01/D.04 Blitzschutzarbeiten</title>
+      <link>https://www.service.bund.de/IMPORTE/Ausschreibungen/abc/2026/05/432613G349409.html#track=feed-callforbids</link>
+      <description><![CDATA[
+   Erf&uuml;llungsort: <strong>75365 Calw-Hirsau</strong>
+<br />Vergabestelle: <strong>zfp - Zentrum f&#252;r Psychiatrie</strong><br />
+<br />Angebotsfrist:  <strong>15.05.2026 12:00</strong> <br />
+]]></description>
+      <pubDate>Fri, 1 May 2026 14:00:00 +0200</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
 
 def test_parse_rss_extracts_items():
     items = BundScraper.parse_rss(
@@ -183,6 +214,33 @@ def test_parse_rss_extracts_items():
     assert magde.deadline.day == 12
     assert magde.publication_date is not None
     assert magde.portal == "bund.de Service-Portal"
+
+
+def test_parse_rss_real_bund_format():
+    """Echtes Format vom Live-Server (CDATA + <strong> + Entities +
+    Erfuellungsort + Angebotsfrist). HTML wird gestrippt, Entities
+    werden dekodiert."""
+    items = BundScraper.parse_rss(
+        RSS_REAL_BUND, base_url=BASE, portal_name="bund.de Service-Portal",
+    )
+    assert len(items) == 2
+
+    oth = next(it for it in items.values() if "Heizunganlagen" in it.title)
+    # Vergabestelle: KEIN '<strong>' im Wert, KEIN HTML-Rest
+    assert oth.contracting_authority == "Staatl. Bauamt Amberg-Sulzbach"
+    assert "<strong>" not in (oth.contracting_authority or "")
+    assert oth.location is not None
+    assert "Amberg" in oth.location
+    assert "<strong>" not in (oth.location or "")
+    assert oth.deadline is not None
+    assert oth.deadline.day == 22
+    assert oth.deadline.month == 5
+
+    blitz = next(it for it in items.values() if "Blitzschutz" in it.title)
+    # Entity wurde dekodiert: '&#252;' (252 = ü) -> 'ü'
+    assert "ü" in (blitz.contracting_authority or "")  # 'für Psychiatrie'
+    assert blitz.location is not None
+    assert "Calw" in blitz.location
 
 
 def test_looks_like_rss_via_content_type():

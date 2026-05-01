@@ -19,6 +19,7 @@ liefert, brechen wir ab.
 """
 from __future__ import annotations
 
+import html as html_module
 import logging
 import re
 import time
@@ -198,7 +199,13 @@ class BundScraper(BaseScraper):
             desc_el = entry.find("description")
             if desc_el is None:
                 desc_el = entry.find("{http://www.w3.org/2005/Atom}summary")
-            description = (desc_el.text or "").strip() if desc_el is not None else ""
+            raw_description = (desc_el.text or "") if desc_el is not None else ""
+            # service.bund.de packt HTML in CDATA mit <strong>-Tags und
+            # Entities (&uuml; etc.). Erst Entities dekodieren, dann Tags
+            # mit BS4 strippen, dann Whitespace normalisieren.
+            decoded = html_module.unescape(raw_description)
+            description = BeautifulSoup(decoded, "lxml").get_text(" ", strip=True)
+            description = re.sub(r"\s+", " ", description).strip()
 
             pub_el = entry.find("pubDate")
             if pub_el is None:
@@ -214,27 +221,30 @@ class BundScraper(BaseScraper):
                     except ValueError:
                         pub_date = None
 
-            # Heuristik: 'Vergabestelle: X | Ort: Y | Frist: DD.MM.YYYY' im
-            # Description-Text. Wie bei der HTML-Variante.
+            # Heuristik: service.bund.de RSS-Description hat das Format
+            #   Erfuellungsort: <strong>92224 Amberg</strong>
+            #   Vergabestelle: <strong>Staatl. Bauamt Amberg-Sulzbach</strong>
+            #   Angebotsfrist: <strong>22.05.2026 08:30</strong>
+            #   Veroeffentlichungsende: <strong>22.05.2026 08:29</strong>
+            # Nach unserem Tag-Strip ist daraus reiner Text mit Labels
+            # gefolgt von ':' und dem Wert. Wir trennen am naechsten Label.
             authority = None
             location = None
             deadline = None
-            full = "{} {}".format(title, description)
-            am = re.search(
-                r"Vergabestelle\s*[:\-]?\s*(.+?)(?=\s*(?:\||·|Ort|Frist|Veröffentlichung|$))",
-                full, re.IGNORECASE,
-            )
-            if am:
-                authority = am.group(1).strip(" .,;|·")
-            lm = re.search(
-                r"Ort\s*[:\-]?\s*(.+?)(?=\s*(?:\||·|Frist|Vergabestelle|Veröffentlichung|$))",
-                full, re.IGNORECASE,
-            )
-            if lm:
-                location = lm.group(1).strip(" .,;|·")
-            fm = re.search(r"Frist[^0-9]*(\d{2}\.\d{2}\.\d{4})", full)
-            if fm:
-                deadline = _parse_de_date(fm.group(1))
+
+            authority = _extract_label(description, [
+                "Vergabestelle", "Auftraggeber", "Buyer",
+            ])
+            location = _extract_label(description, [
+                "Erfüllungsort", "Erfuellungsort", "Ausführungsort",
+                "Ausfuehrungsort", "Ort", "Place of performance",
+            ])
+            deadline_text = _extract_label(description, [
+                "Angebotsfrist", "Abgabefrist", "Frist",
+                "Submission deadline",
+            ])
+            if deadline_text:
+                deadline = _parse_de_date(deadline_text)
 
             out[link] = TenderItem(
                 title=title[:500],
@@ -365,6 +375,40 @@ def _guess_region(text: str) -> str | None:
     for state in GERMAN_STATES:
         if state.lower() in text.lower():
             return "Nordrhein-Westfalen" if state == "NRW" else state
+    return None
+
+
+_LABEL_STOPS = sorted({
+    "Vergabestelle", "Auftraggeber", "Buyer",
+    "Erfüllungsort", "Erfuellungsort", "Ausführungsort",
+    "Ausfuehrungsort", "Ort", "Place of performance",
+    "Angebotsfrist", "Abgabefrist", "Frist",
+    "Submission deadline",
+    "Veröffentlichung", "Veroeffentlichung",
+    "Veröffentlichungsende", "Veroeffentlichungsende",
+    "Auftragsart", "Vergabeart",
+}, key=len, reverse=True)
+
+
+def _extract_label(text: str, labels: Iterable[str]) -> str | None:
+    """Findet 'LABEL: WERT' im Text. WERT geht bis zum naechsten Label
+    aus _LABEL_STOPS oder bis Zeilenende. Toleriert Whitespace, ':'/'-'
+    und beliebige andere Trenner zwischen Label und Wert."""
+    if not text:
+        return None
+    for label in labels:
+        stop = "|".join(re.escape(s) for s in _LABEL_STOPS if s != label)
+        pattern = (
+            rf"{re.escape(label)}\s*[:\-]?\s*"
+            rf"(.+?)(?=\s*(?:{stop})\s*[:\-]|\s*$)"
+        )
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if not m:
+            continue
+        value = m.group(1).strip(" .,;|·:>")
+        # Strong-Tags etc. waren schon entfernt; wir sehen nur Klartext.
+        if value and len(value) < 250:
+            return value
     return None
 
 

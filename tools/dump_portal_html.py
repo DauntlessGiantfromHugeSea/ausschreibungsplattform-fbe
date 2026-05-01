@@ -48,6 +48,7 @@ def _path_slug(url: str) -> str:
 
 def _candidate_urls(portal) -> list[str]:
     """URLs, die wir pro Portal anhitten - aus listing_paths oder search_path."""
+    from urllib.parse import urlencode
     cfg = portal.config or {}
     out: list[str] = []
     for path in (cfg.get("listing_paths") or []):
@@ -55,8 +56,16 @@ def _candidate_urls(portal) -> list[str]:
     sp = cfg.get("search_path")
     if sp:
         out.append(urljoin(portal.base_url + "/", sp.replace("{term}", "Tiefbau").lstrip("/")))
+    # bund-Scraper baut die URL aus listing_params - hier nachbilden, damit
+    # wir die echte gefilterte Bauleistungs-URL dumpen, nicht nur die Landingpage.
+    if portal.scraper == "bund" and cfg.get("listing_params"):
+        params = {k: str(v) for k, v in cfg["listing_params"].items()}
+        out.append("{}{}?{}".format(
+            portal.base_url,
+            "/Content/DE/Ausschreibungen/Suche/Formular.html",
+            urlencode(params),
+        ))
     if not out:
-        # Mindestens die Landingpage holen, damit wir was haben.
         out.append(portal.base_url + "/")
     return out[:3]  # max 3 URLs pro Portal
 

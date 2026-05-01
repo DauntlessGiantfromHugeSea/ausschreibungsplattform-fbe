@@ -165,14 +165,15 @@ portals:
   # =====================================================================
 
   - name: "Vergabe Baden-Württemberg"
-    enabled: true
+    enabled: false
     scraper: "crawl_html"
     base_url: "https://vergabe.service-bw.de"
     strategy: "scrape"
     notes: |
-      Baden-Wuerttemberg-Vergabe (Service-BW). vergabe.bwl.de existiert
-      nicht mehr. Crawl-Modus auf der oeffentlichen Bekanntmachungsliste,
-      dann client-seitig auf Cluster-Begriffe filtern.
+      DEAKTIVIERT: Domain liefert DNS-Fehler (Name or service not known).
+      Weder vergabe.bwl.de noch vergabe.service-bw.de existieren noch.
+      Aktuelle BW-Vergabeplattform muss recherchiert und neue base_url
+      gesetzt werden, dann auf enabled: true umstellen.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
@@ -194,15 +195,14 @@ portals:
     base_url: "https://www.auftraege.bayern.de"
     strategy: "scrape"
     notes: |
-      Bayerische Auftragsboerse hat keine stabile Such-URL-API. Crawl
-      ueber Landingpage + uebliche Listing-Pfade, dann Volltext-Filter.
+      Bayerische Auftragsboerse. / liefert 50 KB Landingpage; /index.php
+      ist 404, /ausschreibungen leitet auf 500er-Fehlerseite. Also nur /
+      als Listing crawlen, Detail-Links via Text-Heuristik (>= 25 Zeichen)
+      extrahieren.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
         - "/"
-        - "/index.php"
-        - "/ausschreibungen"
-        - "/bekanntmachungen"
       link_selector: "a[href]"
       link_pattern: "(bekanntmachung|ausschreibung|auftrag|notice|tender)"
       max_details: 30
@@ -214,34 +214,47 @@ portals:
 
   - name: "Vergabeplattform Berlin"
     enabled: true
-    scraper: "cosinex"
-    base_url: "https://vergabeplattform.berlin.de"
+    scraper: "crawl_html"
+    base_url: "https://www.berlin.de"
     strategy: "scrape"
-    notes: "Berlin VMP Satellite - Listing-Crawl mit Term-Filter."
+    notes: |
+      Berlin hat die alte Cosinex-VMP-Satellite-Adresse abgeschaltet
+      (vergabeplattform.berlin.de leitet auf berlin.de/vergabeplattform/ um).
+      Wir crawlen jetzt die neue Landingpage + Suchseite, folgen
+      Bekanntmachungs-Links und filtern client-seitig.
     config:
-      variant: "satellite"
-      max_pages: 3
-      filter_by_terms: true
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
+      listing_paths:
+        - "/vergabeplattform/"
+        - "/vergabeplattform/ausschreibungen/"
+        - "/vergabeplattform/bekanntmachungen/"
+      max_details: 30
+      request_delay_s: 0.5
 
   - name: "Vergabemarktplatz Brandenburg"
-    enabled: true
+    enabled: false
     scraper: "cosinex"
     base_url: "https://vergabemarktplatz.brandenburg.de"
     strategy: "scrape"
-    notes: "Brandenburg VMP Satellite - Listing-Crawl mit Term-Filter."
+    notes: |
+      DEAKTIVIERT: robots.txt von vergabemarktplatz.brandenburg.de
+      verbietet Crawling. Wir respektieren das. Workaround waere ein
+      offizieller API-Zugang oder die Nutzung eines RSS-Feeds (sofern
+      vorhanden).
     config:
       variant: "satellite"
       max_pages: 3
       filter_by_terms: true
 
   - name: "Vergabe Bremen"
-    enabled: true
+    enabled: false
     scraper: "crawl_html"
     base_url: "https://vergabe.bremen.de"
     strategy: "scrape"
     notes: |
-      Bremen hat keine offen dokumentierte Such-URL. Listing-Crawl
-      ueber die Landingpage und uebliche Pfade, dann Volltext-Filter.
+      DEAKTIVIERT: vergabe.bremen.de liefert nur eine 641-Byte-Stub-
+      Antwort, kein echter Inhalt. Aktuelle Bremen-Vergabeplattform
+      recherchieren - vermutlich auf eine andere Subdomain umgezogen.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
@@ -258,11 +271,14 @@ portals:
       detail_deadline_selector: ".frist, .deadline"
 
   - name: "Vergabe Hamburg"
-    enabled: true
+    enabled: false
     scraper: "cosinex"
     base_url: "https://vergabe.hamburg.de"
     strategy: "scrape"
-    notes: "Hamburg VMP Center - Listing-Crawl mit Term-Filter."
+    notes: |
+      DEAKTIVIERT: Domain liefert DNS-Fehler. Hamburg-Vergabe ist auf
+      eine andere URL umgezogen (z.B. www.vergabe.hamburg). base_url
+      anpassen + enabled: true setzen.
     config:
       variant: "center"
       max_pages: 3
@@ -274,15 +290,15 @@ portals:
     base_url: "https://www.had.de"
     strategy: "scrape"
     notes: |
-      Hessen Ausschreibungsdatenbank (HAD). vergabe.hessen.de leitet
-      auf had.de um. Listing-Crawl + Volltext-Filter.
+      Hessen Ausschreibungsdatenbank (HAD). /ausschreibungen.html ist
+      404, aber / liefert eine 9.7-KB-Landingpage mit Bekanntmachungs-
+      Links. Aggressiver Fallback (Text-Laenge + URL-Pattern) zieht die
+      Detail-Links daraus.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
-        - "/ausschreibungen.html"
-        - "/ausschreibungen-suche.html"
         - "/"
-      link_selector: "a[href*='ausschreibung'], a[href*='had_id'], a[href*='detail']"
+      link_selector: "a[href*='ausschreibung'], a[href*='had_id'], a[href*='detail'], a[href*='Bekanntmachung']"
       max_details: 40
       request_delay_s: 0.5
       detail_title_selector: "h1, .title, .had-title"
@@ -291,24 +307,28 @@ portals:
       detail_deadline_selector: ".frist, .angebotsfrist"
 
   - name: "Vergabe Mecklenburg-Vorpommern"
-    enabled: true
+    enabled: false
     scraper: "cosinex"
     base_url: "https://www.vergabe-mv.de"
     strategy: "scrape"
-    notes: "MV VMP Satellite - Listing-Crawl mit Term-Filter."
+    notes: |
+      DEAKTIVIERT: Domain vergabe-mv.de liefert DNS-Fehler. Aktuelle
+      MV-Vergabeplattform recherchieren und base_url anpassen.
     config:
       variant: "satellite"
       max_pages: 3
       filter_by_terms: true
 
   - name: "Vergabe Niedersachsen"
-    enabled: true
+    enabled: false
     scraper: "crawl_html"
     base_url: "https://vergabe.niedersachsen.de"
     strategy: "scrape"
     notes: |
-      Niedersachsen-Vergabe - eigenes Portal. Listing-Crawl ueber
-      Veroeffentlichungs-Pfade + Volltext-Filter.
+      DEAKTIVIERT: vergabe.niedersachsen.de liefert nur eine 89-Byte-
+      Stub-Antwort. Aktuelle Niedersachsen-Vergabeplattform
+      recherchieren - aktuell wahrscheinlich auf vergabe.nds.de oder
+      einer Cosinex-VMP-Subdomain.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
@@ -328,10 +348,18 @@ portals:
     scraper: "cosinex"
     base_url: "https://www.evergabe.nrw.de"
     strategy: "scrape"
-    notes: "NRW VMP Center - Listing-Crawl mit Term-Filter."
+    notes: |
+      NRW VMP Center. / leitet auf /VMPCenter/company/welcome.do um -
+      das ist die Public-Dashboard-Seite mit Suchformular und Link auf
+      die Bekanntmachungs-Liste. Wir crawlen welcome.do + die Standard-
+      VMPCenter-Pfade; aggressiver Fallback (Text-Laenge >= 25) extrahiert
+      auch Links ohne erkennbare Notice-Pattern.
     config:
-      variant: "center"
-      max_pages: 3
+      listing_paths:
+        - "/VMPCenter/company/welcome.do"
+        - "/VMPCenter/notice"
+        - "/VMPCenter/notice/list.do"
+      max_pages: 2
       filter_by_terms: true
 
   - name: "Vergabe Rheinland-Pfalz"
@@ -339,18 +367,25 @@ portals:
     scraper: "cosinex"
     base_url: "https://vergabe.rlp.de"
     strategy: "scrape"
-    notes: "RLP VMP Center - Listing-Crawl mit Term-Filter."
+    notes: |
+      RLP VMP Center. Wie NRW: / leitet auf welcome.do um. Selbe Strategie.
     config:
-      variant: "center"
-      max_pages: 3
+      listing_paths:
+        - "/VMPCenter/company/welcome.do"
+        - "/VMPCenter/notice"
+        - "/VMPCenter/notice/list.do"
+      max_pages: 2
       filter_by_terms: true
 
   - name: "Vergabe Saarland"
-    enabled: true
+    enabled: false
     scraper: "cosinex"
     base_url: "https://vergabe.saarland.de"
     strategy: "scrape"
-    notes: "Saarland VMP Center - Listing-Crawl mit Term-Filter."
+    notes: |
+      DEAKTIVIERT: vergabe.saarland.de leitet auf saarland.de/.../vergabe um
+      und liefert dort HTTP 403. Aktuelle Saarland-Vergabeplattform
+      recherchieren und base_url anpassen.
     config:
       variant: "center"
       max_pages: 3
@@ -379,29 +414,41 @@ portals:
     scraper: "cosinex"
     base_url: "https://www.evergabe.sachsen-anhalt.de"
     strategy: "scrape"
-    notes: "Sachsen-Anhalt VMP Satellite - Listing-Crawl mit Term-Filter."
+    notes: |
+      Sachsen-Anhalt VMP Satellite. / liefert 105 KB Landingpage. Wir
+      probieren Standard-Satellite-Pfade plus / als Fallback (greift dann
+      via Text-Heuristik).
     config:
-      variant: "satellite"
-      max_pages: 3
+      listing_paths:
+        - "/VMPSatellite/notice"
+        - "/VMPSatellite/notice/list.do"
+        - "/VMPSatellite/company/welcome.do"
+        - "/"
+      max_pages: 2
       filter_by_terms: true
 
   - name: "Vergabe Schleswig-Holstein"
-    enabled: true
+    enabled: false
     scraper: "cosinex"
     base_url: "https://www.vergabe-sh.de"
     strategy: "scrape"
-    notes: "SH VMP Satellite - Listing-Crawl mit Term-Filter."
+    notes: |
+      DEAKTIVIERT: Domain vergabe-sh.de liefert DNS-Fehler. Aktuelle SH-
+      Vergabeplattform recherchieren und base_url anpassen.
     config:
       variant: "satellite"
       max_pages: 3
       filter_by_terms: true
 
   - name: "Vergabe Thüringen"
-    enabled: true
+    enabled: false
     scraper: "cosinex"
     base_url: "https://www.evergabe-thueringen.de"
     strategy: "scrape"
-    notes: "Thueringen VMP Satellite - Listing-Crawl mit Term-Filter."
+    notes: |
+      DEAKTIVIERT: Server lehnt Verbindung ab (Connection refused). Domain
+      ist erreichbar aber Port 443 antwortet nicht mehr. Vermutlich Umzug
+      auf neue Domain.
     config:
       variant: "satellite"
       max_pages: 3

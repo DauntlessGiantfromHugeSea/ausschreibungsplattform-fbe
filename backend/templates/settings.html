@@ -37,6 +37,32 @@
   </div>
 </div>
 
+<!-- Sofort-Suche-Button (separat, ohne Reset) -->
+<div class="card p-6 mb-6 border-emerald-200 bg-emerald-50/30">
+  <div class="flex items-start gap-4">
+    <div class="flex-1">
+      <h2 class="text-lg font-semibold mb-1">Suchlauf jetzt starten</h2>
+      <p class="text-sm text-zinc-600">
+        Triggert sofort einen Lauf gegen alle aktivierten Portale. Status
+        kannst du auf <a href="/admin/status" class="text-brand-700 hover:underline">/admin/status</a>
+        verfolgen — die Seite zeigt nach Abschluss die Treffer pro Portal.
+        Dauer typischerweise 30–90 Sekunden.
+      </p>
+      {% if is_running %}
+      <p class="mt-2 text-sm text-amber-700">
+        ⚙ Ein Suchlauf läuft gerade. Ein zweiter Klick wird automatisch
+        zusammengeführt.
+      </p>
+      {% endif %}
+    </div>
+    <form method="post" action="/admin/run-search">
+      <button type="submit" class="btn-primary whitespace-nowrap">
+        ▶ Suche starten
+      </button>
+    </form>
+  </div>
+</div>
+
 <!-- Reset-Funktion -->
 <div class="card p-6 mb-6 border-rose-200">
   <h2 class="text-lg font-semibold mb-2">Alle Suchergebnisse zurücksetzen</h2>
@@ -44,7 +70,7 @@
     Löscht <strong>alle {{ counts.tenders }} Ausschreibungen</strong> und
     <strong>{{ counts.comments }} Kommentare</strong> aus der Datenbank.
     Suchprofile, Portale, Suchbegriffe und Benutzer bleiben erhalten.
-    Anschließend kannst du optional einen frischen Suchlauf starten.
+    Standardmäßig wird direkt danach ein neuer Suchlauf gestartet.
   </p>
   <p class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md p-3 mb-4">
     <strong>Achtung:</strong> Das ist nicht rückgängig zu machen. Vorher
@@ -63,17 +89,16 @@
                autocomplete="off" placeholder="RESET">
       </div>
       <label class="flex items-start gap-2 text-sm">
-        <input type="checkbox" name="rescrape" value="yes" class="mt-0.5"
-               {% if is_running %}disabled{% endif %}>
+        <input type="checkbox" name="rescrape" value="yes" class="mt-0.5" checked>
         <span>
-          Direkt nach dem Reset einen neuen Suchlauf im Hintergrund starten
-          {% if is_running %}<span class="text-zinc-500">(läuft bereits — Option deaktiviert)</span>{% endif %}
+          Direkt nach dem Reset einen neuen Suchlauf starten
+          <span class="text-zinc-500">(empfohlen — sonst zeigt das Dashboard 0 Treffer bis zur nächsten Scheduler-Runde)</span>
         </span>
       </label>
       <div class="flex gap-2">
         <button type="submit"
                 class="btn bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500">
-          Alle Ausschreibungen löschen
+          Reset + neue Suche starten
         </button>
         <a href="/admin/settings" class="btn-ghost">Abbrechen</a>
       </div>

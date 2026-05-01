@@ -216,6 +216,21 @@ def test_admin_reset_blocked_for_non_admin(app_client, tender):
     assert r.status_code in (303, 401, 403)
 
 
+def test_admin_run_search_button_triggers_pipeline(auth_client):
+    """Der separate 'Suche starten'-Button triggert einen Lauf, ohne
+    dass der User RESET tippen muss."""
+    r = auth_client.post("/admin/run-search", follow_redirects=False)
+    assert r.status_code == 303
+    assert "/admin/settings?flash=" in r.headers["location"]
+    assert "Suchlauf+gestartet" in r.headers["location"]
+
+
+def test_admin_run_search_requires_login(app_client):
+    app_client.get("/logout")
+    r = app_client.post("/admin/run-search", follow_redirects=False)
+    assert r.status_code in (303, 401, 403)
+
+
 def test_score_breakdown_rendered_in_detail(auth_client, db_session):
     from backend.models import Tender
     import json

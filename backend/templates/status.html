@@ -2,6 +2,11 @@
 {% block title %}Status – FBE Ausschreibungen{% endblock %}
 {% block content %}
 
+{% if is_running %}
+<!-- Auto-Refresh alle 15s solange ein Lauf aktiv ist -->
+<meta http-equiv="refresh" content="15">
+{% endif %}
+
 <nav class="text-sm text-zinc-500 mb-4">
   <a href="/" class="hover:text-zinc-900">Dashboard</a>
   <span class="mx-1.5">›</span>
@@ -12,18 +17,32 @@
   <div>
     <h1 class="text-2xl font-semibold tracking-tight">Status pro Portal</h1>
     <p class="text-sm text-zinc-500 mt-1">
-      {% if last_run and last_run.finished_at %}
+      {% if is_running %}
+        <span class="inline-flex items-center gap-1.5 text-amber-700 font-medium">
+          <span class="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+          Suchlauf läuft gerade — Seite aktualisiert sich automatisch alle 15s.
+        </span>
+      {% elif last_run and last_run.finished_at %}
         Letzter Lauf: {{ last_run.finished_at[:16].replace('T',' ') }}
         {% if last_run.new is defined %}
           · {{ last_run.new }} neu, {{ last_run.updated or 0 }} aktualisiert,
           {{ last_run.errors or 0 }} Fehler
         {% endif %}
       {% else %}
-        Noch kein Lauf abgeschlossen — auf dem Dashboard „Suche starten" klicken.
+        Noch kein Lauf abgeschlossen.
       {% endif %}
     </p>
   </div>
-  <a href="/admin/probe-all" class="btn-ghost">Alle live testen</a>
+  <div class="flex gap-2">
+    {% if not is_running %}
+    <form method="post" action="/admin/run-search">
+      <button type="submit" class="btn-primary whitespace-nowrap">
+        ▶ Suche starten
+      </button>
+    </form>
+    {% endif %}
+    <a href="/admin/probe-all" class="btn-ghost">Alle live testen</a>
+  </div>
 </div>
 
 {# Zusammenfassung #}

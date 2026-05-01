@@ -654,6 +654,7 @@ def admin_status(request: Request):
             "configured_portals": enabled_portals(),
             "last_run": last_run,
             "summary": _portal_status_summary(last_run),
+            "is_running": is_pipeline_running(),
             "user": _session_user(request),
         },
     )
@@ -719,12 +720,33 @@ def admin_reset_tenders(
         .format(deleted_tenders, deleted_comments)
     )
 
-    if rescrape == "yes" and not is_pipeline_running():
+    if rescrape == "yes":
+        # Immer queueen - run_pipeline_with_lock kuemmert sich um Doppellaeufe
+        # via internem Lock. Nicht hier vorab gaten, sonst denkt der User
+        # 'der Reset hat keine Suche getriggert' weil zufaellig schon ein
+        # Auto-Run lief.
         background_tasks.add_task(run_pipeline_with_lock)
-        msg += " Suchlauf im Hintergrund gestartet."
+        msg += " Suchlauf gestartet."
 
     return RedirectResponse(
         url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/run-search")
+def admin_run_search(
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """Triggert sofort einen Suchlauf - separat von Reset, damit der User
+    auch ohne Loeschen einen frischen Lauf anstossen kann."""
+    user = _session_user(request)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    background_tasks.add_task(run_pipeline_with_lock)
+    return RedirectResponse(
+        url="/admin/settings?flash=Suchlauf+gestartet+-+Status+aktualisiert+sich+in+ca.+30+Sekunden.",
         status_code=303,
     )
 

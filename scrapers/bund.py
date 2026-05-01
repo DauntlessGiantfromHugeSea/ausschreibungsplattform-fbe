@@ -6,26 +6,25 @@ aktuellen Ausschreibungen sortiert nach Veroeffentlichungsdatum zeigt:
     /Content/DE/Ausschreibungen/Suche/Formular.html
         ?resultsPerPage=100&sortOrder=dateOfIssue_dt+desc
 
-Das liefert mit einem Request 100 frische Bekanntmachungen. Wir filtern
-client-seitig auf die konfigurierten Cluster-Begriffe.
+Mit jobsrss=true im Querystring liefert service.bund.de denselben
+Filter als RSS-Feed - das ist deutlich stabiler als HTML-Scraping.
+Der Scraper erkennt den Response-Content-Type automatisch und routet
+zu RSS- oder HTML-Parser.
 
 Optional, falls in portals.yaml `enable_keyword_search: true` gesetzt ist,
 schicken wir zusaetzlich pro query_term eine templateQueryString-Suche.
 
 Pagination: GP=N (1..max_pages). Wenn eine Seite weniger als 100 Items
 liefert, brechen wir ab.
-
-Teaser-Layout: <li class="standard-teaser"> oder Varianten. Der Titel-Link
-zeigt auf /Content/DE/Ausschreibungen/Anzeige/<id>.html - wir bevorzugen
-diesen Link statt des ersten Links in der Karte (sonst landen wir auf
-"merken"- oder Pagination-Links).
 """
 from __future__ import annotations
 
 import logging
 import re
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 from typing import Iterable, List
 from urllib.parse import urljoin, urlencode
 
@@ -115,6 +114,12 @@ class BundScraper(BaseScraper):
         if resp.status_code != 200:
             log.info("[bund.de] Listing HTTP %s page %d", resp.status_code, page)
             return {}
+        # Auto-Erkennung RSS vs HTML: bei jobsrss=true liefert
+        # service.bund.de XML/RSS, sonst HTML.
+        if _looks_like_rss(resp):
+            return self.parse_rss(
+                resp.content, base_url=self.base_url, portal_name=self.name,
+            )
         return self.parse_search_html(
             resp.text, base_url=self.base_url, portal_name=self.name,
         )
@@ -147,6 +152,103 @@ class BundScraper(BaseScraper):
             return list(query_terms)
 
     # ------------------------------------------------------------------
+    @classmethod
+    def parse_rss(
+        cls, xml_bytes: bytes, base_url: str, portal_name: str = "bund.de",
+    ) -> dict[str, TenderItem]:
+        """Parst die RSS-Antwort von service.bund.de (jobsrss=true).
+
+        Pro <item>: <title>, <link>, <description>, <pubDate>.
+        Beschreibungstext enthaelt typischerweise auch Vergabestelle und
+        Ort als Klartext - wir extrahieren beides per Heuristik.
+        """
+        try:
+            root = ET.fromstring(xml_bytes)
+        except ET.ParseError as exc:
+            log.warning("[bund.de] RSS-Parse-Fehler: %s", exc)
+            return {}
+
+        out: dict[str, TenderItem] = {}
+        items_xml = root.findall(".//item") or root.findall(
+            ".//{http://www.w3.org/2005/Atom}entry"
+        )
+        for entry in items_xml:
+            title_el = entry.find("title")
+            if title_el is None:
+                title_el = entry.find("{http://www.w3.org/2005/Atom}title")
+            if title_el is None or not (title_el.text or "").strip():
+                continue
+            title = title_el.text.strip()
+
+            link_el = entry.find("link")
+            if link_el is not None and link_el.text:
+                link = link_el.text.strip()
+            else:
+                # Atom-Link
+                link = None
+                for le in entry.findall("{http://www.w3.org/2005/Atom}link"):
+                    if le.attrib.get("rel", "alternate") == "alternate":
+                        link = le.attrib.get("href")
+                        if link:
+                            break
+            if not link:
+                continue
+            link = urljoin(base_url, link)
+
+            desc_el = entry.find("description")
+            if desc_el is None:
+                desc_el = entry.find("{http://www.w3.org/2005/Atom}summary")
+            description = (desc_el.text or "").strip() if desc_el is not None else ""
+
+            pub_el = entry.find("pubDate")
+            if pub_el is None:
+                pub_el = entry.find("{http://www.w3.org/2005/Atom}published")
+            pub_date = None
+            if pub_el is not None and pub_el.text:
+                raw = pub_el.text.strip()
+                try:
+                    pub_date = parsedate_to_datetime(raw)
+                except (TypeError, ValueError):
+                    try:
+                        pub_date = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    except ValueError:
+                        pub_date = None
+
+            # Heuristik: 'Vergabestelle: X | Ort: Y | Frist: DD.MM.YYYY' im
+            # Description-Text. Wie bei der HTML-Variante.
+            authority = None
+            location = None
+            deadline = None
+            full = "{} {}".format(title, description)
+            am = re.search(
+                r"Vergabestelle\s*[:\-]?\s*(.+?)(?=\s*(?:\||·|Ort|Frist|Veröffentlichung|$))",
+                full, re.IGNORECASE,
+            )
+            if am:
+                authority = am.group(1).strip(" .,;|·")
+            lm = re.search(
+                r"Ort\s*[:\-]?\s*(.+?)(?=\s*(?:\||·|Frist|Vergabestelle|Veröffentlichung|$))",
+                full, re.IGNORECASE,
+            )
+            if lm:
+                location = lm.group(1).strip(" .,;|·")
+            fm = re.search(r"Frist[^0-9]*(\d{2}\.\d{2}\.\d{4})", full)
+            if fm:
+                deadline = _parse_de_date(fm.group(1))
+
+            out[link] = TenderItem(
+                title=title[:500],
+                portal=portal_name,
+                url=link,
+                contracting_authority=authority,
+                location=location,
+                region=_guess_region(location or ""),
+                publication_date=pub_date,
+                deadline=deadline,
+                description=description[:1000],
+            )
+        return out
+
     @classmethod
     def parse_search_html(
         cls, html: str, base_url: str, portal_name: str = "bund.de",
@@ -264,6 +366,29 @@ def _guess_region(text: str) -> str | None:
         if state.lower() in text.lower():
             return "Nordrhein-Westfalen" if state == "NRW" else state
     return None
+
+
+def _looks_like_rss(resp) -> bool:
+    """True wenn die Antwort RSS/Atom-XML ist - geprueft via Content-Type
+    und durch Sniffing der ersten Bytes des Body."""
+    headers = getattr(resp, "headers", None) or {}
+    ctype = ""
+    if hasattr(headers, "get"):
+        ctype = (headers.get("content-type") or "").lower()
+    if "xml" in ctype or "rss" in ctype:
+        return True
+    # Body-Sniffing: erste 512 Bytes auf <?xml oder <rss/<feed
+    body = getattr(resp, "content", None) or b""
+    if isinstance(body, str):
+        body = body.encode("utf-8", "ignore")
+    head = body[:512].lstrip()
+    if not head:
+        return False
+    if head.startswith(b"<?xml"):
+        return True
+    if head.startswith(b"<rss") or head.startswith(b"<feed"):
+        return True
+    return False
 
 
 def _matches_any(item: TenderItem, terms: Iterable[str]) -> bool:

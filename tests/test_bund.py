@@ -146,6 +146,95 @@ def test_parser_handles_empty_html():
 
 
 # ---------------------------------------------------------------------------
+RSS_HTML = b"""<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>service.bund.de - Ausschreibungen Bauleistungen</title>
+    <item>
+      <title>Verfuellung Leitungsgraben Magdeburg</title>
+      <link>https://www.service.bund.de/Content/DE/Ausschreibungen/Anzeige/4711.html</link>
+      <description>Vergabestelle: Stadt Magdeburg | Ort: Magdeburg, Sachsen-Anhalt | Frist: 12.06.2026</description>
+      <pubDate>Mon, 01 May 2026 10:00:00 +0200</pubDate>
+    </item>
+    <item>
+      <title>Tiefbauarbeiten B5 Berlin</title>
+      <link>https://www.service.bund.de/Content/DE/Ausschreibungen/Anzeige/9999.html</link>
+      <description>Vergabestelle: Senat Berlin | Ort: Berlin | Frist: 30.06.2026</description>
+      <pubDate>Mon, 01 May 2026 09:00:00 +0200</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+def test_parse_rss_extracts_items():
+    items = BundScraper.parse_rss(
+        RSS_HTML, base_url=BASE, portal_name="bund.de Service-Portal",
+    )
+    assert len(items) == 2
+    magde = next(it for it in items.values() if "Magdeburg" in it.title)
+    assert magde.url.endswith("/Anzeige/4711.html")
+    assert magde.contracting_authority == "Stadt Magdeburg"
+    assert "Magdeburg" in magde.location
+    assert magde.region == "Sachsen-Anhalt"
+    assert magde.deadline is not None
+    assert magde.deadline.year == 2026
+    assert magde.deadline.month == 6
+    assert magde.deadline.day == 12
+    assert magde.publication_date is not None
+    assert magde.portal == "bund.de Service-Portal"
+
+
+def test_looks_like_rss_via_content_type():
+    from scrapers.bund import _looks_like_rss
+
+    class R:
+        headers = {"content-type": "application/rss+xml; charset=utf-8"}
+        content = b"<?xml..."
+    assert _looks_like_rss(R) is True
+
+
+def test_looks_like_rss_via_body_sniff():
+    from scrapers.bund import _looks_like_rss
+
+    class R:
+        headers = {"content-type": "text/plain"}
+        content = b'<?xml version="1.0"?><rss>...'
+    assert _looks_like_rss(R) is True
+
+
+def test_looks_like_rss_returns_false_for_html():
+    from scrapers.bund import _looks_like_rss
+
+    class R:
+        headers = {"content-type": "text/html; charset=utf-8"}
+        content = b"<!DOCTYPE html><html>..."
+    assert _looks_like_rss(R) is False
+
+
+def test_fetch_listing_routes_rss_to_rss_parser(monkeypatch):
+    """Wenn der Server RSS zurueckgibt (jobsrss=true), wird parse_rss genutzt
+    und nicht der HTML-Parser."""
+
+    class FakeResp:
+        status_code = 200
+        headers = {"content-type": "application/rss+xml"}
+        content = RSS_HTML
+        text = RSS_HTML.decode("utf-8")
+
+    s = BundScraper(base_url=BASE, name="bund.de Service-Portal", config={})
+    try:
+        s._robots = type("R", (), {"can_fetch": lambda *a: True})()
+        monkeypatch.setattr(s, "get", lambda url: FakeResp())
+        items = s._fetch_listing(page=1)
+        assert len(items) == 2
+        # Echter RSS-pubDate-Parse wirkt
+        any_pub = next(iter(items.values())).publication_date
+        assert any_pub is not None
+    finally:
+        s.close()
+
+
 def test_filter_by_terms_excludes_off_topic(monkeypatch):
     """Listing liefert 3 Items, nur 1 enthaelt einen Cluster-Begriff -
     nach client-Filter bleibt 1 uebrig."""

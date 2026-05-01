@@ -179,16 +179,36 @@ class SachsenScraper(BaseScraper):
         cls, html: str, base_url: str, portal_name: str,
     ) -> dict[str, TenderItem]:
         soup = BeautifulSoup(html, "lxml")
+        out: dict[str, TenderItem] = {}
 
-        # Zeilen-basierte Erkennung mit mehreren Fallback-Selektoren.
+        # Strategie 1 (gewinnerprobte): NetServer-Tabelle direkt parsen.
+        # Echte DOM-Struktur (aus Live-Dump):
+        #   <table class="tableHorizontalHeader">
+        #     <tr class="tableRow">
+        #       <td>Erschienen</td>
+        #       <td class="tender"><a href="...">Titel</a></td>
+        #       <td class="tenderAuthority">Stadt X</td>
+        #       <td class="tenderDeadline">DD.MM.YYYY</td>
+        #       <td class="tenderType">Verfahrensart</td>
+        #     </tr>
+        # Selektor matched alle Datenzeilen, wir extrahieren ueber die
+        # Cell-Klassen.
+        for row in soup.select("tr.tableRow, tr.clickable-row"):
+            item = cls._parse_netserver_row(
+                row, base_url=base_url, portal_name=portal_name,
+            )
+            if item:
+                out[item.url] = item
+
+        if out:
+            return out
+
+        # Strategie 2: alte Row-Selektoren (Fallback fuer aeltere Layouts).
         rows = []
         for sel in ROW_SELECTORS:
             rows = soup.select(sel)
             if rows:
                 break
-
-        out: dict[str, TenderItem] = {}
-
         if rows:
             for row in rows:
                 item = cls._parse_row(row, base_url=base_url, portal_name=portal_name)
@@ -285,6 +305,58 @@ class SachsenScraper(BaseScraper):
                         if ptext and 6 < len(ptext) < 400:
                             return ptext
         return None
+
+    # ------------------------------------------------------------------
+    @classmethod
+    def _parse_netserver_row(
+        cls, row, base_url: str, portal_name: str,
+    ) -> TenderItem | None:
+        """Parser fuer die echte NetServer-Tabellenstruktur.
+
+        Cell-Klassen aus dem Live-Dump:
+            .tender             - Titel-Zelle (enthaelt <a href>)
+            .tenderAuthority    - Vergabestelle
+            .tenderDeadline     - Frist DD.MM.YYYY
+            .tenderType         - Verfahrensart (VOB, VOL, etc.)
+        """
+        title_cell = row.select_one("td.tender, .tender")
+        if title_cell is None:
+            return None
+        link = title_cell.find("a", href=True)
+        if link is None:
+            return None
+        title = link.get_text(" ", strip=True)
+        if not title or len(title) < 4:
+            return None
+
+        href = link["href"].strip()
+        # Relative URLs wie 'PublicationSearchControllerServlet?function=...'
+        # werden gegen base_url/NetServer/ aufgeloest.
+        if href.startswith(("http://", "https://")):
+            url_full = href
+        elif href.startswith("/"):
+            url_full = urljoin(base_url, href)
+        else:
+            url_full = urljoin(base_url + "/NetServer/", href)
+
+        authority = _cell_text(row, ".tenderAuthority")
+        deadline = _parse_date(_cell_text(row, ".tenderDeadline"))
+        publication = _parse_date(_cell_text(row, ".tenderPublication"))
+        ttype = _cell_text(row, ".tenderType")
+
+        # Falls einzelne Klassen fehlen, restliche td-Texte als Beschreibung.
+        full_text = row.get_text(" | ", strip=True)
+
+        return TenderItem(
+            title=title[:500],
+            portal=portal_name,
+            url=url_full,
+            contracting_authority=authority,
+            deadline=deadline,
+            publication_date=publication,
+            description=("Verfahrensart: {} | {}".format(ttype, full_text)
+                         if ttype else full_text)[:1000],
+        )
 
     # ------------------------------------------------------------------
     @classmethod
@@ -418,6 +490,14 @@ def _parse_date(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _cell_text(row, selector: str) -> str | None:
+    el = row.select_one(selector)
+    if not el:
+        return None
+    txt = el.get_text(" ", strip=True)
+    return txt or None
 
 
 def _matches_any(item: TenderItem, terms: Iterable[str]) -> bool:

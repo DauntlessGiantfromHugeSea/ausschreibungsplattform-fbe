@@ -189,14 +189,60 @@ class CosinexScraper(BaseScraper):
         cls, html: str, base_url: str, portal_name: str,
     ) -> dict[str, TenderItem]:
         soup = BeautifulSoup(html, "lxml")
+        out: dict[str, TenderItem] = {}
+
+        # Strategie 0: VMP-Welcome-Page-Tabelle. Die /VMPCenter/company/welcome.do
+        # bzw. /VMPSatellite/-Landing-Page hat eine Tabelle direkt mit den
+        # aktuellen Bekanntmachungen. Spalten (aus Live-Dump NRW/RLP):
+        #   0: Veröffentlicht  1: Frist  2: Kurzbezeichnung  3: Typ  4: Plattform
+        # Detail-Links zeigen auf /VMPCenter/public/notice/...
+        for tbl in soup.find_all("table"):
+            header = tbl.find("tr")
+            if not header:
+                continue
+            header_text = header.get_text(" ", strip=True).lower()
+            if "kurzbezeichnung" not in header_text:
+                continue
+            for tr in tbl.find_all("tr")[1:]:
+                tds = tr.find_all("td")
+                if len(tds) < 3:
+                    continue
+                # Spalte 2 (index) ist der Titel mit Anchor
+                title_cell = tds[2] if len(tds) > 2 else tds[-1]
+                link = None
+                for a in title_cell.find_all("a", href=True):
+                    if "/notice" in a["href"] or "/public" in a["href"]:
+                        link = a
+                        break
+                if link is None:
+                    link = title_cell.find("a", href=True)
+                if link is None:
+                    continue
+                title = link.get_text(" ", strip=True)
+                if not title or len(title) < 4:
+                    continue
+                url_full = urljoin(base_url, link["href"].strip())
+                pub = _parse_date(tds[0].get_text(" ", strip=True)) if tds else None
+                deadline = _parse_date(tds[1].get_text(" ", strip=True)) if len(tds) > 1 else None
+                ttype = tds[3].get_text(" ", strip=True) if len(tds) > 3 else None
+                authority = tds[4].get_text(" ", strip=True) if len(tds) > 4 else None
+                out[url_full] = TenderItem(
+                    title=title[:500],
+                    portal=portal_name,
+                    url=url_full,
+                    contracting_authority=authority,
+                    publication_date=pub,
+                    deadline=deadline,
+                    description=("Typ: {}".format(ttype) if ttype else None),
+                )
+            if out:
+                return out
 
         rows = []
         for sel in ROW_SELECTORS:
             rows = soup.select(sel)
             if rows:
                 break
-
-        out: dict[str, TenderItem] = {}
 
         for row in rows:
             item = cls._parse_row(row, base_url=base_url, portal_name=portal_name)

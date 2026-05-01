@@ -195,22 +195,16 @@ portals:
     base_url: "https://www.auftraege.bayern.de"
     strategy: "scrape"
     notes: |
-      Bayerische Auftragsboerse. / liefert 50 KB Landingpage; /index.php
-      ist 404, /ausschreibungen leitet auf 500er-Fehlerseite. Also nur /
-      als Listing crawlen, Detail-Links via Text-Heuristik (>= 25 Zeichen)
-      extrahieren.
+      Bayerische Auftragsboerse. Live-Dump zeigt: / ist nur Werbe-Landing,
+      die echten Ausschreibungen liegen unter /Dashboards/Dashboard_off?BL=09
+      (Deutsche eVergabe Dashboard, BL=09 = Bayern). Den crawlen wir.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
+        - "/Dashboards/Dashboard_off?BL=09"
         - "/"
-      link_selector: "a[href]"
-      link_pattern: "(bekanntmachung|ausschreibung|auftrag|notice|tender)"
       max_details: 30
       request_delay_s: 0.5
-      detail_title_selector: "h1, .title, td.title"
-      detail_authority_selector: ".vergabestelle, .buyer, .auftraggeber"
-      detail_location_selector: ".ort, .place"
-      detail_deadline_selector: ".frist, .deadline, .angebotsfrist"
 
   - name: "Vergabeplattform Berlin"
     enabled: true
@@ -218,16 +212,14 @@ portals:
     base_url: "https://www.berlin.de"
     strategy: "scrape"
     notes: |
-      Berlin hat die alte Cosinex-VMP-Satellite-Adresse abgeschaltet
-      (vergabeplattform.berlin.de leitet auf berlin.de/vergabeplattform/ um).
-      Wir crawlen jetzt die neue Landingpage + Suchseite, folgen
-      Bekanntmachungs-Links und filtern client-seitig.
+      Berlin: alte vergabeplattform.berlin.de leitet auf
+      berlin.de/vergabeplattform/ um. Live-Dump zeigt: 9 Anchors auf
+      /vergabeplattform/veroeffentlichungen/info-XX/ - Kategorie-Listings.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
+        - "/vergabeplattform/veroeffentlichungen/"
         - "/vergabeplattform/"
-        - "/vergabeplattform/ausschreibungen/"
-        - "/vergabeplattform/bekanntmachungen/"
       max_details: 30
       request_delay_s: 0.5
 
@@ -290,15 +282,16 @@ portals:
     base_url: "https://www.had.de"
     strategy: "scrape"
     notes: |
-      Hessen Ausschreibungsdatenbank (HAD). /ausschreibungen.html ist
-      404, aber / liefert eine 9.7-KB-Landingpage mit Bekanntmachungs-
-      Links. Aggressiver Fallback (Text-Laenge + URL-Pattern) zieht die
-      Detail-Links daraus.
+      Hessen Ausschreibungsdatenbank (HAD). Live-Dump zeigt echte
+      Listing-URLs: /onlinesuche_login.html (aktuelle Hessen-Aus-
+      schreibungen), /archivsuche_einfach.html (Archiv),
+      /beschafferprofile-beabs-ausschreibungen.html (Beabsichtigt).
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
+        - "/onlinesuche_login.html"
+        - "/beschafferprofile-beabs-ausschreibungen.html"
         - "/"
-      link_selector: "a[href*='ausschreibung'], a[href*='had_id'], a[href*='detail'], a[href*='Bekanntmachung']"
       max_details: 40
       request_delay_s: 0.5
       detail_title_selector: "h1, .title, .had-title"
@@ -349,17 +342,17 @@ portals:
     base_url: "https://www.evergabe.nrw.de"
     strategy: "scrape"
     notes: |
-      NRW VMP Center. / leitet auf /VMPCenter/company/welcome.do um -
-      das ist die Public-Dashboard-Seite mit Suchformular und Link auf
-      die Bekanntmachungs-Liste. Wir crawlen welcome.do + die Standard-
-      VMPCenter-Pfade; aggressiver Fallback (Text-Laenge >= 25) extrahiert
-      auch Links ohne erkennbare Notice-Pattern.
+      NRW VMP Center. Live-Dump zeigt: welcome.do hat eine 22-Zeilen-
+      Tabelle direkt mit aktuellen Bekanntmachungen (Spalten:
+      Veroeffentlicht, Frist, Kurzbezeichnung, Typ, Plattform). Der
+      neue Welcome-Page-Tabellen-Parser im cosinex-Scraper extrahiert
+      diese direkt.
     config:
       listing_paths:
         - "/VMPCenter/company/welcome.do"
-        - "/VMPCenter/notice"
-        - "/VMPCenter/notice/list.do"
-      max_pages: 2
+        - "/"
+        - "/VMPCenter/company/announcements/categoryOverview.do?method=show"
+      max_pages: 1
       filter_by_terms: true
 
   - name: "Vergabe Rheinland-Pfalz"
@@ -368,13 +361,14 @@ portals:
     base_url: "https://vergabe.rlp.de"
     strategy: "scrape"
     notes: |
-      RLP VMP Center. Wie NRW: / leitet auf welcome.do um. Selbe Strategie.
+      RLP VMP Center. Wie NRW: welcome.do liefert die 22-Zeilen-
+      Bekanntmachungstabelle direkt.
     config:
       listing_paths:
         - "/VMPCenter/company/welcome.do"
-        - "/VMPCenter/notice"
-        - "/VMPCenter/notice/list.do"
-      max_pages: 2
+        - "/"
+        - "/VMPCenter/company/announcements/categoryOverview.do?method=show"
+      max_pages: 1
       filter_by_terms: true
 
   - name: "Vergabe Saarland"
@@ -411,21 +405,21 @@ portals:
 
   - name: "Vergabe Sachsen-Anhalt"
     enabled: true
-    scraper: "cosinex"
+    scraper: "crawl_html"
     base_url: "https://www.evergabe.sachsen-anhalt.de"
     strategy: "scrape"
     notes: |
-      Sachsen-Anhalt VMP Satellite. / liefert 105 KB Landingpage. Wir
-      probieren Standard-Satellite-Pfade plus / als Fallback (greift dann
-      via Text-Heuristik).
+      Sachsen-Anhalt: kein Cosinex-VMP, sondern eigenes evergabe-Portal
+      auf evergabe.sachsen-anhalt.de. Live-Dump: / liefert 105 KB mit
+      einer 10-Zeilen-Tabelle aktueller Vergaben + Form-POST nach
+      /recherche-aktueller-vergaben.
     config:
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
-        - "/VMPSatellite/notice"
-        - "/VMPSatellite/notice/list.do"
-        - "/VMPSatellite/company/welcome.do"
+        - "/recherche-aktueller-vergaben"
         - "/"
-      max_pages: 2
-      filter_by_terms: true
+      max_details: 40
+      request_delay_s: 0.5
 
   - name: "Vergabe Schleswig-Holstein"
     enabled: false

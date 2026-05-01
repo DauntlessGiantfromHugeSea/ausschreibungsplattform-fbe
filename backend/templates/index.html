@@ -82,7 +82,8 @@
 <!-- Quick-Filter Chips -->
 <div class="flex flex-wrap items-center gap-2 mb-4">
   {% set q = filters.quick %}
-  <a href="/" class="chip {% if not q and not filters.status %}chip-active{% endif %}">Alle</a>
+  {% set ie = filters.include_expired %}
+  <a href="/" class="chip {% if not q and not filters.status and not ie %}chip-active{% endif %}">Aktiv (Standard)</a>
   <a href="/?quick=high" class="chip {% if q=='high' %}chip-active{% endif %}">★ Hochrelevant</a>
   <a href="/?quick=deadline-7"  class="chip {% if q=='deadline-7' %}chip-active{% endif %}">Frist ≤ 7d</a>
   <a href="/?quick=deadline-14" class="chip {% if q=='deadline-14' %}chip-active{% endif %}">Frist ≤ 14d</a>
@@ -92,6 +93,11 @@
   <a href="/?quick=interessant"  class="chip {% if q=='interessant' %}chip-active{% endif %}">Interessant</a>
   <a href="/?quick=beworben"     class="chip {% if q=='beworben' %}chip-active{% endif %}">Beworben</a>
   <a href="/?quick=archiviert"   class="chip {% if q=='archiviert' %}chip-active{% endif %}">Archiviert</a>
+  <span class="w-px bg-zinc-200 mx-1"></span>
+  <a href="/?include_expired=1" class="chip {% if ie %}chip-active{% endif %}"
+     title="Auch abgelaufene Ausschreibungen anzeigen">⏱ Auch abgelaufene</a>
+  <a href="/?quick=expired"     class="chip {% if q=='expired' %}chip-active{% endif %}"
+     title="Nur abgelaufene Ausschreibungen">Nur abgelaufene</a>
 
   <!-- Profile-Dropdown rechts -->
   <div class="ml-auto relative" id="profile-menu">

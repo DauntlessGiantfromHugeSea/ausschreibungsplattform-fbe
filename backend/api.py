@@ -122,6 +122,7 @@ def _filtered_query(
     score_min: Optional[float] = None,
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
+    include_expired: bool = False,
 ):
     query = db.query(Tender)
     if portal:
@@ -157,8 +158,16 @@ def _filtered_query(
             )
         )
 
-    # Quick-Filter (chips) – ueberlagern oben, kombinierbar
+    # Default: nur LAUFENDE Ausschreibungen anzeigen (Frist heute oder spaeter,
+    # oder gar keine Frist gesetzt). Mit include_expired=True wird der Filter
+    # uebersprungen.
     now = datetime.utcnow()
+    if not include_expired:
+        query = query.filter(
+            or_(Tender.deadline.is_(None), Tender.deadline >= now)
+        )
+
+    # Quick-Filter (chips) – ueberlagern oben, kombinierbar
     if quick == "high":
         query = query.filter(Tender.relevance_level == "high")
     elif quick == "deadline-7":
@@ -167,6 +176,8 @@ def _filtered_query(
         query = query.filter(Tender.deadline >= now, Tender.deadline <= now + timedelta(days=14))
     elif quick == "deadline-30":
         query = query.filter(Tender.deadline >= now, Tender.deadline <= now + timedelta(days=30))
+    elif quick == "expired":
+        query = query.filter(Tender.deadline < now)
     elif quick in STATUS_VALUES:
         query = query.filter(Tender.status == quick)
 
@@ -228,14 +239,17 @@ def index(
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
+    include_expired: Optional[str] = None,
     flash: Optional[str] = None,
     error: Optional[str] = None,
 ):
+    expired_flag = bool(include_expired)
     query = _filtered_query(
         db,
         portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
         score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=expired_flag,
     )
     tenders = _apply_sort(query, sort).limit(500).all()
 
@@ -289,6 +303,7 @@ def index(
                 "score_max": score_max if score_max is not None else "",
                 "quick": quick or "",
                 "sort": sort or "score_desc",
+                "include_expired": "1" if expired_flag else "",
             },
             "configured_portals": enabled_portals(),
             "status_summary": _portal_status_summary(last_run),
@@ -946,11 +961,13 @@ def export_csv(
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
+    include_expired: Optional[str] = None,
 ):
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
         score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()
     return Response(
@@ -974,11 +991,13 @@ def export_xlsx(
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
+    include_expired: Optional[str] = None,
 ):
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
         score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()
     return Response(

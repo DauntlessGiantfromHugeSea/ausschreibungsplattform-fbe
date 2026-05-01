@@ -92,7 +92,11 @@ portals:
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       timeout: 60
-      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest"
+      # Vorfilter auf 20 Bauleistungs-Gewerke aus der User-URL: Tiefbau (158),
+      # Strassenbau, Pflasterbau, Erdbau, Kanalbau, Spundwand, etc. + per_page=100
+      # + neueste zuerst. So kommen nur Auftraege rein, die fuer FBE relevant
+      # sein koennen.
+      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest&search%5Bcraft_code_ids%5D%5B%5D=158&search%5Bcraft_code_ids%5D%5B%5D=446&search%5Bcraft_code_ids%5D%5B%5D=445&search%5Bcraft_code_ids%5D%5B%5D=122&search%5Bcraft_code_ids%5D%5B%5D=124&search%5Bcraft_code_ids%5D%5B%5D=132&search%5Bcraft_code_ids%5D%5B%5D=119&search%5Bcraft_code_ids%5D%5B%5D=123&search%5Bcraft_code_ids%5D%5B%5D=131&search%5Bcraft_code_ids%5D%5B%5D=120&search%5Bcraft_code_ids%5D%5B%5D=133&search%5Bcraft_code_ids%5D%5B%5D=130&search%5Bcraft_code_ids%5D%5B%5D=391&search%5Bcraft_code_ids%5D%5B%5D=121&search%5Bcraft_code_ids%5D%5B%5D=128&search%5Bcraft_code_ids%5D%5B%5D=118&search%5Bcraft_code_ids%5D%5B%5D=125&search%5Bcraft_code_ids%5D%5B%5D=126&search%5Bcraft_code_ids%5D%5B%5D=127&search%5Bcraft_code_ids%5D%5B%5D=129"
       # Auf den ersten /auftrag/-Link warten = Hydration ist fertig.
       wait_for_selector: "a[href*='/auftrag/']"
       wait_timeout_ms: 20000

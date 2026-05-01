@@ -26,32 +26,100 @@ clusters:
       - "Hohlraumverfüllung"
       - "Bodenaustausch"
       - "Verfüllbaustoff"
+      - "Bodenverfüllung"
+      - "Schachtverfüllung"
+      - "Grabenverfüllung"
 
-  - name: "Leitungsbau"
+  - name: "Spundwand / Verbau / Baugrubensicherung"
+    weight: high
+    terms:
+      - "Spundwand"
+      - "Spundwände"
+      - "Spundwandarbeiten"
+      - "Verbau"
+      - "Verbauarbeiten"
+      - "Trägerbohlwand"
+      - "Bohrpfahl"
+      - "Bohrpfahlwand"
+      - "Pfahlgründung"
+      - "Pfahlbohrung"
+      - "Pfahlwand"
+      - "Mixed-in-Place"
+      - "MIP-Wand"
+      - "DSV"
+      - "Düsenstrahlverfahren"
+      - "Schmalwand"
+      - "Dichtwand"
+      - "Schlitzwand"
+      - "Bohrlochverpressung"
+
+  - name: "Leitungsbau / Rohrleitungen"
     weight: medium
     terms:
       - "Leitungsgraben"
       - "Rohrgraben"
       - "Kanalgraben"
+      - "Kabelgraben"
       - "Leitungsbau"
       - "Kanalbau"
+      - "Kanalsanierung"
+      - "Rohrleitung"
+      - "Rohrleitungsbau"
       - "Erdkabel"
       - "Stromtrasse"
       - "Gasleitung"
       - "Wasserleitung"
+      - "Trinkwasserleitung"
+      - "Abwasserleitung"
       - "Wasserstoffleitung"
       - "Fernwärme"
+      - "Fernwärmeleitung"
       - "Wärmenetz"
+      - "Düker"
+      - "Dükerbau"
 
-  - name: "Tiefbau / Baugruben"
+  - name: "Tiefbau / Baugruben / Erdarbeiten"
     weight: medium
     terms:
       - "Tiefbau"
+      - "Tiefbauarbeiten"
       - "Baugrube"
       - "Baugrubenverfüllung"
+      - "Baugrubensicherung"
       - "Erdarbeiten"
+      - "Erdaushub"
+      - "Schachtbau"
+      - "Schachtarbeiten"
+      - "Kanalbauarbeiten"
+      - "Wegebau"
+      - "Wegebauarbeiten"
+      - "Pflaster"
+      - "Pflasterarbeiten"
+      - "Asphaltdecke"
+      - "Asphaltbau"
+      - "Asphaltarbeiten"
+      - "Bitumenarbeiten"
 
-  - name: "Sonderthemen"
+  - name: "DIN-Normen Bauausführung"
+    weight: medium
+    terms:
+      - "DIN 18300"
+      - "DIN 18301"
+      - "DIN 18303"
+      - "DIN 18304"
+      - "DIN 18305"
+      - "DIN 18306"
+      - "DIN 18307"
+      - "DIN 18308"
+      - "DIN 18313"
+      - "DIN 18315"
+      - "DIN 18316"
+      - "DIN 18317"
+      - "DIN 18318"
+      - "DIN 18320"
+      - "DIN 18459"
+
+  - name: "Sonderthemen / Schwierige Standorte"
     weight: medium
     terms:
       - "Deich"
@@ -61,17 +129,32 @@ clusters:
       - "Quartiersentwicklung"
       - "Denkmalschutz"
       - "kontaminierte Böden"
+      - "Altlast"
+      - "Altlasten"
       - "Ersatzbaustoffverordnung"
       - "Problemuntergrund"
       - "Baugrundverbesserung"
+      - "Bodenverbesserung"
       - "Grundwasser"
+      - "Grundwasserabsenkung"
+      - "Wasserhaltung"
+      - "Bodensanierung"
+      - "Tiefbohrung"
+      - "Rückbau"
+      - "Abbrucharbeiten"
 
   - name: "Allgemein (niedrige Relevanz allein)"
     weight: low
     terms:
       - "Straßenbau"
+      - "Strassenbau"
       - "Erdbau"
       - "Baugrund"
+      - "Hochbau"
+      - "Ingenieurbau"
+      - "Brückenbau"
+      - "Bauleistung"
+      - "Bauleistungen"
 
 # Begriffe, die fuer die Volltext-Suche an Portalen verwendet werden.
 # Reduziert auf Kernbegriffe um Trefferzahl klein zu halten.
@@ -82,15 +165,26 @@ query_terms:
   - "Verfüllung Leitungsgraben"
   - "Fernwärme Verfüllung"
   - "Hohlraumverfüllung"
+  - "Spundwand"
+  - "Tiefbau"
 
 # CPV-Codes der EU – fuer TED-Filter (Tiefbau / Leitungsbau / Erdarbeiten)
 cpv_codes:
   - "45112000"   # Aushub und Erdbewegungsarbeiten
   - "45111240"   # Bodenstabilisierung
+  - "45111200"   # Baustellenvorbereitung
+  - "45111250"   # Baugrunduntersuchung
+  - "45112100"   # Aushub von Graeben
+  - "45112500"   # Erdbewegungsarbeiten
   - "45232100"   # Wasserversorgungsleitungen
   - "45231220"   # Gasleitungen
   - "45231300"   # Wasser- und Abwasserleitungen
   - "45232140"   # Fernwärmeleitungen
   - "45232150"   # Wasserverteilleitungen
+  - "45232400"   # Abwasserkanal
   - "45233000"   # Bauarbeiten Straßen
   - "45221250"   # Tiefbauarbeiten
+  - "45262210"   # Gruendung
+  - "45262212"   # Baugrubensicherung
+  - "45262213"   # Spundwandarbeiten
+  - "45262220"   # Brunnenbohrung

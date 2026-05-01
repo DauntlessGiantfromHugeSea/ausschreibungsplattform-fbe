@@ -216,6 +216,48 @@ def test_admin_reset_blocked_for_non_admin(app_client, tender):
     assert r.status_code in (303, 401, 403)
 
 
+def test_default_dashboard_hides_expired_tenders(auth_client, db_session):
+    """Default-Filter: nur Ausschreibungen mit Frist heute oder spaeter."""
+    from datetime import datetime, timedelta
+    from backend.models import Tender, TenderStatus
+    db_session.add_all([
+        Tender(title="Aktiv1", portal="X", url="https://x.example/a1",
+               fingerprint="fp-act-1", relevance_score=80, relevance_level="high",
+               status=TenderStatus.NEU.value,
+               deadline=datetime.utcnow() + timedelta(days=10)),
+        Tender(title="Abgelaufen", portal="X", url="https://x.example/exp",
+               fingerprint="fp-exp", relevance_score=80, relevance_level="high",
+               status=TenderStatus.NEU.value,
+               deadline=datetime.utcnow() - timedelta(days=5)),
+        Tender(title="OhneFrist", portal="X", url="https://x.example/null",
+               fingerprint="fp-null", relevance_score=80, relevance_level="high",
+               status=TenderStatus.NEU.value,
+               deadline=None),
+    ])
+    db_session.commit()
+    try:
+        # Default: aktiv-Filter
+        r = auth_client.get("/")
+        assert r.status_code == 200
+        assert "Aktiv1" in r.text
+        assert "OhneFrist" in r.text  # Tender ohne Frist bleibt sichtbar
+        assert "Abgelaufen" not in r.text  # abgelaufen wird ausgeblendet
+
+        # Mit include_expired=1: alles
+        r = auth_client.get("/?include_expired=1")
+        assert "Aktiv1" in r.text
+        assert "Abgelaufen" in r.text
+
+        # Quick=expired: nur abgelaufene
+        r = auth_client.get("/?quick=expired&include_expired=1")
+        assert "Abgelaufen" in r.text
+        assert "Aktiv1" not in r.text
+    finally:
+        for fp in ("fp-act-1", "fp-exp", "fp-null"):
+            db_session.query(Tender).filter(Tender.fingerprint == fp).delete()
+        db_session.commit()
+
+
 def test_admin_run_search_button_triggers_pipeline(auth_client):
     """Der separate 'Suche starten'-Button triggert einen Lauf, ohne
     dass der User RESET tippen muss."""

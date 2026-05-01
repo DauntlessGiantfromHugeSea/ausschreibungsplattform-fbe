@@ -449,6 +449,48 @@ portals:
       filter_by_terms: true
 
   # =====================================================================
+  # Zusaetzliche RSS-Feeds - URL bitte ueber /admin/probe verifizieren,
+  # bevor enabled: true gesetzt wird. Der rss_generic-Scraper akzeptiert
+  # einfach feed_urls + filter_by_terms.
+  # =====================================================================
+
+  - name: "bi-medien Bauausschreibungen"
+    enabled: false
+    scraper: "rss_generic"
+    base_url: "https://www.bi-medien.de"
+    strategy: "rss"
+    notes: |
+      Vorlage: bi-medien (Fachverlag Bau) verlinkt auf der Webseite
+      RSS-Feeds zu Bauausschreibungen / Tiefbau. Vor Aktivierung die
+      tatsaechliche Feed-URL pruefen (variiert nach Verlagsangebot).
+      In der Vergangenheit war /feeds/ausschreibungen.xml gaengig.
+    config:
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
+      feed_urls:
+        - "https://www.bi-medien.de/feeds/ausschreibungen.xml"
+      filter_by_terms: true
+      max_items_per_feed: 200
+
+  - name: "TED RSS-Feed (DE)"
+    enabled: false
+    scraper: "rss_generic"
+    base_url: "https://ted.europa.eu"
+    strategy: "rss"
+    notes: |
+      Vorlage: TED hat dokumentierte RSS-Feeds, das aktuelle URL-Format
+      aendert sich aber zwischen v2 und v3. Vor Aktivierung: bei TED
+      auf der Static-Page einen aktuellen Feed-Link ziehen
+      (https://ted.europa.eu/en/static-page/rss) und hier eintragen.
+      Aktuell ueberlappt das Ergebnis mit der TED-API; deshalb
+      standardmaessig deaktiviert.
+    config:
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
+      feed_urls:
+        - "https://ted.europa.eu/udl?uri=TED:RSS:All:DE&action=display"
+      filter_by_terms: true
+      max_items_per_feed: 200
+
+  # =====================================================================
   # Login-/JS-pflichtig - spaeter mit Spezial-Scraper
   # =====================================================================
 
@@ -468,13 +510,15 @@ portals:
 
   - name: "Vergabe24 (Cosinex)"
     enabled: false
-    scraper: "generic_html"
+    scraper: "cosinex"
     base_url: "https://www.vergabe24.de"
-    strategy: "search_url"
-    notes: "Sessions/Cookies oft erforderlich. Selektoren testen."
+    strategy: "scrape"
+    notes: |
+      Vorlage: Vergabe24 ist ein Cosinex-Vergabeplattform-Aggregator.
+      Aktivierung: enabled: true setzen, dann ueber /admin/status
+      pruefen ob die Welcome-Page-Tabelle erkannt wird. Falls nicht,
+      listing_paths anpassen.
     config:
-      search_path: "/?searchterm={term}"
-      result_selector: "div.notice-result, li.result"
-      title_selector: "a.title, h3 a"
-      authority_selector: ".buyer"
-      deadline_selector: ".deadline"
+      variant: "center"
+      max_pages: 2
+      filter_by_terms: true

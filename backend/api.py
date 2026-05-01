@@ -659,6 +659,76 @@ def admin_status(request: Request):
     )
 
 
+@app.get("/admin/settings", response_class=HTMLResponse)
+def admin_settings(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    counts = {
+        "tenders": db.query(Tender).count(),
+        "comments": db.query(Comment).count(),
+        "profiles": db.query(SearchProfile).count(),
+    }
+    return templates.TemplateResponse(
+        request, "settings.html",
+        {
+            "user": _session_user(request),
+            "counts": counts,
+            "is_running": is_pipeline_running(),
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/admin/reset-tenders")
+def admin_reset_tenders(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    confirm: str = Form(""),
+    rescrape: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Loescht alle Tender + Kommentare + last-run-State. Optional sofort
+    neu suchen."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    if confirm != "RESET":
+        return RedirectResponse(
+            url="/admin/settings?error=Reset+nicht+bestaetigt+(Feld+leer)",
+            status_code=303,
+        )
+
+    deleted_comments = db.query(Comment).delete(synchronize_session=False)
+    deleted_tenders = db.query(Tender).delete(synchronize_session=False)
+    db.commit()
+
+    # last_run.json loeschen, damit das Status-Panel sauber startet.
+    try:
+        from .run_state import _PATH as run_state_path
+        if run_state_path.exists():
+            run_state_path.unlink()
+    except Exception as exc:  # pragma: no cover
+        log.warning("last_run.json konnte nicht geloescht werden: %s", exc)
+
+    msg = (
+        "Reset: {} Tender + {} Kommentare geloescht."
+        .format(deleted_tenders, deleted_comments)
+    )
+
+    if rescrape == "yes" and not is_pipeline_running():
+        background_tasks.add_task(run_pipeline_with_lock)
+        msg += " Suchlauf im Hintergrund gestartet."
+
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
 @app.get("/admin/probe-all", response_class=HTMLResponse)
 def admin_probe_all_get(request: Request):
     return templates.TemplateResponse(

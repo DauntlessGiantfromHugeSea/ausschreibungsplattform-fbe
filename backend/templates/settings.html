@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Einstellungen</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-6">Einstellungen</h1>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+    ✓ {{ flash }}
+  </div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+    ✗ {{ error }}
+  </div>
+{% endif %}
+
+<!-- Aktuelle DB-Stand -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+  <div class="card p-4">
+    <div class="text-3xl font-semibold">{{ counts.tenders }}</div>
+    <div class="text-xs text-zinc-500 uppercase tracking-wider mt-1">Ausschreibungen in DB</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-3xl font-semibold">{{ counts.comments }}</div>
+    <div class="text-xs text-zinc-500 uppercase tracking-wider mt-1">Kommentare</div>
+  </div>
+  <div class="card p-4">
+    <div class="text-3xl font-semibold">{{ counts.profiles }}</div>
+    <div class="text-xs text-zinc-500 uppercase tracking-wider mt-1">Suchprofile</div>
+  </div>
+</div>
+
+<!-- Reset-Funktion -->
+<div class="card p-6 mb-6 border-rose-200">
+  <h2 class="text-lg font-semibold mb-2">Alle Suchergebnisse zurücksetzen</h2>
+  <p class="text-sm text-zinc-600 mb-4">
+    Löscht <strong>alle {{ counts.tenders }} Ausschreibungen</strong> und
+    <strong>{{ counts.comments }} Kommentare</strong> aus der Datenbank.
+    Suchprofile, Portale, Suchbegriffe und Benutzer bleiben erhalten.
+    Anschließend kannst du optional einen frischen Suchlauf starten.
+  </p>
+  <p class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md p-3 mb-4">
+    <strong>Achtung:</strong> Das ist nicht rückgängig zu machen. Vorher
+    einen DB-Backup machen, falls du Daten behalten willst:
+    <code class="block mt-1 text-xs">cp data/tenders.db data/tenders.db.backup-$(date +%F)</code>
+  </p>
+
+  <form method="post" action="/admin/reset-tenders"
+        onsubmit="return confirm('Wirklich ALLE {{ counts.tenders }} Ausschreibungen löschen? Das ist endgültig.');">
+    <div class="space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">
+          Bestätigung — bitte das Wort <code class="bg-zinc-100 px-1 rounded">RESET</code> eintragen
+        </label>
+        <input type="text" name="confirm" class="input max-w-xs" required
+               autocomplete="off" placeholder="RESET">
+      </div>
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="rescrape" value="yes" class="mt-0.5"
+               {% if is_running %}disabled{% endif %}>
+        <span>
+          Direkt nach dem Reset einen neuen Suchlauf im Hintergrund starten
+          {% if is_running %}<span class="text-zinc-500">(läuft bereits — Option deaktiviert)</span>{% endif %}
+        </span>
+      </label>
+      <div class="flex gap-2">
+        <button type="submit"
+                class="btn bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500">
+          Alle Ausschreibungen löschen
+        </button>
+        <a href="/admin/settings" class="btn-ghost">Abbrechen</a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Schnellzugriffe Admin -->
+<div class="card p-6 mb-6">
+  <h2 class="text-lg font-semibold mb-3">Verwaltung</h2>
+  <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+    <li><a href="/admin/portals" class="text-brand-700 hover:underline">→ Portale verwalten</a></li>
+    <li><a href="/admin/search-terms" class="text-brand-700 hover:underline">→ Suchbegriffe bearbeiten</a></li>
+    <li><a href="/admin/users" class="text-brand-700 hover:underline">→ Benutzer verwalten</a></li>
+    <li><a href="/admin/status" class="text-brand-700 hover:underline">→ Portal-Status</a></li>
+    <li><a href="/admin/probe-all" class="text-brand-700 hover:underline">→ Alle Portale live testen</a></li>
+    <li><a href="/profiles" class="text-brand-700 hover:underline">→ Suchprofile</a></li>
+  </ul>
+</div>
+
+<!-- Manuelle Aktionen via CLI -->
+<div class="card p-6 text-sm">
+  <h2 class="text-lg font-semibold mb-3">Wartungs-Tools (CLI)</h2>
+  <p class="text-zinc-600 mb-3">
+    Für seltenere Aufgaben — auf dem Server direkt ausführen:
+  </p>
+  <ul class="space-y-2">
+    <li>
+      <strong>Junk-Einträge bereinigen</strong> (Footer/Menü-Müll, der durch
+      zu gierige Parser reingerutscht ist):
+<pre class="bg-zinc-50 border border-zinc-200 rounded-md p-2 text-xs overflow-x-auto mt-1"><code>python tools/cleanup_junk_tenders.py             # Vorschau
+python tools/cleanup_junk_tenders.py --archive   # Archivieren
+python tools/cleanup_junk_tenders.py --delete    # Löschen</code></pre>
+    </li>
+    <li class="mt-3">
+      <strong>HTML-Dump aller Portale</strong> für Selektor-Diagnose:
+<pre class="bg-zinc-50 border border-zinc-200 rounded-md p-2 text-xs overflow-x-auto mt-1"><code>python tools/dump_portal_html.py
+python tools/analyze_dump.py /tmp/portal-debug-extracted</code></pre>
+    </li>
+  </ul>
+</div>
+
+{% endblock %}

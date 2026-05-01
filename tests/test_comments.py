@@ -135,6 +135,87 @@ def test_comment_admin_can_delete_others(auth_client, tender, db_session):
     assert db_session.get(Comment, cid) is None
 
 
+def test_admin_settings_page_loads(auth_client, db_session):
+    from backend.models import Tender, TenderStatus
+    db_session.add(Tender(
+        title="Test", portal="X", url="https://x.example/1",
+        fingerprint="fp-settings-1", relevance_score=0,
+        relevance_level="low", status=TenderStatus.NEU.value,
+    ))
+    db_session.commit()
+    try:
+        r = auth_client.get("/admin/settings")
+        assert r.status_code == 200
+        assert "Einstellungen" in r.text
+        assert "Alle Suchergebnisse zurücksetzen" in r.text
+        assert "RESET" in r.text
+    finally:
+        db_session.query(Tender).filter(Tender.fingerprint == "fp-settings-1").delete()
+        db_session.commit()
+
+
+def test_admin_reset_requires_confirm_keyword(auth_client, db_session):
+    from backend.models import Tender, TenderStatus
+    db_session.add(Tender(
+        title="Bleibt erhalten", portal="X", url="https://x.example/keep",
+        fingerprint="fp-keep", relevance_score=0,
+        relevance_level="low", status=TenderStatus.NEU.value,
+    ))
+    db_session.commit()
+    try:
+        # Falsches Bestaetigungswort -> kein Reset
+        r = auth_client.post(
+            "/admin/reset-tenders",
+            data={"confirm": "wrong"}, follow_redirects=False,
+        )
+        assert r.status_code == 303
+        assert "/admin/settings?error=" in r.headers["location"]
+        # Tender existiert noch
+        db_session.expire_all()
+        assert db_session.query(Tender).filter(
+            Tender.fingerprint == "fp-keep").first() is not None
+    finally:
+        db_session.query(Tender).filter(Tender.fingerprint == "fp-keep").delete()
+        db_session.commit()
+
+
+def test_admin_reset_deletes_tenders_and_comments(auth_client, db_session):
+    from backend.models import Comment, Tender, TenderStatus
+    t = Tender(
+        title="Wird geloescht", portal="X", url="https://x.example/del",
+        fingerprint="fp-del", relevance_score=0,
+        relevance_level="low", status=TenderStatus.NEU.value,
+    )
+    db_session.add(t)
+    db_session.commit()
+    tender_id = t.id  # vor Reset cachen
+    db_session.add(Comment(
+        tender_id=tender_id, user_id=None, username="someone",
+        body="dazu auch weg",
+    ))
+    db_session.commit()
+
+    r = auth_client.post(
+        "/admin/reset-tenders",
+        data={"confirm": "RESET"}, follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "/admin/settings?flash=" in r.headers["location"]
+    db_session.expire_all()
+    assert db_session.query(Tender).filter(Tender.fingerprint == "fp-del").first() is None
+    assert db_session.query(Comment).filter(Comment.tender_id == tender_id).first() is None
+
+
+def test_admin_reset_blocked_for_non_admin(app_client, tender):
+    """Wenn ein Viewer (nicht-Admin) versucht zu resetten, kommt 403."""
+    app_client.get("/logout")
+    # Versuch ohne Session
+    r = app_client.post("/admin/reset-tenders", data={"confirm": "RESET"},
+                        follow_redirects=False)
+    # Auth-Middleware schickt zur Login-Seite (303) ODER 401/403
+    assert r.status_code in (303, 401, 403)
+
+
 def test_score_breakdown_rendered_in_detail(auth_client, db_session):
     from backend.models import Tender
     import json

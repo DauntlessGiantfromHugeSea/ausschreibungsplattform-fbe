@@ -82,17 +82,32 @@ class TedScraper(BaseScraper):
         url = f"{self.base_url}{SEARCH_ENDPOINT}"
         if not self.can_fetch(url):
             log.warning("[TED] robots.txt verbietet %s", url)
+            self.http_log.append({"url": url, "status": None, "size": 0,
+                                  "error": "robots.txt verbietet Abruf"})
             return {}
-        resp = self._client.post(url, json=payload)
+        try:
+            resp = self._client.post(url, json=payload)
+        except Exception as exc:
+            self.http_log.append({"url": url, "status": None, "size": 0,
+                                  "error": "{}: {}".format(type(exc).__name__, str(exc)[:160])})
+            raise
+        self.http_log.append({
+            "url": url,
+            "status": resp.status_code,
+            "size": len(resp.content) if resp.content else 0,
+            "error": None,
+        })
         if resp.status_code != 200:
             log.info("[TED] HTTP %s: %s", resp.status_code, resp.text[:200])
             return {}
         data = resp.json()
-        return self.parse_results(data.get("notices", []))
+        return self.parse_results(data.get("notices", []), portal_name=self.name)
 
     # ------------------------------------------------------------------
     @classmethod
-    def parse_results(cls, notices: Iterable[dict]) -> dict[str, TenderItem]:
+    def parse_results(
+        cls, notices: Iterable[dict], portal_name: str = "TED",
+    ) -> dict[str, TenderItem]:
         out: dict[str, TenderItem] = {}
         for n in notices:
             pub_no = _first(n.get("publication-number"))
@@ -119,7 +134,7 @@ class TedScraper(BaseScraper):
 
             item = TenderItem(
                 title=title,
-                portal="TED",
+                portal=portal_name,
                 url=link,
                 contracting_authority=buyer,
                 location=place,

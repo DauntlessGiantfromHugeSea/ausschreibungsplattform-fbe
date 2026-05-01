@@ -40,6 +40,40 @@ def add_score_breakdown_column() -> bool:
         return False
 
 
+# Frueher hatten BundScraper / TedScraper portal="bund.de" / "TED" hartcodiert.
+# Heute liefern sie self.name (= YAML-Eintragsname). Damit der Filter im
+# Dashboard ueber Bestand + neue Eintraege gleich heisst, mappen wir die alten
+# Werte auf die YAML-Namen.
+PORTAL_NAME_MIGRATIONS = {
+    "bund.de": "bund.de Service-Portal",
+    "TED": "TED - Tenders Electronic Daily",
+}
+
+
+def normalize_portal_names() -> dict:
+    """Aktualisiert tenders.portal von alten hartcodierten Werten auf YAML-Namen."""
+    db = SessionLocal()
+    out: dict[str, int] = {}
+    try:
+        for old, new in PORTAL_NAME_MIGRATIONS.items():
+            n = (
+                db.query(Tender)
+                .filter(Tender.portal == old)
+                .update({Tender.portal: new}, synchronize_session=False)
+            )
+            if n:
+                out[old] = n
+        if out:
+            db.commit()
+            log.info("Migration: portal-Namen umbenannt: %s", out)
+    except Exception as exc:  # pragma: no cover
+        db.rollback()
+        log.exception("Migration normalize_portal_names fehlgeschlagen: %s", exc)
+    finally:
+        db.close()
+    return out
+
+
 def backfill_regions() -> int:
     """Setzt region fuer alle Tender, bei denen es noch leer ist und sich
     aus location ableiten laesst.
@@ -74,5 +108,6 @@ def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
         "score_breakdown_added": add_score_breakdown_column(),
+        "portal_names_normalized": normalize_portal_names(),
         "regions_backfilled": backfill_regions(),
     }

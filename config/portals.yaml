@@ -35,7 +35,18 @@ portals:
     scraper: "bund"
     base_url: "https://www.service.bund.de"
     strategy: "search_url"
-    notes: "Bekanntmachungen des Bundes - eigener Scraper, stabil."
+    notes: |
+      Bekanntmachungen des Bundes. Standard-Listing liefert mit einem
+      Request 100 frische Items, sortiert nach Veroeffentlichungsdatum.
+      Per query_term wird zusaetzlich serverseitig gefiltert.
+    config:
+      max_pages: 2
+      enable_keyword_search: true
+      filter_by_terms: true
+      request_delay_s: 0.4
+      listing_params:
+        resultsPerPage: 100
+        sortOrder: "dateOfIssue_dt desc"
 
   - name: "TED - Tenders Electronic Daily"
     enabled: true

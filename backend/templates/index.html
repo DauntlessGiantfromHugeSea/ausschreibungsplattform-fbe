@@ -61,110 +61,24 @@
   </a>
 </div>
 
-<!-- Portal-Status: ALLE konfigurierten Portale, immer sichtbar -->
-<details class="card mb-6 group" open>
-  <summary class="cursor-pointer p-4 select-none flex items-center justify-between">
-    <div>
-      <span class="text-sm font-medium">Status pro Quelle</span>
+<!-- Portal-Status: schmale Zusammenfassung mit Link zur Status-Seite -->
+<a href="/admin/status" class="card mb-6 p-3 flex items-center justify-between hover:bg-zinc-50 transition no-underline">
+  <div class="flex items-center gap-3 text-sm">
+    <span class="font-medium">Status pro Portal</span>
+    {% if status_summary %}
+      <span class="pill bg-emerald-100 text-emerald-800">{{ status_summary.ok }} OK</span>
+      <span class="pill bg-amber-100 text-amber-800">{{ status_summary.empty }} leer</span>
+      {% if status_summary.error %}<span class="pill bg-rose-100 text-rose-800">{{ status_summary.error }} Fehler</span>{% endif %}
+      {% if status_summary.never %}<span class="pill bg-zinc-100 text-zinc-700">{{ status_summary.never }} nicht gelaufen</span>{% endif %}
       {% if last_run and last_run.finished_at %}
-      <span class="text-xs text-zinc-500 ml-2">
-        Letzter Lauf: {{ last_run.finished_at[:16].replace('T',' ') }}
-        {% if last_run.new is defined %}· {{ last_run.new }} neu, {{ last_run.updated or 0 }} aktualisiert{% endif %}
-      </span>
-      {% else %}
-      <span class="text-xs text-zinc-500 ml-2">Noch kein Lauf abgeschlossen — auf „Suche starten" klicken.</span>
+        <span class="text-xs text-zinc-500 hidden md:inline">· Letzter Lauf {{ last_run.finished_at[:16].replace('T',' ') }}</span>
       {% endif %}
-    </div>
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 text-zinc-400 group-open:rotate-180 transition">
-      <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-    </svg>
-  </summary>
-
-  {# Map: portal-name -> letzter-Lauf-Eintrag #}
-  {% set last_by_name = {} %}
-  {% if last_run and last_run.portals %}
-    {% for p in last_run.portals %}{% if last_by_name.update({p.name: p}) %}{% endif %}{% endfor %}
-  {% endif %}
-
-  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 px-4 pb-4">
-    {% for cp in configured_portals %}
-      {% set p = last_by_name.get(cp.name) %}
-      {% set state =
-            'never' if not p
-            else ('error' if p.errors and p.errors > 0
-                  else ('ok' if (p.fetched or 0) > 0 else 'empty')) %}
-      <div class="rounded-lg border p-3 text-sm
-                  {% if state == 'ok' %}border-emerald-200 bg-emerald-50/50
-                  {% elif state == 'empty' %}border-amber-200 bg-amber-50/50
-                  {% elif state == 'error' %}border-rose-200 bg-rose-50/50
-                  {% else %}border-zinc-200 bg-zinc-50/50{% endif %}">
-        <div class="flex items-center justify-between gap-2">
-          <div class="font-medium truncate min-w-0" title="{{ cp.name }}">{{ cp.name }}</div>
-          {% if state == 'ok' %}
-            <span class="pill bg-emerald-100 text-emerald-800">{{ p.fetched }} OK</span>
-          {% elif state == 'empty' %}
-            <span class="pill bg-amber-100 text-amber-800">0 Treffer</span>
-          {% elif state == 'error' %}
-            <span class="pill bg-rose-100 text-rose-800">Fehler</span>
-          {% else %}
-            <span class="pill bg-zinc-100 text-zinc-600">noch nicht</span>
-          {% endif %}
-        </div>
-
-        <div class="text-xs text-zinc-500 mt-1">
-          <code class="text-zinc-600">{{ cp.scraper }}</code>
-          {% if p %}
-            · {{ p.fetched or 0 }} Treffer
-            {% if p.new %}· {{ p.new }} neu{% endif %}
-          {% endif %}
-        </div>
-
-        {# HTTP-Diagnose: was wurde wirklich gehit #}
-        {% if p and p.http_log %}
-        <ul class="mt-2 space-y-1 text-xs">
-          {% for h in p.http_log %}
-          <li class="flex items-center gap-1.5">
-            {% if h.status == 200 %}
-              <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-            {% elif h.status %}
-              <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-            {% else %}
-              <span class="inline-block h-1.5 w-1.5 rounded-full bg-rose-500"></span>
-            {% endif %}
-            <span class="font-mono text-zinc-700">
-              HTTP {{ h.status or '—' }}
-              {% if h.size %}· {{ (h.size / 1024)|round(0)|int }} KB{% endif %}
-            </span>
-            <span class="truncate text-zinc-500" title="{{ h.url }}">
-              {{ h.url|replace(cp.base_url, '') or '/' }}
-            </span>
-          </li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-
-        {% if p and p.error_msg %}
-        <div class="mt-2 text-xs text-rose-700 break-words font-mono">{{ p.error_msg }}</div>
-        {% endif %}
-
-        {% if p and p.sample_titles %}
-        <ul class="mt-2 space-y-0.5 text-xs text-zinc-600 list-disc pl-4">
-          {% for t in p.sample_titles %}<li class="truncate" title="{{ t }}">{{ t }}</li>{% endfor %}
-        </ul>
-        {% endif %}
-
-        <div class="mt-2 flex gap-2 text-xs">
-          <a href="/admin/probe?portal={{ cp.name|urlencode }}" class="text-brand-700 hover:underline">testen</a>
-          <span class="text-zinc-300">·</span>
-          <a href="/admin/portals/{{ cp.name|urlencode }}/edit" class="text-brand-700 hover:underline">bearbeiten</a>
-          <span class="text-zinc-300">·</span>
-          <a href="/?portal={{ cp.name|urlencode }}" class="text-brand-700 hover:underline">filtern</a>
-        </div>
-      </div>
-    {% endfor %}
+    {% else %}
+      <span class="text-xs text-zinc-500">Noch kein Lauf — „Suche starten" klicken.</span>
+    {% endif %}
   </div>
-</details>
-
+  <span class="text-xs text-brand-700">Details ansehen →</span>
+</a>
 <!-- Quick-Filter Chips -->
 <div class="flex flex-wrap items-center gap-2 mb-4">
   {% set q = filters.quick %}

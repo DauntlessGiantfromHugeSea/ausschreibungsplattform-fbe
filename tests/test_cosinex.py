@@ -149,3 +149,33 @@ def test_user_agent_override():
         assert s._client.headers.get("User-Agent") == "MyCustomUA/1.0"
     finally:
         s.close()
+
+
+def test_aggressive_fallback_when_no_strict_links():
+    """Layout ohne CXP-IDs aber mit plausiblen Bekanntmachungs-Pfaden."""
+    html = """
+    <html><body>
+    <main>
+      <ul>
+        <li><a href="/auftrag/12345-tiefbau-koeln">
+            Tiefbauarbeiten Innenstadt Koeln</a></li>
+        <li><a href="/bekanntmachung/98765">
+            Verfuellung Leitungsgraben Mainz</a></li>
+        <li><a href="/static/css/main.css">style</a></li>
+        <li><a href="https://external.example/x">externer Link</a></li>
+        <li><a href="/aktuell/45678">
+            Sanierung Trinkwasserleitung Aachen</a></li>
+      </ul>
+    </main>
+    </body></html>
+    """
+    items = CosinexScraper.parse_listing(
+        html, base_url="https://www.evergabe.nrw.de", portal_name="nrw",
+    )
+    titles = [it.title for it in items.values()]
+    assert any("Tiefbauarbeiten" in t for t in titles)
+    assert any("Verfuellung" in t for t in titles)
+    assert any("Trinkwasserleitung" in t for t in titles)
+    # Externe Links + Statische Assets raus
+    assert not any("style" in t for t in titles)
+    assert not any("externer" in t for t in titles)

@@ -69,6 +69,14 @@ DETAIL_LINK_RE = re.compile(
     r"/notice/(CXP|notice|view|detail|[A-Z0-9]{6,})", re.IGNORECASE,
 )
 
+# Breiter Fallback: jede URL, die typisch fuer eine Bekanntmachung aussieht.
+# Wird nur verwendet wenn DETAIL_LINK_RE 0 Treffer liefert.
+BROAD_NOTICE_RE = re.compile(
+    r"(notice|publication|bekanntmachung|ausschreibung|auftrag|"
+    r"vergabe|tender|CXP[0-9A-Z]{4,}|[/=][0-9]{5,})",
+    re.IGNORECASE,
+)
+
 # Treffer-Container - Layout variiert leicht zwischen Satellite/Center und
 # einzelnen Portalen, daher mehrere Selektoren mit Fallback.
 ROW_SELECTORS = [
@@ -195,7 +203,7 @@ class CosinexScraper(BaseScraper):
             if item:
                 out[item.url] = item
 
-        # Fallback: alle Notice-Links der Seite einsammeln.
+        # Fallback 1: alle Notice-Links der Seite (strikt).
         if not out:
             for a in soup.find_all("a", href=True):
                 href = a["href"].strip()
@@ -203,6 +211,34 @@ class CosinexScraper(BaseScraper):
                     continue
                 title = a.get_text(" ", strip=True)
                 if not title or len(title) < 4:
+                    continue
+                url_full = urljoin(base_url, href)
+                out.setdefault(url_full, TenderItem(
+                    title=title[:500],
+                    portal=portal_name,
+                    url=url_full,
+                ))
+
+        # Fallback 2: aggressiv. Jede interne URL, die wie eine Bekanntmachung
+        # aussieht (Pfad enthaelt notice|publication|ausschreibung|auftrag|
+        # vergabe|tender|CXP-ID|>=5-stellige Zahl). Verbessert Trefferquote
+        # bei Cosinex-Layouts, deren CSS-Klassen wir nicht treffen.
+        if not out:
+            for a in soup.find_all("a", href=True):
+                href = a["href"].strip()
+                if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                    continue
+                # nur interne / relative Links
+                if href.startswith("http") and not href.startswith(base_url):
+                    continue
+                if not BROAD_NOTICE_RE.search(href):
+                    continue
+                title = a.get_text(" ", strip=True)
+                if not title or len(title) < 8:
+                    continue
+                # Junk-Titel rauswerfen
+                if title.lower() in {"hier", "weiter", "zurueck", "zurück", "merken",
+                                     "drucken", "details", "mehr"}:
                     continue
                 url_full = urljoin(base_url, href)
                 out.setdefault(url_full, TenderItem(

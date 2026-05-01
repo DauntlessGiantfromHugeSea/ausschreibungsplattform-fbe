@@ -195,7 +195,7 @@ class SachsenScraper(BaseScraper):
                 if item:
                     out[item.url] = item
 
-        # Letzter Fallback: jeden Detail-Link der Seite einsammeln.
+        # Fallback 1: jeden Detail-Link der Seite einsammeln (klassische <a href>).
         if not out:
             for a in soup.find_all("a", href=True):
                 href = a["href"].strip()
@@ -211,7 +211,80 @@ class SachsenScraper(BaseScraper):
                     url=url_full,
                 ))
 
+        # Fallback 2: NetServer rendert Detail-Links als JavaScript-onclick:
+        #     onclick="OnPublicationClicked('PublicationID','12345')"
+        # oder direkt als Daten-Attribut. Wir scannen das rohe HTML nach
+        # PublicationID-Werten und extrahieren den Titel aus dem umgebenden
+        # <tr>/<td>/<a>-Block.
+        if not out:
+            out.update(cls._extract_from_publication_ids(
+                html, soup, base_url=base_url, portal_name=portal_name,
+            ))
+
         return out
+
+    # ------------------------------------------------------------------
+    @classmethod
+    def _extract_from_publication_ids(
+        cls, html: str, soup, base_url: str, portal_name: str,
+    ) -> dict[str, TenderItem]:
+        """Robuste Extraktion ueber PublicationID-Werte im rohen HTML.
+
+        Das deckt JavaScript-Onclick-Links, Hidden-Inputs und Datenattribute
+        ab - alles, was klassische href-basierte Selektoren verfehlen.
+        """
+        out: dict[str, TenderItem] = {}
+        # Alle PublicationIDs in der Seite (alphanumerisch, 4+ Zeichen).
+        # Pattern 1: URL-Parameter PublicationID=ABC123
+        # Pattern 2: JS-Call OnPublicationClicked('PublicationID','ABC123')
+        # Pattern 3: Hidden-Input name="PublicationID" ... value="ABC123"
+        # Pattern 4: data-publication-id="ABC123"
+        id_patterns = [
+            re.compile(r"PublicationID\s*=\s*([A-Za-z0-9_\-]{4,})"),
+            re.compile(r"OnPublicationClicked\s*\(\s*['\"]\w*['\"]\s*,\s*['\"]([A-Za-z0-9_\-]{4,})['\"]"),
+            re.compile(
+                r"""name\s*=\s*['"]PublicationID['"][^>]*?value\s*=\s*['"]([A-Za-z0-9_\-]{4,})['"]""",
+                re.IGNORECASE | re.DOTALL,
+            ),
+            re.compile(r"data-publication-id\s*=\s*['\"]([A-Za-z0-9_\-]{4,})['\"]", re.IGNORECASE),
+        ]
+        seen_ids: set[str] = set()
+        for pat in id_patterns:
+            for m in pat.finditer(html):
+                pid = m.group(1)
+                if pid in seen_ids or pid.lower() in {"publicationid", "true", "false"}:
+                    continue
+                seen_ids.add(pid)
+                url_full = urljoin(
+                    base_url + "/",
+                    "NetServer/PublicationControllerServlet"
+                    "?function=DisplayPublication&PublicationID={}".format(pid),
+                )
+                # Titel aus dem DOM holen: jedes Element, dessen Attribut den
+                # PID enthaelt, liefert seinen Eltern-Block.
+                title = cls._title_near_id(soup, pid) or "Sachsen-Bekanntmachung {}".format(pid)
+                out[url_full] = TenderItem(
+                    title=title[:500],
+                    portal=portal_name,
+                    url=url_full,
+                )
+        return out
+
+    @staticmethod
+    def _title_near_id(soup, pid: str) -> str | None:
+        # Suche nach Elementen, deren Attribute den PID enthalten.
+        for el in soup.find_all(True):
+            for attr_val in el.attrs.values():
+                if isinstance(attr_val, str) and pid in attr_val:
+                    text = el.get_text(" ", strip=True)
+                    if text and 6 < len(text) < 400:
+                        return text
+                    parent = el.find_parent(["tr", "li", "div", "article"])
+                    if parent:
+                        ptext = parent.get_text(" ", strip=True)
+                        if ptext and 6 < len(ptext) < 400:
+                            return ptext
+        return None
 
     # ------------------------------------------------------------------
     @classmethod

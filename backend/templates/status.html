@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Status – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Status</span>
+</nav>
+
+<div class="flex items-end justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Status pro Portal</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      {% if last_run and last_run.finished_at %}
+        Letzter Lauf: {{ last_run.finished_at[:16].replace('T',' ') }}
+        {% if last_run.new is defined %}
+          · {{ last_run.new }} neu, {{ last_run.updated or 0 }} aktualisiert,
+          {{ last_run.errors or 0 }} Fehler
+        {% endif %}
+      {% else %}
+        Noch kein Lauf abgeschlossen — auf dem Dashboard „Suche starten" klicken.
+      {% endif %}
+    </p>
+  </div>
+  <a href="/admin/probe-all" class="btn-ghost">Alle live testen</a>
+</div>
+
+{# Zusammenfassung #}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold">{{ summary.total }}</div>
+    <div class="text-xs text-zinc-500 uppercase tracking-wider">aktive Portale</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold text-emerald-700">{{ summary.ok }}</div>
+    <div class="text-xs text-emerald-700 uppercase tracking-wider">liefern Treffer</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold text-amber-700">{{ summary.empty }}</div>
+    <div class="text-xs text-amber-700 uppercase tracking-wider">0 Treffer</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-3xl font-semibold text-rose-700">{{ summary.error + summary.never }}</div>
+    <div class="text-xs text-rose-700 uppercase tracking-wider">Fehler / noch nicht</div>
+  </div>
+</div>
+
+{# Map: portal-name -> letzter-Lauf-Eintrag #}
+{% set last_by_name = {} %}
+{% if last_run and last_run.portals %}
+  {% for p in last_run.portals %}{% if last_by_name.update({p.name: p}) %}{% endif %}{% endfor %}
+{% endif %}
+
+<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+  {% for cp in configured_portals %}
+    {% set p = last_by_name.get(cp.name) %}
+    {% set state =
+          'never' if not p
+          else ('error' if p.errors and p.errors > 0
+                else ('ok' if (p.fetched or 0) > 0 else 'empty')) %}
+    <div class="rounded-lg border p-3 text-sm
+                {% if state == 'ok' %}border-emerald-200 bg-emerald-50/50
+                {% elif state == 'empty' %}border-amber-200 bg-amber-50/50
+                {% elif state == 'error' %}border-rose-200 bg-rose-50/50
+                {% else %}border-zinc-200 bg-zinc-50/50{% endif %}">
+      <div class="flex items-center justify-between gap-2">
+        <div class="font-medium truncate min-w-0" title="{{ cp.name }}">{{ cp.name }}</div>
+        {% if state == 'ok' %}
+          <span class="pill bg-emerald-100 text-emerald-800">{{ p.fetched }} OK</span>
+        {% elif state == 'empty' %}
+          <span class="pill bg-amber-100 text-amber-800">0 Treffer</span>
+        {% elif state == 'error' %}
+          <span class="pill bg-rose-100 text-rose-800">Fehler</span>
+        {% else %}
+          <span class="pill bg-zinc-100 text-zinc-600">noch nicht</span>
+        {% endif %}
+      </div>
+
+      <div class="text-xs text-zinc-500 mt-1">
+        <code class="text-zinc-600">{{ cp.scraper }}</code>
+        {% if p %}
+          · {{ p.fetched or 0 }} Treffer
+          {% if p.new %}· {{ p.new }} neu{% endif %}
+        {% endif %}
+      </div>
+
+      {% if p and p.http_log %}
+      <ul class="mt-2 space-y-1 text-xs">
+        {% for h in p.http_log %}
+        <li class="flex items-center gap-1.5">
+          {% if h.status == 200 %}
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+          {% elif h.status %}
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
+          {% else %}
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0"></span>
+          {% endif %}
+          <span class="font-mono text-zinc-700 shrink-0">
+            HTTP {{ h.status or '—' }}
+            {% if h.size %}· {{ (h.size / 1024)|round(0)|int }} KB{% endif %}
+          </span>
+          <span class="truncate text-zinc-500 min-w-0" title="{{ h.url }}">
+            {{ h.url|replace(cp.base_url, '') or '/' }}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      {% if p and p.error_msg %}
+      <div class="mt-2 text-xs text-rose-700 break-words font-mono">{{ p.error_msg }}</div>
+      {% endif %}
+
+      {% if p and p.sample_titles %}
+      <ul class="mt-2 space-y-0.5 text-xs text-zinc-600 list-disc pl-4">
+        {% for t in p.sample_titles %}<li class="truncate" title="{{ t }}">{{ t }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+
+      <div class="mt-2 flex gap-2 text-xs">
+        <a href="/admin/probe?portal={{ cp.name|urlencode }}" class="text-brand-700 hover:underline">testen</a>
+        <span class="text-zinc-300">·</span>
+        <a href="/admin/portals/{{ cp.name|urlencode }}/edit" class="text-brand-700 hover:underline">bearbeiten</a>
+        <span class="text-zinc-300">·</span>
+        <a href="/?portal={{ cp.name|urlencode }}" class="text-brand-700 hover:underline">filtern</a>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="card p-5 mt-6 text-sm">
+  <h3 class="font-semibold mb-2">Was tun mit den Ergebnissen?</h3>
+  <ul class="list-disc pl-5 text-zinc-600 space-y-1">
+    <li><strong>OK / Treffer &gt; 0</strong> (grün) — Portal liefert; nichts zu tun.</li>
+    <li><strong>0 Treffer</strong> (gelb) — Server antwortet, aber Selektor / URL findet keine Karten. Auf <em>testen</em> klicken → HTML-Auszug ansehen → Selektor anpassen.</li>
+    <li><strong>Fehler</strong> (rot) — meist falsche URL (404), Timeout oder robots.txt-Block. URL in <em>bearbeiten</em> korrigieren.</li>
+    <li><strong>noch nicht</strong> (grau) — war im letzten Lauf nicht dabei (neu hinzugefügt oder Lauf vorzeitig abgebrochen).</li>
+  </ul>
+</div>
+
+{% endblock %}

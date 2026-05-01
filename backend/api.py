@@ -72,6 +72,33 @@ def _session_user(request: Request) -> dict | None:
         "id": request.session.get("user_id") or 0,
     }
 
+
+def _portal_status_summary(last_run: dict | None) -> dict:
+    """Zaehlt OK / leer / Fehler / nicht-gelaufen pro konfiguriertem Portal."""
+    portals = list(load_portals())
+    last_by_name: dict[str, dict] = {}
+    if last_run and isinstance(last_run.get("portals"), list):
+        for p in last_run["portals"]:
+            if isinstance(p, dict) and p.get("name"):
+                last_by_name[p["name"]] = p
+    ok = empty = error = never = 0
+    for cp in portals:
+        if not cp.enabled:
+            continue
+        p = last_by_name.get(cp.name)
+        if not p:
+            never += 1
+        elif (p.get("errors") or 0) > 0:
+            error += 1
+        elif (p.get("fetched") or 0) > 0:
+            ok += 1
+        else:
+            empty += 1
+    return {
+        "total": ok + empty + error + never,
+        "ok": ok, "empty": empty, "error": error, "never": never,
+    }
+
 SORT_OPTIONS = {
     "score_desc": (Tender.relevance_score.desc(), Tender.created_at.desc()),
     "score_asc":  (Tender.relevance_score.asc(),),
@@ -264,6 +291,7 @@ def index(
                 "sort": sort or "score_desc",
             },
             "configured_portals": enabled_portals(),
+            "status_summary": _portal_status_summary(last_run),
             "flash": flash,
             "error": error,
             "last_run": last_run,
@@ -614,6 +642,20 @@ def admin_probe_post(request: Request, portal: str = Form(...), term: str = Form
          "result": result, "term": term,
          "diagnostic": diagnostic,
          "user": request.session.get("user")},
+    )
+
+
+@app.get("/admin/status", response_class=HTMLResponse)
+def admin_status(request: Request):
+    last_run = load_run_state()
+    return templates.TemplateResponse(
+        request, "status.html",
+        {
+            "configured_portals": enabled_portals(),
+            "last_run": last_run,
+            "summary": _portal_status_summary(last_run),
+            "user": _session_user(request),
+        },
     )
 
 

@@ -501,6 +501,9 @@ def _cell_text(row, selector: str) -> str | None:
 
 
 def _matches_any(item: TenderItem, terms: Iterable[str]) -> bool:
+    """Substring-Match auf den ganzen TenderItem-Text. Fuzzy fuer deutsche
+    Komposita: 'Maschinenwegen' matcht 'Maschinenweg' (gemeinsamer Stamm
+    ab 6 Zeichen) und umgekehrt."""
     hay = " ".join([
         item.title or "",
         item.description or "",
@@ -510,6 +513,17 @@ def _matches_any(item: TenderItem, terms: Iterable[str]) -> bool:
     if not hay:
         return False
     for t in terms:
-        if t and t.lower() in hay:
+        if not t:
+            continue
+        tl = t.lower()
+        if tl in hay:
             return True
+        # Kompositionsmatch: Stamm bis 6 Zeichen prueft auch in den Hay-Worten.
+        if len(tl) >= 8:
+            stem = tl[:-2]  # 'maschinenwegen' -> 'maschinenwege'
+            if stem in hay:
+                return True
+            stem = tl[:-3]
+            if stem in hay:
+                return True
     return False

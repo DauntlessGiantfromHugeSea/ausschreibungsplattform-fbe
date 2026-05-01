@@ -179,9 +179,17 @@ def score_text(
 
 
 def _term_matches(term: str, text: str) -> bool:
-    """Case-insensitiver Match auf Wortgrenzen, mit Toleranz bei Bindestrichen."""
+    """Case-insensitiver Match mit linker Wortgrenze, rechts kompositions-tolerant.
+
+    Beispiel: Term 'Tiefbau' matcht 'Tiefbau', 'Tiefbauarbeiten',
+    'Tiefbau-Arbeiten' und 'Tiefbau & Erdbau', NICHT aber 'Untertiefbau'
+    (linke Grenze fehlt). Damit funktionieren deutsche Komposita.
+    Bindestriche im Term werden zu [\\s\\-]+ - 'Flüssig boden' matcht.
+    """
     pattern = re.escape(term.lower()).replace(r"\ ", r"[\s\-]+")
-    return re.search(rf"(?<![\w]){pattern}(?![\w])", text) is not None
+    # Linke Grenze: kein Buchstabe/Ziffer davor.
+    # Rechts: keine zusaetzliche Restriktion - Komposita erlaubt.
+    return re.search(rf"(?<![\w]){pattern}", text) is not None
 
 
 def _level_for(score: float) -> str:

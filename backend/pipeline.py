@@ -139,6 +139,23 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
     # Bundesland aus PLZ/Ort ableiten falls noch nicht gesetzt.
     item.region = infer_region(item.location, item.region)
 
+    # Beschreibung garantiert mit Inhalt fuellen, damit User im Detail
+    # nicht ins Leere schaut. Faellt auf Auftraggeber/Ort/Portal/CPV zurueck.
+    if not (item.description or "").strip():
+        parts = []
+        if item.contracting_authority:
+            parts.append("Auftraggeber: {}".format(item.contracting_authority))
+        if item.location:
+            parts.append("Ort: {}".format(item.location))
+        if item.region:
+            parts.append("Bundesland: {}".format(item.region))
+        if item.cpv_codes:
+            parts.append("CPV: {}".format(", ".join(str(c) for c in item.cpv_codes[:5])))
+        if item.deadline:
+            parts.append("Frist: {}".format(item.deadline.strftime("%d.%m.%Y")))
+        parts.append("Quelle: {}".format(item.portal))
+        item.description = " · ".join(parts) if parts else item.title
+
     fp = fingerprint(item.url, item.title, item.contracting_authority, item.deadline)
     sr = score_text(
         title=item.title,

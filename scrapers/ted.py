@@ -16,6 +16,7 @@ Doku: https://ted.europa.eu/api/v3/swagger
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Iterable, List
 
@@ -135,7 +136,7 @@ class TedScraper(BaseScraper):
             pub_no = _first(n.get("publication-number"))
             title = _first(n.get("notice-title")) or "(ohne Titel)"
             buyer = _first(n.get("buyer-name"))
-            place = _first(n.get("place-of-performance"))
+            place_raw = _first(n.get("place-of-performance"))
             pub_date = _parse_iso(_first(n.get("publication-date")))
             deadline = _parse_iso(_first(n.get("deadline-date-lot")))
             cpvs = _as_list(n.get("classification-cpv"))
@@ -154,13 +155,27 @@ class TedScraper(BaseScraper):
             if not link:
                 continue
 
+            # NUTS-Code (DEU/DE0/DEA/DEB/DEG01 ...) zu Bundesland mappen.
+            # Original-NUTS bleibt in description-Vorschau, location wird
+            # auf den klaren Stadt-/Region-Namen aus dem Titel gesetzt
+            # falls TED nichts Lesbares liefert.
+            region = _nuts_to_bundesland(place_raw)
+            location = _location_from_title(title) or _readable_place(place_raw)
+
+            # Sinnvolle Beschreibung bauen wenn description-lot fehlt.
+            if not description or len(description.strip()) < 10:
+                description = _build_description(
+                    title=title, buyer=buyer, location=location,
+                    cpvs=cpvs, pub_no=pub_no,
+                )
+
             item = TenderItem(
                 title=title,
                 portal=portal_name,
                 url=link,
                 contracting_authority=buyer,
-                location=place,
-                region=None,
+                location=location,
+                region=region,
                 publication_date=pub_date,
                 deadline=deadline,
                 description=description,
@@ -196,6 +211,76 @@ def _as_list(value):
     if isinstance(value, list):
         return value
     return [value]
+
+
+# NUTS-Praefix (erste 3-4 Zeichen) -> Bundesland.
+# https://ec.europa.eu/eurostat/web/nuts/national-structures
+_NUTS_TO_BUNDESLAND = {
+    "DE1": "Baden-Württemberg",
+    "DE2": "Bayern",
+    "DE3": "Berlin",
+    "DE4": "Brandenburg",
+    "DE5": "Bremen",
+    "DE6": "Hamburg",
+    "DE7": "Hessen",
+    "DE8": "Mecklenburg-Vorpommern",
+    "DE9": "Niedersachsen",
+    "DEA": "Nordrhein-Westfalen",
+    "DEB": "Rheinland-Pfalz",
+    "DEC": "Saarland",
+    "DED": "Sachsen",
+    "DEE": "Sachsen-Anhalt",
+    "DEF": "Schleswig-Holstein",
+    "DEG": "Thüringen",
+}
+
+
+def _nuts_to_bundesland(code: str | None) -> str | None:
+    """DEG01 -> Thueringen, DEA32 -> NRW etc. DEU/DE bleiben None."""
+    if not code:
+        return None
+    code = code.strip().upper()
+    if code in {"DEU", "DE", ""}:
+        return None
+    # Erste 3 Zeichen treffen alle 16 Laender (DEA, DEB, ..., DE1, DE2, ...).
+    return _NUTS_TO_BUNDESLAND.get(code[:3])
+
+
+def _readable_place(value: str | None) -> str | None:
+    """Wenn TED nur den NUTS-Code in place-of-performance liefert (DEU/DEA32),
+    geben wir leeren Wert zurueck statt 'DEU' in die location zu schreiben."""
+    if not value:
+        return None
+    v = value.strip()
+    # NUTS-Codes sind 2-5 Zeichen alphanumerisch und beginnen mit DE
+    if re.match(r"^DE[0-9A-Z]{0,4}$", v):
+        return None
+    return v
+
+
+def _location_from_title(title: str | None) -> str | None:
+    """TED-Titel sind im Format 'Deutschland-STADT: Was'. Wir ziehen die
+    Stadt aus dem Titel, weil place-of-performance oft nur ein NUTS-Code ist."""
+    if not title:
+        return None
+    m = re.match(r"\s*Deutschland\s*-\s*([^:]+?):", title)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _build_description(title, buyer, location, cpvs, pub_no) -> str:
+    """Baut eine zumindest informative Beschreibung wenn description-lot leer."""
+    parts = []
+    if buyer:
+        parts.append("Auftraggeber: {}".format(buyer))
+    if location:
+        parts.append("Ort: {}".format(location))
+    if cpvs:
+        parts.append("CPV: {}".format(", ".join(str(c) for c in cpvs[:5])))
+    if pub_no:
+        parts.append("TED-Nr: {}".format(pub_no))
+    return " · ".join(parts) if parts else (title or "")
 
 
 def _matches_any(item: TenderItem, terms) -> bool:

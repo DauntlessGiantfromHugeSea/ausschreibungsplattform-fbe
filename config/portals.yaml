@@ -68,18 +68,20 @@ portals:
   # =====================================================================
 
   - name: "evergabe.de (Cosinex)"
-    enabled: true
+    enabled: false
     scraper: "generic_html"
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      Next.js-SPA, serverseitig vorgerendert. Vorher: per query_term ein
-      Request - das fuehrte zu 5x HTTP 503 (Rate-Limit). Jetzt: ein einziger
-      Listing-Request, danach client-seitig auf Cluster-Begriffe filtern.
-      Browser-UA verhindert Bot-Block.
+      DEAKTIVIERT: Cloudflare-Bot-Block. Live-Dump zeigt durchgaengig
+      HTTP 503 (19 Bytes, "Service Unavailable") auf der richtigen Such-
+      URL. Browser-UA + Delays helfen nichts, weil Cloudflare die VPS-IP
+      blockt. Auto-Discovery-Fallbacks (/bekanntmachungen etc.) sind alle
+      404 - 5 sinnlose Requests pro Lauf. Reaktivierung sobald wir einen
+      Workaround haben (Proxy, Residential-IP, oder offiziellen API-Key).
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      # Listing-Pfad ohne {term} = nur ein Request pro Lauf.
+      auto_discover: false
       search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest"
       filter_by_terms: true
       result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li"

@@ -517,11 +517,54 @@ portals:
     notes: "Login/Account erforderlich. Spezial-Scraper noetig."
 
   - name: "DB Vergabeportal"
-    enabled: false
-    scraper: "db_vergabe"
+    enabled: true
+    scraper: "playwright_html"
     base_url: "https://bieterportal.noncd.db.de"
     strategy: "scrape"
-    notes: "JS-rendered, Playwright noetig."
+    notes: |
+      Bieterportal Deutsche Bahn AG (Healy-Hudson eVergabe, gleiche
+      Engine wie DTVP). Listing der oeffentlichen Bekanntmachungen
+      unter /evergabe.bieter/eva/supplierportal/portal. JS-rendered -
+      braucht Playwright (Headless-Chromium).
+
+      Auf VPS einmalig:
+          source .venv/bin/activate
+          pip install playwright
+          playwright install chromium
+
+      Falls Playwright nicht installiert ist, gibt der Scraper einen
+      klaren Hinweis und blockt nicht die anderen Portale.
+    config:
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
+      timeout: 60
+      search_path: "/evergabe.bieter/eva/supplierportal/portal"
+      # Auf eines dieser Selektoren warten = Hydration ist durch.
+      wait_for_selector: >
+        table.notice-list, table.results, table.searchResults,
+        .project-list, .search-result, .notice-result,
+        a[href*='/notice'], a[href*='/Verfahren'], a[href*='/Bekanntmachung'],
+        tr.notice, tr.publication, [class*='notice-item'],
+        [class*='result-row']
+      wait_timeout_ms: 25000
+      filter_by_terms: true
+      # Multi-Strategy-Selektoren: zuerst Tabellen-Zeilen, dann Notice-
+      # Container, dann letztens jeden Anchor mit Notice-Pfad als Card.
+      result_selector: >
+        tr.notice, tr.publication, tr.result-row,
+        table.notice-list tbody tr,
+        table.searchResults tbody tr,
+        table.results tbody tr,
+        .project-list-row, .search-result-row,
+        .notice-result, [class*='notice-item'], [class*='publication-item'],
+        article.notice, li.notice
+      title_selector: >
+        a.notice-title, a.publication-title, a.title,
+        h2 a, h3 a, td a[href*='/notice'], td a[href*='/Verfahren'],
+        td a[href*='/Bekanntmachung'], td a
+      authority_selector: ".buyer, .vergabestelle, .auftraggeber, .organisation"
+      location_selector: ".place, .ort, .erfuellungsort, .location"
+      deadline_selector: ".deadline, .frist, .angebotsfrist, .submissionDeadline"
+      description_selector: ".description, .excerpt, .summary, p"
 
   - name: "Vergabe24 (Cosinex)"
     enabled: false

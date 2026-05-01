@@ -191,20 +191,18 @@ portals:
 
   - name: "Auftragsbörse Bayern"
     enabled: true
-    scraper: "crawl_html"
+    scraper: "bayern"
     base_url: "https://www.auftraege.bayern.de"
     strategy: "scrape"
     notes: |
-      Bayerische Auftragsboerse. Live-Dump zeigt: / ist nur Werbe-Landing,
-      die echten Ausschreibungen liegen unter /Dashboards/Dashboard_off?BL=09
-      (Deutsche eVergabe Dashboard, BL=09 = Bayern). Den crawlen wir.
+      Bayerische Auftragsboerse. Dedizierter Parser fuer den WebTicker
+      <ul id="webTicker"> auf der Landingpage - dieser enthaelt direkt
+      50+ aktuelle Bekanntmachungen mit Titel und Vergabestelle in
+      Klammern. Keine Detail-Links pro Item (echte Detailseiten sind
+      Login-pflichtig auf vst.deutsche-evergabe.de).
     config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/Dashboards/Dashboard_off?BL=09"
-        - "/"
-      max_details: 30
-      request_delay_s: 0.5
+      filter_by_terms: true
+      listing_path: "/"
 
   - name: "Vergabeplattform Berlin"
     enabled: true

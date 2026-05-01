@@ -24,29 +24,60 @@ def is_configured() -> bool:
 
 
 def _send(subject: str, plain_body: str, html_body: str | None = None) -> bool:
-    """Niedrigschwelliger SMTP-Versand. Liefert True bei Erfolg."""
-    if not is_configured():
-        log.info("Mailversand uebersprungen - nicht konfiguriert.")
+    """Niedrigschwelliger SMTP-Versand an NOTIFY_EMAIL. Liefert True bei Erfolg."""
+    return _send_to(
+        to=[settings.notify_email] if settings.notify_email else [],
+        subject=subject, plain_body=plain_body, html_body=html_body,
+    )
+
+
+def _send_to(
+    to: list[str],
+    subject: str,
+    plain_body: str,
+    html_body: str | None = None,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
+    reply_to: str | None = None,
+) -> bool:
+    """SMTP-Versand mit expliziten Empfaengern. To/CC/BCC werden alle als
+    Empfaenger im SMTP-RCPT-TO uebergeben, aber nur To/CC im Header sichtbar."""
+    if not (settings.smtp_host and settings.smtp_from):
+        log.info("Mailversand uebersprungen - SMTP_HOST/SMTP_FROM fehlt.")
+        return False
+    to = [a for a in (to or []) if a]
+    cc = [a for a in (cc or []) if a]
+    bcc = [a for a in (bcc or []) if a]
+    if not (to or cc or bcc):
+        log.info("Mailversand uebersprungen - kein Empfaenger angegeben.")
         return False
 
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = settings.smtp_from
-    msg["To"] = settings.notify_email
+    if to:
+        msg["To"] = ", ".join(to)
+    if cc:
+        msg["Cc"] = ", ".join(cc)
+    if reply_to:
+        msg["Reply-To"] = reply_to
     msg.set_content(plain_body)
     if html_body:
         msg.add_alternative(html_body, subtype="html")
 
+    rcpt = list(to) + list(cc) + list(bcc)
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
             smtp.starttls()
             if settings.smtp_user:
                 smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(msg)
+            smtp.send_message(msg, to_addrs=rcpt)
     except Exception as exc:
         log.warning("Mailversand fehlgeschlagen: %s", exc)
         return False
-    log.info("Mail an %s versendet: %s", settings.notify_email, subject)
+    log.info("Mail an %s versendet: %s",
+             ", ".join(rcpt[:3]) + ("..." if len(rcpt) > 3 else ""),
+             subject)
     return True
 
 
@@ -195,3 +226,240 @@ def _format_html(items: List[Tender], header: str) -> str:
       </table>
     </body></html>
     """.format(header=header, rows="".join(rows), count=len(items))
+
+
+# ---------------------------------------------------------------------------
+def send_tender_mail(
+    tender: Tender,
+    to: list[str],
+    cc: list[str] | None = None,
+    subject: str | None = None,
+    custom_message: str = "",
+    sender_name: str | None = None,
+    sender_signature: str | None = None,
+) -> bool:
+    """Versendet eine Mail mit den Daten einer Ausschreibung.
+
+    Layout: FBE-Branding-Header, Custom-Nachricht des Users (Plain mit
+    line breaks), strukturierte Tender-Card, Original-Link, Firmen-Footer.
+
+    Args:
+        tender: ORM-Objekt
+        to: Empfaengerliste (mind. einer noetig)
+        cc: optional CC
+        subject: optional Subject (default: portal-praefix + tender title)
+        custom_message: persoenlicher Text vom User
+        sender_name: Anzeigename oben (default: company_name aus settings)
+        sender_signature: optionale Signatur unten (Plain-Text)
+    """
+    if not to:
+        log.info("send_tender_mail: kein Empfaenger angegeben.")
+        return False
+    if subject is None:
+        subject = "Ausschreibung: {}".format(tender.title or "(ohne Titel)")
+    plain = _format_tender_plain(
+        tender, custom_message=custom_message,
+        sender_signature=sender_signature,
+    )
+    html = _format_tender_html(
+        tender, custom_message=custom_message,
+        sender_name=sender_name or settings.company_name,
+        sender_signature=sender_signature,
+    )
+    return _send_to(
+        to=to, cc=cc, subject=subject,
+        plain_body=plain, html_body=html,
+        reply_to=settings.company_email or None,
+    )
+
+
+def _format_tender_plain(
+    tender: Tender, custom_message: str = "", sender_signature: str | None = None,
+) -> str:
+    lines = []
+    if custom_message and custom_message.strip():
+        lines.append(custom_message.strip())
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+    lines.append("Ausschreibung")
+    lines.append("=" * 50)
+    lines.append("")
+    lines.append("Titel:    {}".format(tender.title or "(ohne Titel)"))
+    if tender.contracting_authority:
+        lines.append("Auftraggeber: {}".format(tender.contracting_authority))
+    if tender.location:
+        lines.append("Ort:      {}".format(tender.location))
+    if tender.region:
+        lines.append("Bundesland: {}".format(tender.region))
+    if tender.deadline:
+        lines.append("Frist:    {}".format(tender.deadline.strftime("%d.%m.%Y")))
+    if tender.publication_date:
+        lines.append("Veröffentlicht: {}".format(
+            tender.publication_date.strftime("%d.%m.%Y")))
+    if tender.portal:
+        lines.append("Quelle:   {}".format(tender.portal))
+    if tender.cpv_codes:
+        lines.append("CPV:      {}".format(tender.cpv_codes))
+    if tender.relevance_score is not None:
+        lines.append("Relevanz: {:.0f} / 100".format(tender.relevance_score))
+    lines.append("")
+    if tender.description:
+        lines.append("Beschreibung:")
+        lines.append((tender.description or "")[:1000])
+        lines.append("")
+    if tender.url:
+        lines.append("Original: {}".format(tender.url))
+    lines.append("")
+    if sender_signature and sender_signature.strip():
+        lines.append("---")
+        lines.append(sender_signature.strip())
+        lines.append("")
+    # Footer
+    foot_parts = []
+    if settings.company_name:
+        foot_parts.append(settings.company_name)
+    if settings.company_address:
+        foot_parts.append(settings.company_address)
+    if settings.company_phone:
+        foot_parts.append("Tel: {}".format(settings.company_phone))
+    if settings.company_email:
+        foot_parts.append(settings.company_email)
+    if settings.company_web:
+        foot_parts.append(settings.company_web)
+    if foot_parts:
+        lines.append("---")
+        lines.append(" · ".join(foot_parts))
+    return "\n".join(lines)
+
+
+def _esc(s) -> str:
+    if s is None:
+        return ""
+    return (str(s).replace("&", "&amp;")
+                  .replace("<", "&lt;")
+                  .replace(">", "&gt;"))
+
+
+def _format_tender_html(
+    tender: Tender, custom_message: str = "",
+    sender_name: str | None = None,
+    sender_signature: str | None = None,
+) -> str:
+    score = tender.relevance_score or 0
+    score_color = "#16a34a" if score >= 70 else "#d97706" if score >= 50 else "#71717a"
+
+    rows_html = []
+    def add_row(label, value):
+        if not value:
+            return
+        rows_html.append(
+            "<tr>"
+            "<td style='padding:6px 12px;color:#71717a;font-size:13px;width:130px;vertical-align:top;'>{label}</td>"
+            "<td style='padding:6px 12px;color:#27272a;font-size:14px;'>{value}</td>"
+            "</tr>".format(label=_esc(label), value=_esc(value))
+        )
+
+    add_row("Auftraggeber", tender.contracting_authority)
+    add_row("Ort", tender.location)
+    add_row("Bundesland", tender.region)
+    if tender.deadline:
+        add_row("Frist", tender.deadline.strftime("%d.%m.%Y"))
+    if tender.publication_date:
+        add_row("Veröffentlicht", tender.publication_date.strftime("%d.%m.%Y"))
+    add_row("Quelle", tender.portal)
+    if tender.cpv_codes:
+        add_row("CPV-Codes", tender.cpv_codes)
+
+    # Custom message: Newline -> <br>
+    custom_html = ""
+    if custom_message and custom_message.strip():
+        body_text = _esc(custom_message.strip()).replace("\n", "<br>")
+        custom_html = (
+            "<div style='padding:20px 24px;background:#f8f7f3;border-left:4px solid #5a8d3a;"
+            "color:#1f2937;font-size:14px;line-height:1.55;'>{}</div>"
+        ).format(body_text)
+
+    description_html = ""
+    if tender.description:
+        desc = _esc((tender.description or "")[:1500]).replace("\n", "<br>")
+        description_html = (
+            "<div style='padding:14px 16px;background:#fafafa;border:1px solid #e4e4e7;"
+            "border-radius:6px;color:#3f3f46;font-size:13px;line-height:1.5;margin:10px 16px;'>{}</div>"
+        ).format(desc)
+
+    signature_html = ""
+    if sender_signature and sender_signature.strip():
+        sig = _esc(sender_signature.strip()).replace("\n", "<br>")
+        signature_html = (
+            "<div style='padding:16px 24px;color:#3f3f46;font-size:14px;"
+            "border-top:1px solid #e4e4e7;'>{}</div>"
+        ).format(sig)
+
+    # Footer mit Firmendaten
+    foot_lines = []
+    if settings.company_name:
+        foot_lines.append("<strong>{}</strong>".format(_esc(settings.company_name)))
+    if settings.company_address:
+        foot_lines.append(_esc(settings.company_address))
+    contact_bits = []
+    if settings.company_phone:
+        contact_bits.append("Tel: {}".format(_esc(settings.company_phone)))
+    if settings.company_email:
+        contact_bits.append('<a href="mailto:{0}" style="color:#5a8d3a;text-decoration:none;">{0}</a>'.format(
+            _esc(settings.company_email)))
+    if settings.company_web:
+        contact_bits.append('<a href="{0}" style="color:#5a8d3a;text-decoration:none;">{0}</a>'.format(
+            _esc(settings.company_web)))
+    if contact_bits:
+        foot_lines.append(" · ".join(contact_bits))
+    footer_html = "<br>".join(foot_lines)
+
+    logo_html = ""
+    if settings.company_logo_url:
+        logo_html = (
+            '<img src="{}" alt="{}" '
+            'style="height:42px;display:block;margin:0 auto;">'
+        ).format(_esc(settings.company_logo_url), _esc(settings.company_name or "Logo"))
+
+    return """\
+<html><body style="margin:0;padding:24px;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#27272a;">
+  <table style="max-width:680px;margin:0 auto;background:white;border-collapse:collapse;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
+    <tr><td style="padding:20px 24px;background:white;border-bottom:1px solid #e4e4e7;text-align:center;">
+      {logo}
+    </td></tr>
+    {custom_block}
+    <tr><td style="padding:20px 24px 8px 24px;">
+      <div style="font-size:12px;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Ausschreibung</div>
+      <h1 style="margin:0 0 12px 0;font-size:20px;font-weight:600;color:#1f2937;line-height:1.35;">{title}</h1>
+      <div style="display:inline-block;padding:3px 10px;background:{score_color}22;color:{score_color};border-radius:6px;font-size:12px;font-weight:600;">
+        Relevanz {score:.0f} / 100
+      </div>
+    </td></tr>
+    <tr><td style="padding:0 12px;">
+      <table style="width:100%;border-collapse:collapse;">{rows}</table>
+    </td></tr>
+    {description_block}
+    <tr><td style="padding:14px 24px 24px 24px;">
+      <a href="{url}" style="display:inline-block;padding:10px 18px;background:#5a8d3a;color:white;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
+        Zur Ausschreibung →
+      </a>
+    </td></tr>
+    {signature_block}
+    <tr><td style="padding:18px 24px;background:#fafafa;color:#71717a;font-size:12px;line-height:1.5;border-top:1px solid #e4e4e7;text-align:center;">
+      {footer}
+    </td></tr>
+  </table>
+</body></html>""".format(
+        logo=logo_html,
+        custom_block=("<tr><td>{}</td></tr>".format(custom_html) if custom_html else ""),
+        title=_esc(tender.title or "(ohne Titel)"),
+        score=score,
+        score_color=score_color,
+        rows="".join(rows_html),
+        description_block=(
+            "<tr><td>{}</td></tr>".format(description_html) if description_html else ""),
+        url=_esc(tender.url or "#"),
+        signature_block=("<tr><td>{}</td></tr>".format(signature_html) if signature_html else ""),
+        footer=footer_html or "Versendet via FBE-Ausschreibungsplattform.",
+    )

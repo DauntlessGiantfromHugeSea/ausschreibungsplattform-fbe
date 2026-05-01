@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -319,7 +320,13 @@ def index(
 
 
 @app.get("/tender/{tender_id}", response_class=HTMLResponse)
-def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
+def detail(
+    tender_id: int,
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "Ausschreibung nicht gefunden")
@@ -338,6 +345,7 @@ def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
         .order_by(Comment.created_at.asc())
         .all()
     )
+    mail_ready = bool(settings.smtp_host and settings.smtp_from)
     return templates.TemplateResponse(
         request,
         "detail.html",
@@ -347,6 +355,9 @@ def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
             "user": _session_user(request),
             "score_breakdown": breakdown,
             "comments": comments,
+            "mail_ready": mail_ready,
+            "flash": flash,
+            "error": error,
         },
     )
 
@@ -425,6 +436,72 @@ def set_status(
         tender.notes = notes
     db.commit()
     return RedirectResponse(url=f"/tender/{tender_id}", status_code=303)
+
+
+@app.post("/tender/{tender_id}/send-mail")
+def tender_send_mail(
+    tender_id: int,
+    request: Request,
+    to: str = Form(...),
+    cc: str = Form(""),
+    subject: str = Form(""),
+    custom_message: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Versendet die Ausschreibung als Mail mit FBE-Branding-Layout."""
+    user = _session_user(request)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    tender = db.get(Tender, tender_id)
+    if not tender:
+        raise HTTPException(404, "Ausschreibung nicht gefunden")
+
+    def _split_emails(s: str) -> list[str]:
+        # Akzeptiert komma- oder semikolon-getrennt, plus Whitespace.
+        if not s:
+            return []
+        parts = re.split(r"[,;\s]+", s.strip())
+        return [p for p in parts if "@" in p and "." in p.split("@")[-1]]
+
+    to_list = _split_emails(to)
+    cc_list = _split_emails(cc)
+    if not to_list:
+        return RedirectResponse(
+            url="/tender/{}?error=Mindestens+eine+gueltige+Empfaenger-Adresse+noetig".format(tender_id),
+            status_code=303,
+        )
+
+    from . import notify as notify_mod
+    if not (settings.smtp_host and settings.smtp_from):
+        return RedirectResponse(
+            url="/tender/{}?error=SMTP+nicht+konfiguriert".format(tender_id),
+            status_code=303,
+        )
+
+    subj = (subject or "").strip() or "Ausschreibung: {}".format(tender.title or "")
+
+    # Reply-To setzt das HTML-Template auf company_email; eine User-Signatur
+    # bauen wir aus username + company defaults.
+    sig = "Mit freundlichen Grüßen\n{}".format(user["username"])
+
+    ok = notify_mod.send_tender_mail(
+        tender=tender,
+        to=to_list,
+        cc=cc_list,
+        subject=subj,
+        custom_message=custom_message or "",
+        sender_signature=sig,
+    )
+    if ok:
+        msg = "Mail an {} versendet.".format(", ".join(to_list[:3]))
+        return RedirectResponse(
+            url="/tender/{}?flash=".format(tender_id) + msg.replace(" ", "+"),
+            status_code=303,
+        )
+    return RedirectResponse(
+        url="/tender/{}?error=Versand+fehlgeschlagen+-+Logs+pruefen".format(tender_id),
+        status_code=303,
+    )
 
 
 @app.post("/tender/{tender_id}/quick-status")

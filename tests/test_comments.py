@@ -258,6 +258,66 @@ def test_default_dashboard_hides_expired_tenders(auth_client, db_session):
         db_session.commit()
 
 
+def test_tender_send_mail_validates_recipient(auth_client, tender):
+    """Ohne gueltige To-Adresse -> error redirect."""
+    r = auth_client.post(
+        f"/tender/{tender}/send-mail",
+        data={"to": "no-at-sign", "subject": "X"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    loc = r.headers["location"]
+    assert "error=" in loc
+    assert "Empfaenger" in loc or "Empf" in loc
+
+
+def test_tender_send_mail_requires_login(app_client, tender):
+    app_client.get("/logout")
+    r = app_client.post(f"/tender/{tender}/send-mail",
+                        data={"to": "x@example.com"}, follow_redirects=False)
+    assert r.status_code in (303, 401, 403)
+
+
+def test_format_tender_html_contains_branding_and_data():
+    """HTML-Mail enthaelt Logo, Tender-Felder und persoenliche Nachricht
+    sauber escaped."""
+    from datetime import datetime
+    from backend import notify
+    from backend.models import Tender, TenderStatus
+    t = Tender(
+        title="Tiefbau & Spundwand <Test>",
+        portal="evergabe.de",
+        url="https://x.example/123",
+        contracting_authority="Stadt Test",
+        location="12345 Test",
+        region="Bayern",
+        relevance_score=75.0,
+        deadline=datetime(2026, 7, 1),
+        description="Tiefbau gemaess DIN 18300",
+        fingerprint="fp-html",
+        status=TenderStatus.NEU.value,
+    )
+    html = notify._format_tender_html(
+        t, custom_message="Hallo!\nZeile 2",
+        sender_signature="Mit Gruss\nDustyn",
+    )
+    # Title escaped (kein < drin)
+    assert "&lt;Test&gt;" in html
+    assert "Tiefbau &amp; Spundwand" in html
+    # Daten sind drin
+    assert "Stadt Test" in html
+    assert "12345 Test" in html
+    assert "Bayern" in html
+    assert "01.07.2026" in html
+    # Custom-Message wird mit Newline -> <br>
+    assert "Hallo!" in html
+    assert "<br>" in html
+    # Score-Pille
+    assert "Relevanz 75" in html
+    # Original-Link
+    assert 'https://x.example/123' in html
+
+
 def test_admin_test_mail_blocked_when_not_configured(auth_client):
     """Ohne SMTP-Konfig liefert /admin/test-mail eine klare Fehlermeldung."""
     r = auth_client.post("/admin/test-mail", follow_redirects=False)

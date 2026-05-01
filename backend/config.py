@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     summary_hour: int = 7
     summary_minute: int = 0
 
+    # Firmendaten fuer den Mail-Footer + Tender-Compose-Mail.
+    # Werden im HTML-Mail-Footer und im Detail-Compose-Vorschau-Header
+    # verwendet. Alle Felder optional - bleiben sie leer, faellt der
+    # Mail-Footer auf einen generischen Hinweis zurueck.
+    company_name: str = "Flüssigboden Engineering"
+    company_address: str = ""
+    company_phone: str = ""
+    company_email: str = ""
+    company_web: str = "https://fb-eng.de"
+    company_logo_url: str = "https://fb-eng.de/wp-content/uploads/2024/10/FBE_green.png"
+
     # Default: leer = bundesweit, kein Region-Bonus/Strafe im Scoring.
     # Per .env auf Bundeslaender-Liste setzen, wenn man Region-Praeferenz
     # haben will (z.B. 'Sachsen,Sachsen-Anhalt,Thüringen').

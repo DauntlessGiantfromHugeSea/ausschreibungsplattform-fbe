@@ -68,17 +68,15 @@ portals:
   # =====================================================================
 
   - name: "evergabe.de (Cosinex)"
-    enabled: false
+    enabled: true
     scraper: "generic_html"
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      DEAKTIVIERT: Cloudflare-Bot-Block. Live-Dump zeigt durchgaengig
-      HTTP 503 (19 Bytes, "Service Unavailable") auf der richtigen Such-
-      URL. Browser-UA + Delays helfen nichts, weil Cloudflare die VPS-IP
-      blockt. Auto-Discovery-Fallbacks (/bekanntmachungen etc.) sind alle
-      404 - 5 sinnlose Requests pro Lauf. Reaktivierung sobald wir einen
-      Workaround haben (Proxy, Residential-IP, oder offiziellen API-Key).
+      evergabe.de Suchportal. Cloudflare blockt aktuell die VPS-IP
+      (HTTP 503). Auto-Discovery aus, damit nicht 5 sinnlose 404er
+      pro Lauf entstehen. Wenn der Server irgendwann antwortet, greift
+      der Selektor #results-list-container.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       auto_discover: false
@@ -95,32 +93,24 @@ portals:
     strategy: "scrape"
     notes: |
       Bund-Laender-Plattform der Beschaffungsstelle des BMI.
-      Reiner Crawl-Modus - keine URL-Suche, stattdessen das oeffentliche
-      Listing aller aktuellen Bekanntmachungen (publishDateRange=ALL).
-      Volltext-Filter laeuft client-seitig auf den Detail-Seiten.
+      Crawl-Modus auf der oeffentlichen Suche (publishDateRange=ALL).
+      Selektor zielt strikt auf die Result-Tabelle - kein 'id='-Substring,
+      sonst werden Header-/Login-/Modal-Links mit ?id=... aufgenommen.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
         - "/search.html?publishDateRange=ALL"
         - "/search.html?1"
         - "/search.html"
-      # Detail-URLs sind heute typischerweise /tenderdocuments/.../<id>
-      # oder /notice.html?... oder /announcement/... - alle plausiblen
-      # Pfade akzeptieren.
+      # NUR die Result-Tabelle - vermeidet Header/Footer/Modal-Links.
       link_selector: >
-        a[href*='/notice'],
-        a[href*='/announcement'],
-        a[href*='/tender'],
-        a[href*='/Bekanntmachung'],
-        a[href*='id='],
+        table.table-advanced td a,
+        table.table-striped td a,
         a.searchResultLink,
         a.publicationLink,
-        a.notice-link,
-        table.searchResults a,
-        table.results a,
-        td.title a
-      # Numerische / hash-artige Detail-IDs ausfiltern, ueber den Pfad-Match.
-      link_pattern: "(notice|announcement|tender|Bekanntmachung|id=|/[0-9A-F]{6,})"
+        a.notice-link
+      # Nur echte Such-Result-Pfade, kein generisches id=-Pattern.
+      link_pattern: "(searchPanel-results|/notice|/announcement|/tender)"
       max_details: 60
       request_delay_s: 0.4
       detail_title_selector: "h1, .title, .announcement-title, .notice-title"
@@ -167,7 +157,7 @@ portals:
   # =====================================================================
 
   - name: "Vergabe Baden-Württemberg"
-    enabled: false
+    enabled: true
     scraper: "crawl_html"
     base_url: "https://vergabe.service-bw.de"
     strategy: "scrape"
@@ -224,7 +214,7 @@ portals:
       request_delay_s: 0.5
 
   - name: "Vergabemarktplatz Brandenburg"
-    enabled: false
+    enabled: true
     scraper: "cosinex"
     base_url: "https://vergabemarktplatz.brandenburg.de"
     strategy: "scrape"
@@ -239,7 +229,7 @@ portals:
       filter_by_terms: true
 
   - name: "Vergabe Bremen"
-    enabled: false
+    enabled: true
     scraper: "crawl_html"
     base_url: "https://vergabe.bremen.de"
     strategy: "scrape"
@@ -263,7 +253,7 @@ portals:
       detail_deadline_selector: ".frist, .deadline"
 
   - name: "Vergabe Hamburg"
-    enabled: false
+    enabled: true
     scraper: "cosinex"
     base_url: "https://vergabe.hamburg.de"
     strategy: "scrape"
@@ -300,7 +290,7 @@ portals:
       detail_deadline_selector: ".frist, .angebotsfrist"
 
   - name: "Vergabe Mecklenburg-Vorpommern"
-    enabled: false
+    enabled: true
     scraper: "cosinex"
     base_url: "https://www.vergabe-mv.de"
     strategy: "scrape"
@@ -313,7 +303,7 @@ portals:
       filter_by_terms: true
 
   - name: "Vergabe Niedersachsen"
-    enabled: false
+    enabled: true
     scraper: "crawl_html"
     base_url: "https://vergabe.niedersachsen.de"
     strategy: "scrape"
@@ -372,7 +362,7 @@ portals:
       filter_by_terms: true
 
   - name: "Vergabe Saarland"
-    enabled: false
+    enabled: true
     scraper: "cosinex"
     base_url: "https://vergabe.saarland.de"
     strategy: "scrape"
@@ -422,7 +412,7 @@ portals:
       request_delay_s: 0.5
 
   - name: "Vergabe Schleswig-Holstein"
-    enabled: false
+    enabled: true
     scraper: "cosinex"
     base_url: "https://www.vergabe-sh.de"
     strategy: "scrape"
@@ -435,7 +425,7 @@ portals:
       filter_by_terms: true
 
   - name: "Vergabe Thüringen"
-    enabled: false
+    enabled: true
     scraper: "cosinex"
     base_url: "https://www.evergabe-thueringen.de"
     strategy: "scrape"

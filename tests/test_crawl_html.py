@@ -65,8 +65,9 @@ def test_aggressive_fallback_when_selector_misses():
     </body></html>
     """
     cfg = {
-        # absichtlich passt der Selektor NICHT auf die Anchor-Klassen
         "link_selector": "a.does-not-match",
+        # Default ist seit Junk-Symptomen False - Test setzt explizit True
+        "aggressive_fallback": True,
     }
     links = CrawlHtmlScraper._extract_links(
         html, base_url="https://www.evergabe-online.de", config=cfg,
@@ -122,7 +123,7 @@ def test_aggressive_fallback_skips_nav_and_footer_links():
     </main>
     </body></html>
     """
-    cfg = {"link_selector": "a.does-not-match"}
+    cfg = {"link_selector": "a.does-not-match", "aggressive_fallback": True}
     links = CrawlHtmlScraper._extract_links(
         html, base_url="https://www.evergabe.sachsen-anhalt.de", config=cfg,
     )
@@ -157,7 +158,7 @@ def test_aggressive_fallback_accepts_long_titles_without_url_match():
     </main>
     </body></html>
     """
-    cfg = {"link_selector": "a.does-not-match"}
+    cfg = {"link_selector": "a.does-not-match", "aggressive_fallback": True}
     links = CrawlHtmlScraper._extract_links(
         html, base_url="https://example.de", config=cfg,
     )

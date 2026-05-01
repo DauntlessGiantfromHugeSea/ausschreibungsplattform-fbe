@@ -138,23 +138,28 @@ class CrawlHtmlScraper(BaseScraper):
         link_sel = config.get("link_selector", "a[href]")
         pattern = config.get("link_pattern")
         regex = re.compile(pattern) if pattern else None
+        # Nav-/Footer-Filter standardmaessig auch fuer den Haupt-Selektor an.
+        # Verhindert dass 'Impressum', 'Datenschutz' etc. landen, falls die
+        # konfigurierten link_selector/link_pattern auch im Footer matchen.
+        skip_nav = config.get("skip_navigation", True)
 
         out: list[str] = []
         for a in soup.select(link_sel):
             href = a.get("href", "").strip()
             if not href or href.startswith("#") or href.startswith("javascript:"):
                 continue
+            if skip_nav and _in_navigation_context(a):
+                continue
             full = urljoin(base_url, href)
             if regex and not regex.search(full):
                 continue
             out.append(full)
 
-        # Aggressiver Fallback: wenn der konfigurierte Selektor 0 Links bringt,
-        # akzeptiere jeden internen Anchor mit plausiblem Bekanntmachungs-Pfad
-        # ODER mit langem sichtbaren Linktext (echte Tender-Titel haben 30+
-        # Zeichen, Menue-Eintraege < 25). Pattern nur auf Path+Query, weil
-        # Hostnames wie 'evergabe-online.de' selbst schon 'vergabe' enthalten.
-        if not out and config.get("aggressive_fallback", True):
+        # Aggressiver Fallback: nur opt-in per Config, weil er bei Portalen
+        # mit vielen redaktionellen Inhalten (Sachsen-Anhalt, Berlin) Footer-/
+        # Menue-/Datenschutz-Links faelschlich als Tender erkennt. Default
+        # off - lieber 0 Treffer als Junk-DB.
+        if not out and config.get("aggressive_fallback", False):
             from urllib.parse import urlsplit
             broad = re.compile(
                 r"(/notice|/publication|/bekanntmachung|/ausschreibung|"

@@ -74,34 +74,18 @@ portals:
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      evergabe.de Suchportal mit dem vollstaendigen Filter-Set aus dem
-      Browser des Users. Das Site-Markup ist Tailwind4-basiert mit
-      tw:@container-Wrappern - der Selektor faengt alle Card-Varianten ab.
-      Auftraggeber zeigt 'Nach Freischalten sichtbar' fuer nicht
-      eingeloggte Nutzer - kann der Scraper nicht aendern.
+      evergabe.de Suchportal. Cloudflare blockt aktuell die VPS-IP
+      (HTTP 503). Auto-Discovery aus, damit nicht 5 sinnlose 404er
+      pro Lauf entstehen. Wenn der Server irgendwann antwortet, greift
+      der Selektor #results-list-container.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      timeout: 90
       auto_discover: false
-      # Vollstaendige User-URL mit allen Filtern + per_page=100 fuer Volumen.
-      search_path: "/auftraege/auftrag-suchen?search%5Binclude_archived%5D=false&search%5Binclude_discarded%5D=false&search%5Binclude_remembered%5D=false&search%5Binclude_viewed%5D=false&search%5Bper_page%5D=100&search%5Bquery_operator%5D=or&search%5Bregion_type%5D=perimeter&search%5Bsort_order%5D=best&search%5Buse_additional_procedure_stadiums%5D=false"
+      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest"
       filter_by_terms: true
-      # Tailwind4-Markup: Cards sind direkte Kinder von tw:@container-Divs,
-      # haben mindestens einen <h2>-Titel. Mehrere Selektor-Varianten zur
-      # Sicherheit.
-      result_selector: >
-        [class*='@container'] > div,
-        [class*='@container'] > article,
-        [class*='@container'] > section,
-        [class*='auftrag-card'],
-        [class*='card'][class*='auftrag'],
-        article[class*='tw:'],
-        article:has(h2),
-        div[class*='tw:flex'][class*='tw:flex-col']:has(h2)
+      result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li"
       title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, a[href*='/auftrag/']"
       description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
-      location_selector: "[class*='Ausführungsort'], [class*='ausfuehrungsort']"
-      deadline_selector: "[class*='Angebotsfrist'], [class*='angebotsfrist']"
 
   - name: "evergabe-online.de (BMI)"
     enabled: true

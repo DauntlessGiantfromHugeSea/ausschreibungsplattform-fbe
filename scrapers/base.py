@@ -62,7 +62,7 @@ class BaseScraper:
         }
         self._client = httpx.Client(
             headers=headers,
-            timeout=settings.http_timeout,
+            timeout=int(self.config.get("timeout", settings.http_timeout)),
             follow_redirects=True,
         )
         self._robots: urllib.robotparser.RobotFileParser | None = None

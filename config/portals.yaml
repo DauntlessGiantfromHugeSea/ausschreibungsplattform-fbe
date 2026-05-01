@@ -73,16 +73,17 @@ portals:
     base_url: "https://www.evergabe.de"
     strategy: "search_url"
     notes: |
-      evergabe.de Suchportal. Cloudflare blockt aktuell die VPS-IP
-      (HTTP 503). Auto-Discovery aus, damit nicht 5 sinnlose 404er
-      pro Lauf entstehen. Wenn der Server irgendwann antwortet, greift
-      der Selektor #results-list-container.
+      evergabe.de Suchportal. Server hinter Cloudflare reagiert teilweise
+      sehr langsam oder mit ReadTimeout - daher timeout: 90s und nur 50
+      Items pro Seite. Auto-Discovery aus, damit nicht 5 sinnlose 404er
+      pro Lauf entstehen.
     config:
       user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
+      timeout: 90
       auto_discover: false
-      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest"
+      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=50"
       filter_by_terms: true
-      result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li"
+      result_selector: "#results-list-container > article, #results-list-container > div, #results-list-container > section, #results-list-container > li, [class*='auftrag-card'], li[class*='card']"
       title_selector: "h2 a, h3 a, h2, h3, [class*='title'] a, a[href*='/auftrag/']"
       description_selector: "p, [class*='description'], [class*='excerpt'], [class*='summary']"
 

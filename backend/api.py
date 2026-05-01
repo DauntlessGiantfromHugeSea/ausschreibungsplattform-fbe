@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse, JSONResponse
@@ -484,7 +485,7 @@ def tender_send_mail(
     # bauen wir aus username + company defaults.
     sig = "Mit freundlichen Grüßen\n{}".format(user["username"])
 
-    ok = notify_mod.send_tender_mail(
+    ok, err = notify_mod.send_tender_mail(
         tender=tender,
         to=to_list,
         cc=cc_list,
@@ -495,11 +496,12 @@ def tender_send_mail(
     if ok:
         msg = "Mail an {} versendet.".format(", ".join(to_list[:3]))
         return RedirectResponse(
-            url="/tender/{}?flash=".format(tender_id) + msg.replace(" ", "+"),
+            url="/tender/{}?flash=".format(tender_id) + quote(msg, safe=""),
             status_code=303,
         )
+    err_msg = err or "Unbekannter Fehler - Logs pruefen"
     return RedirectResponse(
-        url="/tender/{}?error=Versand+fehlgeschlagen+-+Logs+pruefen".format(tender_id),
+        url="/tender/{}?error=".format(tender_id) + quote(err_msg, safe=""),
         status_code=303,
     )
 
@@ -824,11 +826,15 @@ def admin_test_mail(request: Request):
             url="/admin/settings?error=SMTP+nicht+konfiguriert+(NOTIFY_EMAIL+/+SMTP_HOST+leer)",
             status_code=303,
         )
-    ok = notify.send_test_mail()
-    msg = ("Test-Mail an {} versendet.".format(settings.notify_email) if ok
-           else "Versand fehlgeschlagen - Logs pruefen.")
+    ok, err = notify.send_test_mail()
+    if ok:
+        msg = "Test-Mail an {} versendet.".format(settings.notify_email)
+        return RedirectResponse(
+            url="/admin/settings?flash=" + quote(msg, safe=""),
+            status_code=303,
+        )
     return RedirectResponse(
-        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        url="/admin/settings?error=" + quote(err or "Unbekannter Fehler", safe=""),
         status_code=303,
     )
 

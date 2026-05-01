@@ -25,10 +25,11 @@ def is_configured() -> bool:
 
 def _send(subject: str, plain_body: str, html_body: str | None = None) -> bool:
     """Niedrigschwelliger SMTP-Versand an NOTIFY_EMAIL. Liefert True bei Erfolg."""
-    return _send_to(
+    ok, _err = _send_to(
         to=[settings.notify_email] if settings.notify_email else [],
         subject=subject, plain_body=plain_body, html_body=html_body,
     )
+    return ok
 
 
 def _send_to(
@@ -39,18 +40,21 @@ def _send_to(
     cc: list[str] | None = None,
     bcc: list[str] | None = None,
     reply_to: str | None = None,
-) -> bool:
-    """SMTP-Versand mit expliziten Empfaengern. To/CC/BCC werden alle als
-    Empfaenger im SMTP-RCPT-TO uebergeben, aber nur To/CC im Header sichtbar."""
+) -> tuple[bool, str | None]:
+    """SMTP-Versand mit expliziten Empfaengern. Liefert (ok, error_message).
+
+    error_message ist None bei Erfolg oder enthaelt eine kurze, fuer den
+    User lesbare Fehlerbeschreibung (z.B. 'SMTP-Auth fehlgeschlagen' statt
+    nur 'failed').
+    """
     if not (settings.smtp_host and settings.smtp_from):
         log.info("Mailversand uebersprungen - SMTP_HOST/SMTP_FROM fehlt.")
-        return False
+        return False, "SMTP_HOST oder SMTP_FROM nicht konfiguriert"
     to = [a for a in (to or []) if a]
     cc = [a for a in (cc or []) if a]
     bcc = [a for a in (bcc or []) if a]
     if not (to or cc or bcc):
-        log.info("Mailversand uebersprungen - kein Empfaenger angegeben.")
-        return False
+        return False, "Kein Empfaenger angegeben"
 
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -66,19 +70,67 @@ def _send_to(
         msg.add_alternative(html_body, subtype="html")
 
     rcpt = list(to) + list(cc) + list(bcc)
+    port = int(settings.smtp_port or 587)
+
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-            smtp.starttls()
+        # Port 465 = implizites SSL, sonst STARTTLS auf 587/25.
+        if port == 465:
+            smtp = smtplib.SMTP_SSL(settings.smtp_host, port, timeout=30)
+        else:
+            smtp = smtplib.SMTP(settings.smtp_host, port, timeout=30)
+        try:
+            smtp.ehlo()
+            if port != 465:
+                # STARTTLS nur wenn der Server es anbietet, sonst skippen
+                # (manche interne Relays laufen unverschluesselt).
+                try:
+                    if smtp.has_extn("STARTTLS"):
+                        smtp.starttls()
+                        smtp.ehlo()
+                except smtplib.SMTPException as exc:
+                    log.info("STARTTLS nicht moeglich (%s) - fahre ohne TLS fort.", exc)
             if settings.smtp_user:
                 smtp.login(settings.smtp_user, settings.smtp_password)
             smtp.send_message(msg, to_addrs=rcpt)
-    except Exception as exc:
+        finally:
+            try:
+                smtp.quit()
+            except Exception:
+                pass
+    except smtplib.SMTPAuthenticationError as exc:
+        msg_short = "SMTP-Authentifizierung fehlgeschlagen ({}): User/Passwort pruefen".format(
+            exc.smtp_code if hasattr(exc, "smtp_code") else "?")
         log.warning("Mailversand fehlgeschlagen: %s", exc)
-        return False
+        return False, msg_short
+    except smtplib.SMTPRecipientsRefused as exc:
+        msg_short = "Empfaenger abgelehnt: {}".format(list(exc.recipients.keys())[:3])
+        log.warning("Mailversand fehlgeschlagen: %s", exc)
+        return False, msg_short
+    except smtplib.SMTPSenderRefused as exc:
+        msg_short = "Absender abgelehnt: {} (SMTP_FROM in .env pruefen)".format(exc.sender)
+        log.warning("Mailversand fehlgeschlagen: %s", exc)
+        return False, msg_short
+    except smtplib.SMTPConnectError as exc:
+        msg_short = "Verbindung zum SMTP-Server fehlgeschlagen: {}".format(exc)
+        log.warning(msg_short)
+        return False, msg_short
+    except (TimeoutError, OSError) as exc:
+        msg_short = "Netzwerk/Timeout zum SMTP-Server: {}".format(str(exc)[:120])
+        log.warning(msg_short)
+        return False, msg_short
+    except smtplib.SMTPException as exc:
+        msg_short = "SMTP-Fehler: {}".format(str(exc)[:160])
+        log.warning(msg_short)
+        return False, msg_short
+    except Exception as exc:
+        msg_short = "{}: {}".format(type(exc).__name__, str(exc)[:160])
+        log.warning("Mailversand fehlgeschlagen: %s", msg_short)
+        return False, msg_short
+
     log.info("Mail an %s versendet: %s",
              ", ".join(rcpt[:3]) + ("..." if len(rcpt) > 3 else ""),
              subject)
-    return True
+    return True, None
 
 
 # ---------------------------------------------------------------------------
@@ -135,10 +187,10 @@ def send_daily_summary(days: int = 1, min_score: int | None = None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-def send_test_mail() -> bool:
-    """Sendet eine 1-zeilige Test-Mail, um die SMTP-Konfig zu pruefen."""
+def send_test_mail() -> tuple[bool, str | None]:
+    """Sendet eine 1-zeilige Test-Mail. Liefert (ok, error_message)."""
     if not is_configured():
-        return False
+        return False, "SMTP nicht konfiguriert (NOTIFY_EMAIL / SMTP_HOST leer)"
     plain = (
         "Das ist eine Test-Mail von der FBE-Ausschreibungsplattform.\n\n"
         "Wenn du das liest, ist der SMTP-Versand funktional. Tagesszusammen-\n"
@@ -146,7 +198,12 @@ def send_test_mail() -> bool:
         "im Scheduler aktiviert.\n\n"
         "Zeitstempel: {}\n".format(datetime.now().isoformat(timespec="seconds"))
     )
-    return _send("[FBE] Test-Mail · SMTP funktioniert", plain)
+    ok, err = _send_to(
+        to=[settings.notify_email] if settings.notify_email else [],
+        subject="[FBE] Test-Mail · SMTP funktioniert",
+        plain_body=plain,
+    )
+    return ok, err
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +311,7 @@ def send_tender_mail(
     """
     if not to:
         log.info("send_tender_mail: kein Empfaenger angegeben.")
-        return False
+        return False, "Kein Empfaenger"
     if subject is None:
         subject = "Ausschreibung: {}".format(tender.title or "(ohne Titel)")
     plain = _format_tender_plain(

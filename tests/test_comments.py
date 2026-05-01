@@ -322,8 +322,11 @@ def test_admin_test_mail_blocked_when_not_configured(auth_client):
     """Ohne SMTP-Konfig liefert /admin/test-mail eine klare Fehlermeldung."""
     r = auth_client.post("/admin/test-mail", follow_redirects=False)
     assert r.status_code == 303
-    assert "/admin/settings?error=" in r.headers["location"]
-    assert "SMTP" in r.headers["location"]
+    # Pre-flight in api.py blockt mit 'SMTP+nicht+konfiguriert'.
+    # Wenn jemand die Pre-flight uebergeht, bekommt er den Tuple-Error
+    # 'SMTP nicht konfiguriert (NOTIFY_EMAIL / SMTP_HOST leer)'.
+    loc = r.headers["location"].lower()
+    assert "smtp" in loc and "konfiguriert" in loc
 
 
 def test_admin_send_summary_blocked_when_not_configured(auth_client):

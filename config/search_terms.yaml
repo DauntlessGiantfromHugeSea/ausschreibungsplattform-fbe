@@ -1,22 +1,153 @@
 # Suchbegriffe gruppiert nach Themencluster.
-# weight: high (3) | medium (2) | low (1)
-# Synonyme werden case-insensitive geprueft.
+# weight: very_high (30) | high (20) | medium (10) | low (4)
+# Synonyme werden case-insensitive geprueft. Komposita matchen mit linker
+# Wortgrenze ('Tiefbau' findet 'Tiefbauarbeiten').
+# Begriffe sind cluster-eindeutig (kein Begriff in zwei Clustern).
 
 clusters:
-  - name: "Flüssigboden / ZFSV (Kernthema)"
-    weight: high
+  # =====================================================================
+  # KERN-CLUSTER (very_high) - FBE-Kerngeschaeft. Ein Treffer hier
+  # garantiert HIGH-Score, da 30 Cluster-Punkte + 30 Kernthema-Bonus
+  # + 10 Frist-Bonus >= 60 (HIGH-Schwelle).
+  # =====================================================================
+
+  - name: "Flüssigboden / ZFSV / RSS-Flüssigboden"
+    weight: very_high
     terms:
       - "Flüssigboden"
       - "Fluessigboden"
       - "RSS-Flüssigboden"
       - "RSS Flüssigboden"
+      - "RSS-Verfahren"
+      - "RSS Verfahren"
       - "ZFSV"
       - "zeitweise fließfähiger selbstverdichtender Verfüllbaustoff"
+      - "zeitweise fließfähige selbstverdichtende Verfüllbaustoffe"
+      - "fließfähiger selbstverdichtender Verfüllbaustoff"
+      - "fließfähige selbstverdichtende Verfüllbaustoffe"
+      - "zeitweise fließfähiger Verfüllbaustoff"
       - "fließfähiger Verfüllbaustoff"
       - "selbstverdichtender Verfüllbaustoff"
       - "zeitweise fließfähig"
-      - "ZTV-A StB"
+      - "Flüssigbodenverfahren"
+      - "Flüssigbodenbauweise"
+      - "Flüssigverfüllung"
+      - "Verfüllung mit Flüssigboden"
+      - "Leitungsgrabenverfüllung mit Flüssigboden"
+      - "Rohrgrabenverfüllung mit Flüssigboden"
+      - "Baugrubenverfüllung mit Flüssigboden"
+      - "Hohlraumverfüllung mit Flüssigboden"
+      - "Flüssigboden nach RAL GZ 507"
+      - "Flüssigboden nach ZTV-A StB"
       - "RAL GZ 507"
+      - "ZTV-A StB"
+      - "Güteüberwachter Flüssigboden"
+      - "qualitätsgesicherter Flüssigboden"
+      - "Flüssigbodenrezeptur"
+      - "Rezepturentwicklung Flüssigboden"
+      - "Flüssigbodenprüfung"
+      - "Eignungsprüfung Flüssigboden"
+      - "Kontrollprüfung Flüssigboden"
+
+  - name: "Thermisch stabilisierende Böden / thermische Bettung"
+    weight: very_high
+    terms:
+      - "thermisch stabilisierender Boden"
+      - "thermisch stabilisierende Böden"
+      - "thermisch stabilisierter Boden"
+      - "thermisch stabilisierte Böden"
+      - "thermisch optimierter Boden"
+      - "thermisch optimierte Böden"
+      - "thermisch verbesserter Boden"
+      - "thermisch verbesserte Böden"
+      - "thermisch leitfähiger Boden"
+      - "thermisch leitfähige Böden"
+      - "thermisch leitfähiger Verfüllbaustoff"
+      - "thermisch leitfähige Verfüllbaustoffe"
+      - "wärmeleitfähiger Verfüllbaustoff"
+      - "wärmeleitfähige Verfüllbaustoffe"
+      - "wärmeleitfähiger Boden"
+      - "wärmeleitfähige Böden"
+      - "thermische Stabilisierung"
+      - "thermische Bodenstabilisierung"
+      - "thermische Verfüllung"
+      - "thermische Rückverfüllung"
+      - "thermische Leitfähigkeit Boden"
+      - "Wärmeleitfähigkeit Boden"
+      - "Wärmeleitfähigkeit Verfüllbaustoff"
+      - "λ-Wert Boden"
+      - "Lambda-Wert Boden"
+      - "thermischer Bettungswiderstand"
+      - "spezifischer Erdwärmewiderstand"
+      - "Erdwärmewiderstand"
+      - "Kabelbettung thermisch"
+      - "thermische Kabelbettung"
+      - "thermisch optimierte Kabelbettung"
+      - "thermische Einbettung Erdkabel"
+      - "wärmeableitende Bettung"
+      - "wärmeableitender Verfüllbaustoff"
+      - "Boden zur Wärmeableitung"
+      - "Verfüllmaterial zur Wärmeableitung"
+
+  - name: "pro thermolith / pro thermolith TS B4"
+    weight: very_high
+    terms:
+      - "pro thermolith"
+      - "pro thermolith TS"
+      - "pro thermolith TS B4"
+      - "Thermolith"
+      - "Thermolith TS"
+      - "Thermolith TS B4"
+      - "thermolithischer Boden"
+      - "thermolithischer Verfüllbaustoff"
+      - "thermolithische Bettung"
+      - "thermolithische Kabelbettung"
+      - "TS B4"
+      - "TS-B4"
+      - "pro thermolith B4"
+      - "pro thermolith Kabelbettung"
+      - "pro thermolith Verfüllbaustoff"
+      - "pro thermolith für Erdkabel"
+      - "pro thermolith für Stromtrassen"
+      - "pro thermolith für Kabelgräben"
+      - "pro thermolith für Hochspannungskabel"
+      - "thermisch stabilisierender Boden pro thermolith"
+      - "thermisch optimierter Verfüllbaustoff pro thermolith"
+      - "Flüssigboden pro thermolith"
+      - "ZFSV pro thermolith"
+
+  - name: "Ausschreibungsformulierungen Kern (FBE-Produkte)"
+    weight: very_high
+    terms:
+      - "Flüssigboden ausgeschrieben"
+      - "ZFSV ausgeschrieben"
+      - "Verfüllung mit ZFSV"
+      - "Rückverfüllung mit ZFSV"
+      - "Verfüllung mit fließfähigem Verfüllbaustoff"
+      - "Rückverfüllung mit fließfähigem Verfüllbaustoff"
+      - "Einbau von Flüssigboden"
+      - "Lieferung und Einbau von Flüssigboden"
+      - "Herstellen von Flüssigboden"
+      - "Herstellen und Einbauen von ZFSV"
+      - "Lieferung und Einbau ZFSV"
+      - "Einbau thermisch stabilisierender Böden"
+      - "Lieferung thermisch stabilisierender Böden"
+      - "Herstellen thermisch stabilisierender Böden"
+      - "thermisch stabilisierender Verfüllbaustoff"
+      - "thermisch optimierter Verfüllbaustoff"
+      - "thermisch leitfähige Rückverfüllung"
+      - "thermisch leitfähige Kabelbettung"
+      - "Kabelgraben mit thermisch stabilisierendem Boden verfüllen"
+      - "Kabelgraben mit wärmeleitfähigem Material verfüllen"
+      - "Verfüllung mit pro thermolith TS B4"
+      - "Lieferung pro thermolith TS B4"
+      - "Einbau pro thermolith TS B4"
+      - "Kabelbettung mit pro thermolith TS B4"
+      - "thermische Bettung mit pro thermolith TS B4"
+
+  # =====================================================================
+  # ANGRENZENDE GESCHAEFTSFELDER (high)
+  # =====================================================================
 
   - name: "Verfüllung / Hohlräume"
     weight: high
@@ -29,6 +160,47 @@ clusters:
       - "Bodenverfüllung"
       - "Schachtverfüllung"
       - "Grabenverfüllung"
+
+  - name: "Erdkabel / Stromtrassen / Kabelgraben"
+    weight: high
+    terms:
+      - "Erdkabel"
+      - "Erdkabeltrasse"
+      - "Kabeltrasse"
+      - "Stromtrasse"
+      - "Energietrasse"
+      - "Kabelgraben"
+      - "Kabelgrabenverfüllung"
+      - "Kabelbettung"
+      - "Kabelschutzrohr"
+      - "Kabelschutzrohre"
+      - "Leerrohrtrasse"
+      - "Schutzrohrtrasse"
+      - "Hochspannungskabel"
+      - "Höchstspannungskabel"
+      - "Mittelspannungskabel"
+      - "110-kV-Kabel"
+      - "110 kV Kabel"
+      - "220-kV-Kabel"
+      - "220 kV Kabel"
+      - "380-kV-Kabel"
+      - "380 kV Kabel"
+      - "HGÜ"
+      - "Gleichstromtrasse"
+      - "Wechselstromtrasse"
+      - "Netzverstärkung"
+      - "Netzausbau"
+      - "Stromnetzausbau"
+      - "Kabeltiefbau"
+      - "Tiefbau für Erdkabel"
+      - "Verfüllung Kabelgraben"
+      - "Rückverfüllung Kabelgraben"
+      - "Bettung von Erdkabeln"
+      - "thermische Auslegung Kabeltrasse"
+      - "Wärmeabfuhr Erdkabel"
+      - "zulässige Kabeltemperatur"
+      - "Dauerstrombelastbarkeit"
+      - "Strombelastbarkeit Kabel"
 
   - name: "Spundwand / Verbau / Baugrubensicherung"
     weight: high
@@ -53,20 +225,17 @@ clusters:
       - "Schlitzwand"
       - "Bohrlochverpressung"
 
-  - name: "Leitungsbau / Rohrleitungen"
+  - name: "Leitungsbau / Rohrleitungen (ohne Strom)"
     weight: high
     terms:
       - "Leitungsgraben"
       - "Rohrgraben"
       - "Kanalgraben"
-      - "Kabelgraben"
       - "Leitungsbau"
       - "Kanalbau"
       - "Kanalsanierung"
       - "Rohrleitung"
       - "Rohrleitungsbau"
-      - "Erdkabel"
-      - "Stromtrasse"
       - "Gasleitung"
       - "Wasserleitung"
       - "Trinkwasserleitung"
@@ -99,6 +268,10 @@ clusters:
       - "Asphaltbau"
       - "Asphaltarbeiten"
       - "Bitumenarbeiten"
+
+  # =====================================================================
+  # MEDIUM - Indikatoren, die in Kombination Gewicht bekommen
+  # =====================================================================
 
   - name: "DIN-Normen Bauausführung"
     weight: medium
@@ -143,6 +316,10 @@ clusters:
       - "Rückbau"
       - "Abbrucharbeiten"
 
+  # =====================================================================
+  # LOW - allein nicht relevant, scort nur als Beifang
+  # =====================================================================
+
   - name: "Allgemein (niedrige Relevanz allein)"
     weight: low
     terms:
@@ -156,19 +333,38 @@ clusters:
       - "Bauleistung"
       - "Bauleistungen"
 
-# Begriffe, die fuer die Volltext-Suche an Portalen verwendet werden.
+# Begriffe fuer die Volltext-Suche an Portalen (die das per URL erlauben).
 # Reduziert auf Kernbegriffe um Trefferzahl klein zu halten.
 query_terms:
   - "Flüssigboden"
   - "ZFSV"
+  - "RSS-Flüssigboden"
+  - "zeitweise fließfähiger selbstverdichtender Verfüllbaustoff"
+  - "fließfähiger Verfüllbaustoff"
   - "Verfüllbaustoff"
   - "Verfüllung Leitungsgraben"
-  - "Fernwärme Verfüllung"
   - "Hohlraumverfüllung"
+  - "thermisch stabilisierende Böden"
+  - "thermisch stabilisierender Boden"
+  - "thermisch optimierter Verfüllbaustoff"
+  - "thermisch leitfähiger Verfüllbaustoff"
+  - "wärmeleitfähiger Verfüllbaustoff"
+  - "thermische Kabelbettung"
+  - "Kabelbettung thermisch"
+  - "Erdkabel thermische Verfüllung"
+  - "Kabelgraben thermisch stabilisierender Boden"
+  - "pro thermolith"
+  - "pro thermolith TS"
+  - "pro thermolith TS B4"
+  - "Thermolith TS B4"
+  - "Flüssigboden pro thermolith"
+  - "ZFSV pro thermolith"
   - "Spundwand"
   - "Tiefbau"
+  - "Fernwärme Verfüllung"
 
-# CPV-Codes der EU – fuer TED-Filter (Tiefbau / Leitungsbau / Erdarbeiten)
+# CPV-Codes der EU - fuer TED-Filter (Tiefbau / Leitungsbau / Erdarbeiten /
+# Spundwand / Brunnenbohrung / Stromleitungen).
 cpv_codes:
   - "45112000"   # Aushub und Erdbewegungsarbeiten
   - "45111240"   # Bodenstabilisierung
@@ -182,9 +378,11 @@ cpv_codes:
   - "45232140"   # Fernwärmeleitungen
   - "45232150"   # Wasserverteilleitungen
   - "45232400"   # Abwasserkanal
-  - "45233000"   # Bauarbeiten Straßen
+  - "45233000"   # Bauarbeiten Strassen
   - "45221250"   # Tiefbauarbeiten
   - "45262210"   # Gruendung
   - "45262212"   # Baugrubensicherung
   - "45262213"   # Spundwandarbeiten
   - "45262220"   # Brunnenbohrung
+  - "45231400"   # Stromleitungen
+  - "45231600"   # Telekommunikationsleitungen

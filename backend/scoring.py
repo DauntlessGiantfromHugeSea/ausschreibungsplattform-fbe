@@ -24,10 +24,10 @@ from .config import settings
 from .search_terms import SearchConfig, load_search_config
 
 
-# Cluster-Punkte. Hoch genug, dass ein einzelner High-Cluster-Treffer
-# (z.B. ZFSV oder Tiefbau) zusammen mit Kernthema-Bonus + Frist-Bonus
-# bereits den HIGH-Score-Bereich erreicht (>= 60).
-WEIGHTS = {"high": 20, "medium": 10, "low": 4}
+# Cluster-Punkte. very_high ist hoeher als high, damit FBE-Kernthemen
+# (Fluessigboden/ZFSV/pro thermolith) garantiert HIGH-Score erreichen
+# auch ohne weitere Cluster-Treffer.
+WEIGHTS = {"very_high": 30, "high": 20, "medium": 10, "low": 4}
 MAX_HITS_PER_CLUSTER = 2
 
 
@@ -93,7 +93,7 @@ def score_text(
                     hits, weight, ", ".join(cluster_terms),
                 ),
             ))
-            if cluster.weight == "high":
+            if cluster.weight in {"high", "very_high"}:
                 has_high_match = True
 
     # Baseline-Bonus, wenn ein High-Cluster matcht (Fluessigboden, ZFSV,

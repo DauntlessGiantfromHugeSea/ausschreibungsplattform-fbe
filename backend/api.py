@@ -22,7 +22,7 @@ from .models import Comment, Tender, TenderStatus, SearchProfile, User
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
-from .scheduler import is_pipeline_running, next_run_time, run_pipeline_with_lock
+from .scheduler import force_release_lock, is_pipeline_running, next_run_time, run_pipeline_with_lock
 from .search_terms import load_search_config
 from . import yaml_store
 
@@ -667,10 +667,20 @@ def admin_settings(
     error: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    from . import db_backup
     counts = {
         "tenders": db.query(Tender).count(),
         "comments": db.query(Comment).count(),
         "profiles": db.query(SearchProfile).count(),
+    }
+    backups = db_backup.list_backups()
+    db_path = db_backup._db_file()
+    health = {
+        "is_running": is_pipeline_running(),
+        "db_size_kb": (db_path.stat().st_size // 1024) if db_path else 0,
+        "db_path": str(db_path) if db_path else "(non-SQLite)",
+        "backups_count": len(backups),
+        "last_backup": backups[0] if backups else None,
     }
     return templates.TemplateResponse(
         request, "settings.html",
@@ -678,9 +688,43 @@ def admin_settings(
             "user": _session_user(request),
             "counts": counts,
             "is_running": is_pipeline_running(),
+            "health": health,
+            "backups": backups[:5],
             "flash": flash,
             "error": error,
         },
+    )
+
+
+@app.post("/admin/release-lock")
+def admin_release_lock(request: Request):
+    """Notfallfunktion: Pipeline-Lock zwangsweise freigeben."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    was_held = force_release_lock()
+    msg = "Lock freigegeben." if was_held else "Kein aktiver Lock - nichts zu tun."
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/backup-now")
+def admin_backup_now(request: Request):
+    """Sofort ein DB-Backup erzeugen."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import db_backup
+    out = db_backup.maybe_backup(force=True)
+    if out:
+        msg = "Backup erstellt: {} ({} KB)".format(out.name, out.stat().st_size // 1024)
+    else:
+        msg = "Backup nicht erstellt - keine SQLite-DB konfiguriert?"
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
     )
 
 
@@ -702,6 +746,15 @@ def admin_reset_tenders(
             url="/admin/settings?error=Reset+nicht+bestaetigt+(Feld+leer)",
             status_code=303,
         )
+
+    # Auto-Backup vor dem zerstoerenden Reset.
+    try:
+        from . import db_backup
+        backup = db_backup.maybe_backup(force=True)
+        if backup:
+            log.info("Pre-Reset-Backup angelegt: %s", backup.name)
+    except Exception as exc:  # pragma: no cover
+        log.warning("Pre-Reset-Backup fehlgeschlagen: %s", exc)
 
     deleted_comments = db.query(Comment).delete(synchronize_session=False)
     deleted_tenders = db.query(Tender).delete(synchronize_session=False)

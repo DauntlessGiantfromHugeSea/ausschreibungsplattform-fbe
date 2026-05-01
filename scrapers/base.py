@@ -88,7 +88,16 @@ class BaseScraper:
 
     def can_fetch(self, url: str) -> bool:
         rp = self._load_robots()
-        return rp.can_fetch(settings.scraper_user_agent, url)
+        # Wir pruefen mit DEM User-Agent, mit dem wir auch tatsaechlich
+        # anfragen. Wenn das Portal robots.txt-Disallow nur fuer den
+        # FBE-Bot definiert hat, der per-Portal-Browser-UA aber nicht
+        # blockiert ist, soll der Browser-UA durchgelassen werden.
+        ua = self.config.get("user_agent") or settings.scraper_user_agent
+        if rp.can_fetch(ua, url):
+            return True
+        # Fallback: einige Portale lehnen jeden spezifischen UA ab, lassen
+        # aber '*' zu - oder umgekehrt. Wenn '*' erlaubt, akzeptieren wir.
+        return rp.can_fetch("*", url)
 
     # --- HTTP --------------------------------------------------------
     def get(self, url: str, **kwargs) -> httpx.Response:

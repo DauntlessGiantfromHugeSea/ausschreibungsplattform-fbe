@@ -148,6 +148,32 @@ class CrawlHtmlScraper(BaseScraper):
             if regex and not regex.search(full):
                 continue
             out.append(full)
+
+        # Aggressiver Fallback: wenn der konfigurierte Selektor 0 Links bringt,
+        # akzeptiere jeden internen Anchor, dessen Pfad+Query nach Bekanntmachung
+        # aussieht. Pattern wird absichtlich nur auf Path+Query angewendet, weil
+        # Hostnames wie 'evergabe-online.de' selbst schon 'vergabe' enthalten.
+        if not out and config.get("aggressive_fallback", True):
+            from urllib.parse import urlsplit
+            broad = re.compile(
+                r"(/notice|/publication|/bekanntmachung|/ausschreibung|"
+                r"/auftrag|/vergabe|/tender|/announcement|/[0-9]{5,}|"
+                r"[?&]id=[A-Za-z0-9])",
+                re.IGNORECASE,
+            )
+            for a in soup.find_all("a", href=True):
+                href = a["href"].strip()
+                if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                    continue
+                # nur interne / relative Links
+                if href.startswith("http") and not href.startswith(base_url):
+                    continue
+                full = urljoin(base_url, href)
+                parts = urlsplit(full)
+                pq = parts.path + ("?" + parts.query if parts.query else "")
+                if not broad.search(pq):
+                    continue
+                out.append(full)
         return out
 
     # ------------------------------------------------------------------

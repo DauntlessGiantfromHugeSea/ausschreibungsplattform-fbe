@@ -84,18 +84,41 @@ portals:
     scraper: "crawl_html"
     base_url: "https://www.evergabe-online.de"
     strategy: "scrape"
-    notes: "Bund-Laender-Plattform der Beschaffungsstelle des BMI - Crawl-Modus."
+    notes: |
+      Bund-Laender-Plattform der Beschaffungsstelle des BMI.
+      Reiner Crawl-Modus - keine URL-Suche, stattdessen das oeffentliche
+      Listing aller aktuellen Bekanntmachungen (publishDateRange=ALL).
+      Volltext-Filter laeuft client-seitig auf den Detail-Seiten.
     config:
+      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
       listing_paths:
-        - "/search.html?searchScope=ANNOUNCEMENT"
-      link_selector: "a[href*='/announcement/'], a[href*='/notice/'], a.searchResultLink"
+        - "/search.html?publishDateRange=ALL"
+        - "/search.html?1"
+        - "/search.html"
+      # Detail-URLs sind heute typischerweise /tenderdocuments/.../<id>
+      # oder /notice.html?... oder /announcement/... - alle plausiblen
+      # Pfade akzeptieren.
+      link_selector: >
+        a[href*='/notice'],
+        a[href*='/announcement'],
+        a[href*='/tender'],
+        a[href*='/Bekanntmachung'],
+        a[href*='id='],
+        a.searchResultLink,
+        a.publicationLink,
+        a.notice-link,
+        table.searchResults a,
+        table.results a,
+        td.title a
+      # Numerische / hash-artige Detail-IDs ausfiltern, ueber den Pfad-Match.
+      link_pattern: "(notice|announcement|tender|Bekanntmachung|id=|/[0-9A-F]{6,})"
       max_details: 60
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .title, .announcement-title"
-      detail_authority_selector: ".authority, .buyer, .vergabestelle"
-      detail_location_selector: ".place, .location, .ort"
-      detail_deadline_selector: ".deadline, .frist, .submissionDeadline"
-      detail_publication_selector: ".publicationDate, .published"
+      request_delay_s: 0.4
+      detail_title_selector: "h1, .title, .announcement-title, .notice-title"
+      detail_authority_selector: ".authority, .buyer, .vergabestelle, .auftraggeber"
+      detail_location_selector: ".place, .location, .ort, .erfuellungsort"
+      detail_deadline_selector: ".deadline, .frist, .submissionDeadline, .angebotsfrist"
+      detail_publication_selector: ".publicationDate, .published, .veroeffentlicht"
 
   - name: "DTVP - Deutsches Vergabeportal"
     enabled: true

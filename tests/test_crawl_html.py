@@ -50,6 +50,48 @@ def test_extract_links_filters_pattern():
     assert all(u.startswith("https://example.org/") for u in links)
 
 
+def test_aggressive_fallback_when_selector_misses():
+    """Selektor passt nicht, aber Fallback findet Bekanntmachungs-Links."""
+    html = """
+    <html><body>
+    <main>
+      <table class="searchResults">
+        <tr><td><a href="/notice.html?id=ABC1234">Bekanntmachung 1</a></td></tr>
+        <tr><td><a href="/announcement/56789">Bekanntmachung 2</a></td></tr>
+        <tr><td><a href="/static/style.css">Stylesheet</a></td></tr>
+        <tr><td><a href="https://external.example/x">External</a></td></tr>
+      </table>
+    </main>
+    </body></html>
+    """
+    cfg = {
+        # absichtlich passt der Selektor NICHT auf die Anchor-Klassen
+        "link_selector": "a.does-not-match",
+    }
+    links = CrawlHtmlScraper._extract_links(
+        html, base_url="https://www.evergabe-online.de", config=cfg,
+    )
+    # Fallback findet die internen Bekanntmachungs-Links
+    assert any("/notice.html?id=ABC1234" in u for u in links)
+    assert any("/announcement/56789" in u for u in links)
+    assert not any("style.css" in u for u in links)
+    assert not any("external.example" in u for u in links)
+
+
+def test_aggressive_fallback_can_be_disabled():
+    html = """
+    <a href="/notice.html?id=999">x</a>
+    """
+    cfg = {
+        "link_selector": "a.does-not-match",
+        "aggressive_fallback": False,
+    }
+    links = CrawlHtmlScraper._extract_links(
+        html, base_url="https://www.evergabe-online.de", config=cfg,
+    )
+    assert links == []
+
+
 def test_parse_detail_keeps_only_matching():
     cfg = {
         "detail_title_selector": "h1",

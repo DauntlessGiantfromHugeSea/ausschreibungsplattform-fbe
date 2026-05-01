@@ -219,11 +219,11 @@ class CosinexScraper(BaseScraper):
                     url=url_full,
                 ))
 
-        # Fallback 2: aggressiv. Jede interne URL, die wie eine Bekanntmachung
-        # aussieht (Pfad enthaelt notice|publication|ausschreibung|auftrag|
-        # vergabe|tender|CXP-ID|>=5-stellige Zahl). Verbessert Trefferquote
-        # bei Cosinex-Layouts, deren CSS-Klassen wir nicht treffen.
+        # Fallback 2: aggressiv. Jede interne URL, deren Pfad+Query nach
+        # Bekanntmachung aussieht. Pattern auf Path+Query, weil sonst der
+        # Hostname (z.B. 'vergabe.nrw.de') selbst schon matcht.
         if not out:
+            from urllib.parse import urlsplit
             for a in soup.find_all("a", href=True):
                 href = a["href"].strip()
                 if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
@@ -231,7 +231,10 @@ class CosinexScraper(BaseScraper):
                 # nur interne / relative Links
                 if href.startswith("http") and not href.startswith(base_url):
                     continue
-                if not BROAD_NOTICE_RE.search(href):
+                url_full = urljoin(base_url, href)
+                parts = urlsplit(url_full)
+                pq = parts.path + ("?" + parts.query if parts.query else "")
+                if not BROAD_NOTICE_RE.search(pq):
                     continue
                 title = a.get_text(" ", strip=True)
                 if not title or len(title) < 8:
@@ -240,7 +243,6 @@ class CosinexScraper(BaseScraper):
                 if title.lower() in {"hier", "weiter", "zurueck", "zurück", "merken",
                                      "drucken", "details", "mehr"}:
                     continue
-                url_full = urljoin(base_url, href)
                 out.setdefault(url_full, TenderItem(
                     title=title[:500],
                     portal=portal_name,

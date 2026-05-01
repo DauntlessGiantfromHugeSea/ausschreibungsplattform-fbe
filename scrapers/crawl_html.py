@@ -168,17 +168,36 @@ class CrawlHtmlScraper(BaseScraper):
             )
             junk_titles = {"hier", "weiter", "zurueck", "zurück", "merken",
                            "drucken", "details", "mehr", "anmelden",
-                           "login", "kontakt", "impressum", "home"}
+                           "login", "kontakt", "impressum", "home",
+                           "datenschutz", "barrierefreiheit", "agb",
+                           "haftungsausschluss", "newsletter"}
+            # Pfad-Praefixe, die typisch fuer Navigation/Verwaltungs-Seiten
+            # sind, nicht fuer Bekanntmachungen.
+            nav_path_prefixes = re.compile(
+                r"^/(?:vergabestellen|informationen-fuer-bieter|"
+                r"informationen|geltende-regelungen|service|hilfe|"
+                r"kontakt|impressum|datenschutz|barrierefreiheit|"
+                r"agb|home|startseite|ueber-uns|wir-ueber-uns|"
+                r"staatskanzlei|ministerium|ministerien)",
+                re.IGNORECASE,
+            )
             for a in soup.find_all("a", href=True):
                 href = a["href"].strip()
                 if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
                     continue
                 if href.startswith("http") and not href.startswith(base_url):
                     continue
+                # Skip wenn der Anchor in einem Navigations-/Footer-Container
+                # liegt. Echte Bekanntmachungen liegen in <main>/<table>/
+                # <article>, nicht in <nav>/<footer>/<header>/<aside>.
+                if _in_navigation_context(a):
+                    continue
                 full = urljoin(base_url, href)
                 parts = urlsplit(full)
                 pq = parts.path + ("?" + parts.query if parts.query else "")
                 if asset_re.search(pq):
+                    continue
+                if nav_path_prefixes.match(pq):
                     continue
                 title = a.get_text(" ", strip=True)
                 if title and title.lower() in junk_titles:
@@ -238,6 +257,33 @@ class CrawlHtmlScraper(BaseScraper):
 
 
 # ---------------------------------------------------------------------------
+def _in_navigation_context(el) -> bool:
+    """True wenn der Anchor in einem Nav-/Footer-/Header-Container liegt.
+
+    Schaut bis zu 6 Eltern hoch nach <nav>/<footer>/<header>/<aside>
+    oder Klassen/IDs, die typisch fuer Navigation sind.
+    """
+    nav_class_re = re.compile(
+        r"\b(nav|navigation|menu|footer|header|sidebar|aside|"
+        r"breadcrumb|topbar|main-menu|sub-menu|metamenu|burger|"
+        r"dropdown-menu|modul-teaser)\b",
+        re.IGNORECASE,
+    )
+    cur = el
+    for _ in range(6):
+        if cur is None or getattr(cur, "name", None) is None:
+            return False
+        tag = cur.name.lower()
+        if tag in {"nav", "footer", "header", "aside"}:
+            return True
+        cls = " ".join(cur.get("class") or [])
+        eid = cur.get("id") or ""
+        if nav_class_re.search(cls) or nav_class_re.search(eid):
+            return True
+        cur = cur.parent
+    return False
+
+
 def _contains_any_term(text: str, terms: Iterable[str]) -> bool:
     if not text:
         return False

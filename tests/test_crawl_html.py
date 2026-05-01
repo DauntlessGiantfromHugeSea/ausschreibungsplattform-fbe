@@ -92,6 +92,54 @@ def test_aggressive_fallback_can_be_disabled():
     assert links == []
 
 
+def test_aggressive_fallback_skips_nav_and_footer_links():
+    """Echtes Symptom aus dem Sachsen-Anhalt-Dump: footer-/menue-Links wie
+    'Impressum', 'Datenschutz', 'Ministerium fuer Inneres und Sport' wurden
+    als Tender erkannt, weil ihr Linktext lang genug war ODER ihr Pfad
+    /vergabestellen/... enthielt. Der Nav-Context-Filter muss die abweisen."""
+    html = """
+    <html><body>
+    <nav class="main-menu">
+      <a href="/staatskanzlei-und-ministerium-fuer-kultur">
+        Staatskanzlei und Ministerium fuer Kultur</a>
+      <a href="/ministerium-der-finanzen">Ministerium der Finanzen</a>
+    </nav>
+    <header>
+      <a href="/home">Home</a>
+      <a href="/vergabestellen/informationen-fuer-vergabestellen">
+        Informationen fuer Vergabestellen</a>
+    </header>
+    <footer class="footer">
+      <a href="/impressum">Impressum</a>
+      <a href="/datenschutz">Datenschutz</a>
+      <a href="/barrierefreiheit">Erklaerung zur Barrierefreiheit</a>
+    </footer>
+    <main>
+      <a href="/recherche-aktueller-vergaben/show?id=ABC123">
+        Verfuellung Leitungsgraben Magdeburg mit Fluessigboden</a>
+      <a href="/recherche-aktueller-vergaben/show?id=DEF456">
+        Tiefbauarbeiten Hauptstrasse Halle</a>
+    </main>
+    </body></html>
+    """
+    cfg = {"link_selector": "a.does-not-match"}
+    links = CrawlHtmlScraper._extract_links(
+        html, base_url="https://www.evergabe.sachsen-anhalt.de", config=cfg,
+    )
+    # Nav/Header/Footer raus
+    assert not any("staatskanzlei" in u.lower() for u in links)
+    assert not any("/impressum" in u for u in links)
+    assert not any("/datenschutz" in u for u in links)
+    assert not any("barrierefreiheit" in u for u in links)
+    assert not any("/home" in u for u in links)
+    assert not any("/ministerium" in u for u in links)
+    # Vergabestellen-Pfad ist Verwaltungs-Seite, nicht Tender
+    assert not any("/vergabestellen" in u for u in links)
+    # Echte Tender bleiben drin
+    assert any("recherche-aktueller-vergaben/show?id=ABC123" in u for u in links)
+    assert any("recherche-aktueller-vergaben/show?id=DEF456" in u for u in links)
+
+
 def test_aggressive_fallback_accepts_long_titles_without_url_match():
     """Wenn der URL-Pfad nicht nach Bekanntmachung aussieht, aber der Linktext
     substantiell ist (>= 25 Zeichen), wird der Link trotzdem als Treffer

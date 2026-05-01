@@ -267,9 +267,23 @@ class CosinexScraper(BaseScraper):
 
         # Fallback 2: aggressiv. Jede interne URL, deren Pfad+Query nach
         # Bekanntmachung aussieht. Pattern auf Path+Query, weil sonst der
-        # Hostname (z.B. 'vergabe.nrw.de') selbst schon matcht.
+        # Hostname (z.B. 'vergabe.nrw.de') selbst schon matcht. Nav-/Footer-
+        # Anchors werden ueber _in_navigation_context herausgefiltert,
+        # damit Impressum/Datenschutz/Ministerium nicht durchrutscht.
         if not out:
             from urllib.parse import urlsplit
+            nav_path_prefixes = re.compile(
+                r"^/(?:vergabestellen|informationen-fuer-bieter|"
+                r"informationen|geltende-regelungen|service|hilfe|"
+                r"kontakt|impressum|datenschutz|barrierefreiheit|"
+                r"agb|home|startseite|ueber-uns|wir-ueber-uns|"
+                r"staatskanzlei|ministerium|ministerien)",
+                re.IGNORECASE,
+            )
+            junk_titles = {"hier", "weiter", "zurueck", "zurück", "merken",
+                           "drucken", "details", "mehr", "anmelden", "login",
+                           "kontakt", "impressum", "datenschutz",
+                           "barrierefreiheit", "agb", "newsletter", "home"}
             for a in soup.find_all("a", href=True):
                 href = a["href"].strip()
                 if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
@@ -277,24 +291,22 @@ class CosinexScraper(BaseScraper):
                 # nur interne / relative Links
                 if href.startswith("http") and not href.startswith(base_url):
                     continue
+                if _in_navigation_context(a):
+                    continue
                 url_full = urljoin(base_url, href)
                 parts = urlsplit(url_full)
                 pq = parts.path + ("?" + parts.query if parts.query else "")
+                if re.search(r"\.(css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|pdf)(\?|$)",
+                             pq, re.IGNORECASE):
+                    continue
+                if nav_path_prefixes.match(pq):
+                    continue
                 title = a.get_text(" ", strip=True)
                 if not title or len(title) < 8:
                     continue
-                # Junk-Titel rauswerfen
-                if title.lower() in {"hier", "weiter", "zurueck", "zurück", "merken",
-                                     "drucken", "details", "mehr", "anmelden", "login"}:
+                if title.lower() in junk_titles:
                     continue
-                # Akzeptiere wenn URL nach Bekanntmachung aussieht ODER der
-                # sichtbare Linktext lang genug ist, um ein realer Titel zu sein
-                # (Menue-Eintraege sind in der Regel <25 Zeichen).
                 if not (BROAD_NOTICE_RE.search(pq) or len(title) >= 25):
-                    continue
-                # Asset-Endungen abweisen (auch wenn Text lang waere).
-                if re.search(r"\.(css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|pdf)(\?|$)",
-                             pq, re.IGNORECASE):
                     continue
                 out.setdefault(url_full, TenderItem(
                     title=title[:500],
@@ -373,6 +385,31 @@ LABEL_STOPS = sorted({
     "Veröffentlichung", "Veroeffentlichung", "Veröffentlicht",
     "Publication date", "Auftragsart", "Vergabeart", "CPV",
 }, key=len, reverse=True)
+
+
+def _in_navigation_context(el) -> bool:
+    """True wenn der Anchor in <nav>/<footer>/<header>/<aside> oder einem
+    Container mit Klasse/ID 'nav|navigation|menu|footer|header|...' liegt.
+    Bis zu 6 Eltern hochgepeilt - das deckt typische Layouts ab."""
+    nav_class_re = re.compile(
+        r"\b(nav|navigation|menu|footer|header|sidebar|aside|"
+        r"breadcrumb|topbar|main-menu|sub-menu|metamenu|burger|"
+        r"dropdown-menu|modul-teaser)\b",
+        re.IGNORECASE,
+    )
+    cur = el
+    for _ in range(6):
+        if cur is None or getattr(cur, "name", None) is None:
+            return False
+        tag = cur.name.lower()
+        if tag in {"nav", "footer", "header", "aside"}:
+            return True
+        cls = " ".join(cur.get("class") or [])
+        eid = cur.get("id") or ""
+        if nav_class_re.search(cls) or nav_class_re.search(eid):
+            return True
+        cur = cur.parent
+    return False
 
 
 def _looks_like_notice(href: str) -> bool:

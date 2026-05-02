@@ -98,14 +98,26 @@ portals:
       # sein koennen.
       search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest&search%5Bcraft_code_ids%5D%5B%5D=158&search%5Bcraft_code_ids%5D%5B%5D=446&search%5Bcraft_code_ids%5D%5B%5D=445&search%5Bcraft_code_ids%5D%5B%5D=122&search%5Bcraft_code_ids%5D%5B%5D=124&search%5Bcraft_code_ids%5D%5B%5D=132&search%5Bcraft_code_ids%5D%5B%5D=119&search%5Bcraft_code_ids%5D%5B%5D=123&search%5Bcraft_code_ids%5D%5B%5D=131&search%5Bcraft_code_ids%5D%5B%5D=120&search%5Bcraft_code_ids%5D%5B%5D=133&search%5Bcraft_code_ids%5D%5B%5D=130&search%5Bcraft_code_ids%5D%5B%5D=391&search%5Bcraft_code_ids%5D%5B%5D=121&search%5Bcraft_code_ids%5D%5B%5D=128&search%5Bcraft_code_ids%5D%5B%5D=118&search%5Bcraft_code_ids%5D%5B%5D=125&search%5Bcraft_code_ids%5D%5B%5D=126&search%5Bcraft_code_ids%5D%5B%5D=127&search%5Bcraft_code_ids%5D%5B%5D=129"
       # Auf den ersten /auftrag/-Link warten = Hydration ist fertig.
-      wait_for_selector: "a[href*='/auftrag/']"
-      wait_timeout_ms: 20000
+      wait_for_selector: "a[href*='/auftrag/'], #results-list-container article, #results-list-container > div"
+      wait_timeout_ms: 25000
       filter_by_terms: true
-      # Tailwind4-Cards: jeder div, der ein h2 UND einen /auftrag/-Link
-      # enthaelt. Dedup ueber URL faengt nested-matches ab.
-      result_selector: "div:has(h2):has(a[href*='/auftrag/']), article:has(a[href*='/auftrag/'])"
-      title_selector: "h2, h3"
-      description_selector: "p"
+      # Tailwind4-Cards (User-Screenshot): jede Card hat
+      # 'tw:flex tw:flex-col tw:gap-lg tw:pb-sm tw:px-sm' und einen
+      # stretched-link <a class='tw:after:absolute' href='/auftrag/...'>.
+      # Praeziser Selektor: div mit 'tw:gap-lg' UND einem /auftrag/-Anchor
+      # findet exakt die Cards (nicht den Outer-Container). Plus Fallbacks
+      # auf alten SSR-Container und andere Layouts.
+      result_selector: >
+        div[class*='tw:gap-lg']:has(a[href*='/auftrag/']),
+        div[class*='tw:flex-col'][class*='tw:px-sm']:has(a[href*='/auftrag/']),
+        article:has(a[href*='/auftrag/']),
+        #results-list-container > article,
+        #results-list-container > div,
+        #results-list-container > section,
+        #results-list-container > li,
+        [class*='@container'] > div:has(a[href*='/auftrag/'])
+      title_selector: "h2 a, h3 a, h2, h3, [class*='title']"
+      description_selector: "p, [class*='description'], [class*='excerpt']"
       link_selector: "a[href*='/auftrag/']"
 
   - name: "evergabe-online.de (BMI)"

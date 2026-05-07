@@ -84,12 +84,12 @@ class PlaywrightHtmlScraper(BaseScraper):
         items: dict[str, TenderItem] = {}
 
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
+            browser = pw.chromium.launch(headless=bool(self.config.get("headless", True)), args=self.config.get("chromium_args") or ["--disable-blink-features=AutomationControlled"])
             context = browser.new_context(user_agent=ua, locale="de-DE")
             try:
                 # Pro query_term ein Page-Load. Bei Listing-Mode (kein {term})
                 # nur einmal.
-                term_loop = terms if "{term}" in path or self.config.get("hash_json") else [None]
+                term_loop = (self.config.get("url_terms") or terms) if "{term}" in path or self.config.get("hash_json") else [None]
                 for term in term_loop:
                     url = self._build_url(path, term)
                     page = context.new_page()

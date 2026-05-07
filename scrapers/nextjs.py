@@ -62,10 +62,14 @@ DEFAULT_FIELD_MAP = {
 }
 
 # Welche Keys in Listen-Items deuten auf "Das ist ein Tender"?
+# Auch deutsche/Cosinex-/evergabe-Varianten, sonst findet die Heuristik
+# die Treffer-Liste nicht, wenn die Items nur kurzbezeichnung/auftrag_id
+# tragen.
 TENDER_HINTS = (
-    "title", "name", "subject", "bezeichnung",
-    "deadline", "frist", "submission_deadline",
-    "buyer", "vergabestelle", "auftraggeber",
+    "title", "name", "subject", "bezeichnung", "kurzbezeichnung", "headline",
+    "deadline", "frist", "submission_deadline", "angebotsfrist", "deadline_at",
+    "buyer", "buyer_name", "vergabestelle", "auftraggeber", "buyer_organisation",
+    "slug", "auftrag_id", "publication_id", "notice_id",
 )
 
 
@@ -86,6 +90,19 @@ class NextjsScraper(BaseScraper):
                 items.update(self._fetch_one(path, term))
             except Exception as exc:  # pragma: no cover – Netzwerk
                 log.warning("[%s] Fehler bei term '%s': %s", self.name, term, exc)
+
+        if self.config.get("filter_by_terms") and terms:
+            match_terms = [t.lower() for t in terms if t]
+            items = {
+                u: it for u, it in items.items()
+                if any(
+                    t in (it.title or "").lower()
+                    or t in (it.description or "").lower()
+                    or t in (it.contracting_authority or "").lower()
+                    for t in match_terms
+                )
+            }
+
         return list(items.values())
 
     # ------------------------------------------------------------------
@@ -124,7 +141,11 @@ class NextjsScraper(BaseScraper):
         if tenders_list is None:
             tenders_list = _find_tender_list(data)
         if not tenders_list:
-            log.warning("[%s] Keine Tender-Liste im JSON gefunden.", portal_name)
+            top_keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
+            log.warning(
+                "[%s] Keine Tender-Liste im __NEXT_DATA__ gefunden. Top-Level: %s",
+                portal_name, top_keys,
+            )
             return {}
 
         log.info("[%s] %d Eintraege im JSON gefunden.", portal_name, len(tenders_list))
@@ -142,6 +163,8 @@ class NextjsScraper(BaseScraper):
                 continue
             slug = _first_value(raw, field_map.get("slug", []))
             url = _first_value(raw, field_map["url"])
+            if isinstance(slug, str):
+                slug = slug.strip().lstrip("/")
             if not url and url_template and slug:
                 url = url_template.format(slug=slug, id=slug)
             if not url and slug:

@@ -12,6 +12,7 @@ from .config import PROJECT_ROOT
 
 
 CONFIG_PATH = PROJECT_ROOT / "config" / "search_terms.yaml"
+LOCAL_CONFIG_PATH = PROJECT_ROOT / "config" / "search_terms.local.yaml"
 
 
 @dataclass
@@ -43,7 +44,13 @@ class SearchConfig:
 
 @lru_cache(maxsize=1)
 def load_search_config(path: Path | None = None) -> SearchConfig:
-    p = Path(path) if path else CONFIG_PATH
+    # Bei Default-Pfad: erst search_terms.local.yaml pruefen, sonst base.
+    # Damit kann der User per Admin-UI eigene Suchbegriffe anlegen, ohne
+    # dass git pull konflikten.
+    if path is None and LOCAL_CONFIG_PATH.exists():
+        p = LOCAL_CONFIG_PATH
+    else:
+        p = Path(path) if path else CONFIG_PATH
     with p.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     clusters = [

@@ -8,6 +8,17 @@
   <span class="text-zinc-700">Ausschreibung #{{ tender.id }}</span>
 </nav>
 
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+    ✓ {{ flash }}
+  </div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+    ✗ {{ error }}
+  </div>
+{% endif %}
+
 {% set lvl = tender.relevance_level %}
 {% set color =
   'rose' if lvl == 'high'
@@ -220,6 +231,10 @@
     <div class="card p-6">
       <h3 class="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Schnellaktionen</h3>
       <div class="space-y-2">
+        <button type="button" class="btn-ghost w-full justify-start hover:!text-brand-700 hover:!border-brand-300"
+                onclick="document.getElementById('mail-composer').scrollIntoView({behavior:'smooth'}); document.getElementById('mail-to').focus();">
+          ✉ Per Mail weiterleiten
+        </button>
         <form method="post" action="/tender/{{ tender.id }}/quick-status">
           <input type="hidden" name="status" value="interessant">
           <button class="btn-ghost w-full justify-start hover:!text-emerald-700 hover:!border-emerald-300">★ Als interessant markieren</button>
@@ -234,6 +249,57 @@
         </form>
       </div>
     </div>
+
+    <!-- Mail-Composer -->
+    <div class="card p-6" id="mail-composer">
+      <h3 class="text-base font-semibold mb-1">✉ Mail versenden</h3>
+      {% if not mail_ready %}
+        <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3 mt-2">
+          SMTP nicht konfiguriert. Auf <a href="/admin/settings" class="underline">/admin/settings</a> einrichten.
+        </p>
+      {% elif not user %}
+        <p class="text-sm text-zinc-600 mt-2">
+          <a href="/login" class="text-brand-700 hover:underline">Anmelden</a>, um Mails zu versenden.
+        </p>
+      {% else %}
+      <p class="text-xs text-zinc-500 mb-4">
+        Versendet eine HTML-Mail mit FBE-Branding und allen Tender-Daten.
+        Mehrere Adressen mit Komma trennen.
+      </p>
+      <form method="post" action="/tender/{{ tender.id }}/send-mail" class="space-y-3"
+            onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').innerText='Wird versendet…';">
+        <div>
+          <label class="block text-xs font-medium text-zinc-600 mb-1">An *</label>
+          <input id="mail-to" name="to" type="text" required
+                 class="input"
+                 placeholder="kollege@firma.de, andere@firma.de">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-600 mb-1">CC</label>
+          <input name="cc" type="text" class="input" placeholder="optional">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-600 mb-1">Betreff</label>
+          <input name="subject" type="text" class="input"
+                 value="Ausschreibung: {{ tender.title|truncate(80, True, '…') }}">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-zinc-600 mb-1">Persönliche Nachricht</label>
+          <textarea name="custom_message" class="input min-h-[100px]"
+                    placeholder="Hallo,&#10;&#10;diese Ausschreibung könnte für uns interessant sein - ich denke vor allem wegen des Tiefbau-Anteils. Was meinst du?&#10;&#10;Viele Grüße"></textarea>
+          <p class="text-xs text-zinc-400 mt-1">
+            Wird als hervorgehobener Block über den Tender-Daten eingefügt.
+            Tender-Card mit Titel/Auftraggeber/Frist/Beschreibung wird automatisch
+            unten angehängt.
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <button type="submit" class="btn-primary flex-1">Mail senden</button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+
   </aside>
 </div>
 

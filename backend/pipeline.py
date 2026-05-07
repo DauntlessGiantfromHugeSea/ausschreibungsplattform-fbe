@@ -2,6 +2,11 @@
 
 Robustheit:
 - Jede Portal-Iteration in try/except.
+- Per-Portal-Watchdog: laeuft ein Scraper laenger als portal_timeout_s
+  (default 300s = 5 Min), wird die Pipeline nicht ewig blockiert -
+  TimeoutError wird als Portal-Fehler verbucht und der naechste Portal
+  laeuft. Der eigentliche Thread laeuft im Hintergrund weiter, das ist
+  ein bewusster Trade-off (Python erlaubt kein hartes Thread-Killen).
 - Jeder einzelne Item-Insert in try/except + per-Item-Commit, damit
   ein einzelner Fehler nicht die ganze Portal-Charge zurueckrollt.
 - Sonderfaelle (leere Titel/URLs, Fingerprint-Kollisionen, DB-Fehler)
@@ -12,6 +17,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from datetime import datetime
 from typing import List
 
@@ -29,6 +35,11 @@ from . import notify
 
 
 log = logging.getLogger(__name__)
+
+
+# Default Wallclock-Timeout pro Portal in Sekunden. Kann pro Portal
+# ueber config.portal_timeout_s ueberschrieben werden.
+DEFAULT_PORTAL_TIMEOUT_S = 300
 
 
 def _load_scraper(portal: PortalConfig):
@@ -80,23 +91,59 @@ def run_pipeline() -> dict:
             continue
 
         try:
-            with ScraperCls(base_url=portal.base_url, name=portal.name, config=portal.config) as scraper:
-                items = scraper.fetch(cfg.query_terms)
-                # HTTP-Diagnose: was wurde wirklich gehit?
-                # Nur die letzten 5 Requests behalten - reicht fuer das Dashboard.
-                portal_stats["http_log"] = list(scraper.http_log)[-5:]
+            scraper = ScraperCls(base_url=portal.base_url, name=portal.name, config=portal.config)
+        except Exception as exc:
+            log.exception("[%s] Scraper-Init fehlgeschlagen: %s", portal.name, exc)
+            portal_stats["errors"] = 1
+            portal_stats["error_msg"] = "{}: {}".format(type(exc).__name__, str(exc)[:180])
+            stats["errors"] += 1
+            stats["portals"].append(portal_stats)
+            continue
+
+        # Per-Portal-Watchdog: ein hangender Scraper soll nicht den ganzen
+        # Lauf blockieren. Wir lassen scraper.fetch in einem ThreadPool
+        # laufen und brechen nach portal_timeout_s ab.
+        portal_timeout = int((portal.config or {}).get(
+            "portal_timeout_s", DEFAULT_PORTAL_TIMEOUT_S))
+        items = []
+        try:
+            with ThreadPoolExecutor(max_workers=1, thread_name_prefix="scrape-{}".format(portal.name[:20])) as ex:
+                future = ex.submit(scraper.fetch, cfg.query_terms)
+                try:
+                    items = future.result(timeout=portal_timeout)
+                except FuturesTimeout:
+                    log.warning("[%s] Portal-Timeout nach %ds - skip", portal.name, portal_timeout)
+                    portal_stats["errors"] = 1
+                    portal_stats["error_msg"] = "Portal-Timeout nach {}s (config.portal_timeout_s)".format(portal_timeout)
+                    portal_stats["http_log"] = list(scraper.http_log)[-5:]
+                    stats["errors"] += 1
+                    stats["portals"].append(portal_stats)
+                    # Scraper-Close versuchen, nicht blockierend
+                    try:
+                        scraper.close()
+                    except Exception:
+                        pass
+                    continue
+            # HTTP-Diagnose: was wurde wirklich gehit?
+            # Nur die letzten 5 Requests behalten - reicht fuer das Dashboard.
+            portal_stats["http_log"] = list(scraper.http_log)[-5:]
         except Exception as exc:
             log.exception("[%s] Scraper.fetch fehlgeschlagen: %s", portal.name, exc)
             portal_stats["errors"] = 1
             portal_stats["error_msg"] = "{}: {}".format(type(exc).__name__, str(exc)[:180])
             # HTTP-Log auch im Fehlerfall, falls einzelne Requests durchgekommen sind.
             try:
-                portal_stats["http_log"] = list(scraper.http_log)[-5:]  # type: ignore[name-defined]
+                portal_stats["http_log"] = list(scraper.http_log)[-5:]
             except Exception:
                 pass
             stats["errors"] += 1
             stats["portals"].append(portal_stats)
             continue
+        finally:
+            try:
+                scraper.close()
+            except Exception:
+                pass
 
         portal_stats["fetched"] = len(items)
         portal_stats["sample_titles"] = [(it.title or "")[:120] for it in items[:3]]

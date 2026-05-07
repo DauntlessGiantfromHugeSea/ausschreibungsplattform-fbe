@@ -20,24 +20,63 @@ from .config import PROJECT_ROOT
 log = logging.getLogger(__name__)
 
 PORTALS_PATH = PROJECT_ROOT / "config" / "portals.yaml"
+PORTALS_LOCAL_PATH = PROJECT_ROOT / "config" / "portals.local.yaml"
 TERMS_PATH = PROJECT_ROOT / "config" / "search_terms.yaml"
+TERMS_LOCAL_PATH = PROJECT_ROOT / "config" / "search_terms.local.yaml"
 
 
 def read_portals_raw() -> dict:
-    return _load(PORTALS_PATH)
+    """Liest portals.yaml. Falls portals.local.yaml existiert, mergt es
+    drueber. So bleiben Admin-UI-Edits aus dem git fern und kollidieren
+    nicht mit git pulls."""
+    base = _load(PORTALS_PATH)
+    local = _load(PORTALS_LOCAL_PATH) if PORTALS_LOCAL_PATH.exists() else {}
+    if local:
+        return _merge_portals(base, local)
+    return base
 
 
 def read_terms_raw() -> dict:
+    """Liest search_terms.yaml + optionalen lokalen Override.
+
+    search_terms.local.yaml ueberschreibt komplett (nicht feldweise),
+    damit der User Cluster/Query-Terms/CPV-Codes lokal anpassen kann
+    ohne git-pull-Konflikte. Wenn nicht vorhanden -> Base-Datei.
+    """
+    if TERMS_LOCAL_PATH.exists():
+        local = _load(TERMS_LOCAL_PATH)
+        if local:
+            return local
     return _load(TERMS_PATH)
 
 
 def write_portals(data: dict) -> None:
-    _dump(PORTALS_PATH, data)
+    """Admin-UI schreibt seine Aenderungen in portals.local.yaml.
+
+    Damit bleibt die im git getrackte portals.yaml unveraendert und
+    'git pull' kollidiert nicht mehr mit UI-Toggles. Vor dem ersten
+    Schreiben wird der lokale Override aus dem Diff Base->Daten gebaut.
+    """
+    base = _load(PORTALS_PATH)
+    local_only = _diff_portals(base, data)
+    if local_only.get("portals"):
+        _dump(PORTALS_LOCAL_PATH, local_only)
+    elif PORTALS_LOCAL_PATH.exists():
+        # Wenn alle Aenderungen wieder mit Base identisch sind, Override entfernen.
+        PORTALS_LOCAL_PATH.unlink()
     _invalidate_portal_cache()
 
 
 def write_terms(data: dict) -> None:
-    _dump(TERMS_PATH, data)
+    """Admin-UI-Edits fuer Suchbegriffe gehen in search_terms.local.yaml,
+    damit die getrackte Base-Datei nicht durch UI-Toggles veraendert wird.
+    Wenn die Daten identisch zur Base sind, wird der Override geloescht."""
+    base = _load(TERMS_PATH)
+    if data == base:
+        if TERMS_LOCAL_PATH.exists():
+            TERMS_LOCAL_PATH.unlink()
+    else:
+        _dump(TERMS_LOCAL_PATH, data)
     _invalidate_terms_cache()
 
 
@@ -83,6 +122,48 @@ def _dump(path: Path, data: dict) -> None:
         if tmp_path.exists():
             tmp_path.unlink(missing_ok=True)
         raise
+
+
+def _merge_portals(base: dict, local: dict) -> dict:
+    """Ueberlagert local-Portale auf base. Match per name. Fehlende Portale
+    in base werden hinzugefuegt; existierende werden ueberschrieben (komplette
+    Portal-Konfig, nicht feldweise gemergt - Reihenfolge wie in base bewahrt).
+    """
+    base_portals = list(base.get("portals", []) or [])
+    local_portals = list(local.get("portals", []) or [])
+    by_name = {p.get("name"): i for i, p in enumerate(base_portals) if p.get("name")}
+
+    result_list = list(base_portals)  # copy
+    for lp in local_portals:
+        name = lp.get("name")
+        if not name:
+            continue
+        if name in by_name:
+            result_list[by_name[name]] = lp
+        else:
+            result_list.append(lp)
+    out = dict(base)
+    out["portals"] = result_list
+    return out
+
+
+def _diff_portals(base: dict, full: dict) -> dict:
+    """Ermittelt, welche Portale sich vom Base-Stand unterscheiden, und
+    liefert NUR die geaenderten/zusaetzlichen als 'portals'-Liste fuer das
+    local-Override-File."""
+    base_portals = list(base.get("portals", []) or [])
+    full_portals = list(full.get("portals", []) or [])
+    by_name = {p.get("name"): p for p in base_portals if p.get("name")}
+
+    diff: list[dict] = []
+    for fp in full_portals:
+        name = fp.get("name")
+        if not name:
+            continue
+        bp = by_name.get(name)
+        if bp != fp:
+            diff.append(fp)
+    return {"portals": diff} if diff else {}
 
 
 def _invalidate_portal_cache() -> None:

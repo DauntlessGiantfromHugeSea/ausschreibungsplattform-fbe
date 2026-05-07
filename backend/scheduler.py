@@ -55,6 +55,26 @@ def start_scheduler() -> BackgroundScheduler:
         coalesce=True,
         next_run_time=datetime.now(),  # gleich beim Start einmal laufen
     )
+
+    # Taegliche Zusammenfassung um SUMMARY_HOUR (default 7:00 lokal).
+    # Nur einplanen wenn SMTP konfiguriert ist - sonst Job-Spam in den Logs.
+    if settings.notify_email and settings.smtp_host:
+        from . import notify
+        sched.add_job(
+            lambda: notify.send_daily_summary(days=1),
+            trigger=CronTrigger(
+                hour=settings.summary_hour,
+                minute=settings.summary_minute,
+            ),
+            id="daily_summary",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        log.info("Tages-Mail: taeglich %02d:%02d an %s",
+                 settings.summary_hour, settings.summary_minute,
+                 settings.notify_email)
+
     sched.start()
     _scheduler = sched
     return sched
@@ -71,6 +91,13 @@ def run_pipeline_with_lock() -> dict | None:
         log.info("Suchlauf laeuft bereits - dieser Trigger wird uebersprungen.")
         return None
     try:
+        # Auto-Backup vor jedem Lauf (rate-limited auf alle 30 Min).
+        try:
+            from . import db_backup
+            db_backup.maybe_backup()
+        except Exception as exc:  # pragma: no cover
+            log.warning("Pre-Run-Backup fehlgeschlagen: %s", exc)
+
         log.info("Suchlauf gestartet…")
         stats = run_pipeline()
         save_run_state(stats)
@@ -85,6 +112,19 @@ def run_pipeline_with_lock() -> dict | None:
         return None
     finally:
         _pipeline_lock.release()
+
+
+def force_release_lock() -> bool:
+    """Notbremse: bricht das Lock zwangsweise auf, falls ein Suchlauf
+    haengt. Liefert True wenn ein Lock vorher gehalten wurde."""
+    was_held = is_pipeline_running()
+    # Lock ersetzen statt release() - vermeidet RuntimeError wenn nicht
+    # vom selben Thread aufgerufen.
+    global _pipeline_lock
+    _pipeline_lock = threading.Lock()
+    if was_held:
+        log.warning("Pipeline-Lock zwangsweise freigegeben (force_release_lock).")
+    return was_held
 
 
 def is_pipeline_running() -> bool:

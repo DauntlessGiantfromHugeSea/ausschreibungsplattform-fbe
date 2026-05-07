@@ -22,10 +22,10 @@
 {% endif %}
 
 <!-- Aktuelle DB-Stand -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
   <div class="card p-4">
     <div class="text-3xl font-semibold">{{ counts.tenders }}</div>
-    <div class="text-xs text-zinc-500 uppercase tracking-wider mt-1">Ausschreibungen in DB</div>
+    <div class="text-xs text-zinc-500 uppercase tracking-wider mt-1">Ausschreibungen</div>
   </div>
   <div class="card p-4">
     <div class="text-3xl font-semibold">{{ counts.comments }}</div>
@@ -35,7 +35,86 @@
     <div class="text-3xl font-semibold">{{ counts.profiles }}</div>
     <div class="text-xs text-zinc-500 uppercase tracking-wider mt-1">Suchprofile</div>
   </div>
+  <div class="card p-4">
+    <div class="text-3xl font-semibold">{{ (health.db_size_kb / 1024)|round(1) }}<span class="text-base text-zinc-500"> MB</span></div>
+    <div class="text-xs text-zinc-500 uppercase tracking-wider mt-1">DB-Größe</div>
+  </div>
 </div>
+
+<!-- System-Health -->
+<div class="card p-6 mb-6">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-semibold">System-Health</h2>
+    {% if health.is_running %}
+      <span class="pill bg-amber-100 text-amber-800">
+        <span class="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+        Suchlauf läuft
+      </span>
+    {% else %}
+      <span class="pill bg-emerald-100 text-emerald-800">
+        <span class="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+        Bereit
+      </span>
+    {% endif %}
+  </div>
+  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+    <div class="flex justify-between border-b border-zinc-100 pb-1">
+      <dt class="text-zinc-500">DB-Pfad</dt>
+      <dd class="font-mono text-xs text-zinc-700 truncate ml-2">{{ health.db_path }}</dd>
+    </div>
+    <div class="flex justify-between border-b border-zinc-100 pb-1">
+      <dt class="text-zinc-500">Backups vorhanden</dt>
+      <dd class="text-zinc-700">{{ health.backups_count }}</dd>
+    </div>
+    {% if health.last_backup %}
+    <div class="flex justify-between border-b border-zinc-100 pb-1 sm:col-span-2">
+      <dt class="text-zinc-500">Letztes Backup</dt>
+      <dd class="text-zinc-700">
+        {{ health.last_backup.name }}
+        <span class="text-xs text-zinc-500">
+          ({{ (health.last_backup.size_kb / 1024)|round(2) }} MB ·
+          {{ health.last_backup.created_at.strftime('%d.%m.%Y %H:%M') }})
+        </span>
+      </dd>
+    </div>
+    {% endif %}
+  </dl>
+
+  <div class="flex gap-2 mt-4 flex-wrap">
+    <form method="post" action="/admin/backup-now">
+      <button class="btn-ghost text-sm">📦 Backup jetzt erstellen</button>
+    </form>
+    {% if health.is_running %}
+    <form method="post" action="/admin/release-lock"
+          onsubmit="return confirm('Wirklich den Pipeline-Lock zwangsweise freigeben? Nur nutzen wenn ein Suchlauf hängt!');">
+      <button class="btn bg-amber-600 text-white hover:bg-amber-700 text-sm">
+        🔓 Lock zwangsweise freigeben (Notfall)
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if backups %}
+<div class="card p-6 mb-6">
+  <h3 class="text-base font-semibold mb-3">Letzte Backups</h3>
+  <ul class="text-sm space-y-1">
+    {% for b in backups %}
+    <li class="flex justify-between border-b border-zinc-100 py-1">
+      <span class="font-mono text-xs">{{ b.name }}</span>
+      <span class="text-zinc-500 text-xs">
+        {{ (b.size_kb / 1024)|round(2) }} MB · {{ b.created_at.strftime('%d.%m.%Y %H:%M') }}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="text-xs text-zinc-500 mt-3">
+    Backups liegen unter <code>data/backups/</code>. Retention: 7 Tage.
+    Wiederherstellen via Shell:
+    <code class="block mt-1">gunzip -c data/backups/&lt;name&gt;.db.gz &gt; data/tenders.db</code>
+  </p>
+</div>
+{% endif %}
 
 <!-- Sofort-Suche-Button (separat, ohne Reset) -->
 <div class="card p-6 mb-6 border-emerald-200 bg-emerald-50/30">
@@ -61,6 +140,73 @@
       </button>
     </form>
   </div>
+</div>
+
+<!-- Mail-Zusammenfassung -->
+<div class="card p-6 mb-6 {% if not mail.configured %}border-zinc-300 bg-zinc-50/50{% endif %}">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-semibold">📧 Mail-Zusammenfassung</h2>
+    {% if mail.configured %}
+      <span class="pill bg-emerald-100 text-emerald-800">aktiv</span>
+    {% else %}
+      <span class="pill bg-zinc-200 text-zinc-700">nicht konfiguriert</span>
+    {% endif %}
+  </div>
+
+  {% if mail.configured %}
+    <p class="text-sm text-zinc-600 mb-3">
+      Tagesübersicht der hochrelevanten neuen Treffer wird automatisch versendet.
+    </p>
+    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm mb-4">
+      <div class="flex justify-between border-b border-zinc-100 pb-1">
+        <dt class="text-zinc-500">An</dt>
+        <dd class="font-mono text-xs">{{ mail.to }}</dd>
+      </div>
+      <div class="flex justify-between border-b border-zinc-100 pb-1">
+        <dt class="text-zinc-500">SMTP-Host</dt>
+        <dd class="font-mono text-xs">{{ mail.host }}</dd>
+      </div>
+      <div class="flex justify-between border-b border-zinc-100 pb-1">
+        <dt class="text-zinc-500">Absender</dt>
+        <dd class="font-mono text-xs">{{ mail.from }}</dd>
+      </div>
+      <div class="flex justify-between border-b border-zinc-100 pb-1">
+        <dt class="text-zinc-500">Tagesversand um</dt>
+        <dd class="text-zinc-700">{{ mail.summary_time }} (lokal)</dd>
+      </div>
+    </dl>
+    <div class="flex flex-wrap gap-2">
+      <form method="post" action="/admin/test-mail">
+        <button class="btn-ghost text-sm">✉ Test-Mail senden</button>
+      </form>
+      <form method="post" action="/admin/send-summary" class="flex items-center gap-2">
+        <select name="days" class="input text-sm py-1.5 max-w-[150px]">
+          <option value="1">letzte 24h</option>
+          <option value="3">letzte 3 Tage</option>
+          <option value="7" selected>letzte 7 Tage</option>
+          <option value="14">letzte 14 Tage</option>
+          <option value="30">letzten 30 Tage</option>
+        </select>
+        <button class="btn-primary text-sm">Zusammenfassung jetzt senden</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="text-sm text-zinc-600 mb-3">
+      Mailversand ist nicht aktiv. In <code>.env</code> setzen:
+    </p>
+<pre class="bg-white border border-zinc-200 rounded-md p-3 text-xs overflow-x-auto"><code>NOTIFY_EMAIL=du@firma.de
+SMTP_HOST=smtp.firma.de
+SMTP_PORT=587
+SMTP_USER=user@firma.de
+SMTP_PASSWORD=...
+SMTP_FROM=ausschreibungsbot@firma.de
+SUMMARY_HOUR=7
+SUMMARY_MINUTE=0</code></pre>
+    <p class="text-xs text-zinc-500 mt-2">
+      Danach <code>systemctl restart fbe-tender</code>. Diese Seite zeigt
+      dann den aktiven Status mit Test-Mail-Button.
+    </p>
+  {% endif %}
 </div>
 
 <!-- Reset-Funktion -->

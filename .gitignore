@@ -7,6 +7,7 @@ venv/
 data/*.db
 data/*.sqlite*
 data/last_run.json
+data/backups/
 exports/*.csv
 exports/*.xlsx
 .pytest_cache/
@@ -15,3 +16,5 @@ exports/*.xlsx
 .vscode/
 *.log
 config/*.yaml.bak
+config/portals.local.yaml
+config/search_terms.local.yaml

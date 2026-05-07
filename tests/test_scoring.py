@@ -15,16 +15,18 @@ def test_high_relevance_when_fluessigboden_in_title():
     assert any("flüssigboden" in t.lower() for t in res.matched_terms)
 
 
-def test_medium_when_only_supporting_clusters():
+def test_high_when_tiefbau_or_leitungsbau_match():
+    """Seit User-Wunsch 'bundesweit, Tiefbau muss hoch scoren': Tiefbau und
+    Leitungsbau sind High-Cluster. Eine Fernwaermeleitung in Berlin scort
+    damit als high."""
     res = score_text(
         title="Erneuerung Fernwärmenetz Berlin Mitte",
         description="Tiefbau, Leitungsbau, Kanalbau",
         deadline=datetime.utcnow() + timedelta(days=15),
         region="Berlin",
     )
-    # Kein Kernbegriff (Flüssigboden / ZFSV) → Score gedeckelt auf 50.
-    assert res.level == "medium"
-    assert res.score <= 50
+    assert res.level == "high"
+    assert res.score >= 70
 
 
 def test_low_when_only_general_terms():

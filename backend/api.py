@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse, JSONResponse
@@ -15,14 +17,14 @@ from sqlalchemy.orm import Session
 
 from .auth import authenticate, hash_password, install_auth, require_admin
 from . import branding
-from .config import PROJECT_ROOT
+from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
 from .models import Comment, Tender, TenderStatus, SearchProfile, User
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
-from .scheduler import is_pipeline_running, next_run_time, run_pipeline_with_lock
+from .scheduler import force_release_lock, is_pipeline_running, next_run_time, run_pipeline_with_lock
 from .search_terms import load_search_config
 from . import yaml_store
 
@@ -122,6 +124,7 @@ def _filtered_query(
     score_min: Optional[float] = None,
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
+    include_expired: bool = False,
 ):
     query = db.query(Tender)
     if portal:
@@ -157,8 +160,16 @@ def _filtered_query(
             )
         )
 
-    # Quick-Filter (chips) – ueberlagern oben, kombinierbar
+    # Default: nur LAUFENDE Ausschreibungen anzeigen (Frist heute oder spaeter,
+    # oder gar keine Frist gesetzt). Mit include_expired=True wird der Filter
+    # uebersprungen.
     now = datetime.utcnow()
+    if not include_expired:
+        query = query.filter(
+            or_(Tender.deadline.is_(None), Tender.deadline >= now)
+        )
+
+    # Quick-Filter (chips) – ueberlagern oben, kombinierbar
     if quick == "high":
         query = query.filter(Tender.relevance_level == "high")
     elif quick == "deadline-7":
@@ -167,6 +178,8 @@ def _filtered_query(
         query = query.filter(Tender.deadline >= now, Tender.deadline <= now + timedelta(days=14))
     elif quick == "deadline-30":
         query = query.filter(Tender.deadline >= now, Tender.deadline <= now + timedelta(days=30))
+    elif quick == "expired":
+        query = query.filter(Tender.deadline < now)
     elif quick in STATUS_VALUES:
         query = query.filter(Tender.status == quick)
 
@@ -228,14 +241,17 @@ def index(
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
+    include_expired: Optional[str] = None,
     flash: Optional[str] = None,
     error: Optional[str] = None,
 ):
+    expired_flag = bool(include_expired)
     query = _filtered_query(
         db,
         portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
         score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=expired_flag,
     )
     tenders = _apply_sort(query, sort).limit(500).all()
 
@@ -289,6 +305,7 @@ def index(
                 "score_max": score_max if score_max is not None else "",
                 "quick": quick or "",
                 "sort": sort or "score_desc",
+                "include_expired": "1" if expired_flag else "",
             },
             "configured_portals": enabled_portals(),
             "status_summary": _portal_status_summary(last_run),
@@ -304,7 +321,13 @@ def index(
 
 
 @app.get("/tender/{tender_id}", response_class=HTMLResponse)
-def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
+def detail(
+    tender_id: int,
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "Ausschreibung nicht gefunden")
@@ -323,6 +346,7 @@ def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
         .order_by(Comment.created_at.asc())
         .all()
     )
+    mail_ready = bool(settings.smtp_host and settings.smtp_from)
     return templates.TemplateResponse(
         request,
         "detail.html",
@@ -332,6 +356,9 @@ def detail(tender_id: int, request: Request, db: Session = Depends(get_db)):
             "user": _session_user(request),
             "score_breakdown": breakdown,
             "comments": comments,
+            "mail_ready": mail_ready,
+            "flash": flash,
+            "error": error,
         },
     )
 
@@ -410,6 +437,73 @@ def set_status(
         tender.notes = notes
     db.commit()
     return RedirectResponse(url=f"/tender/{tender_id}", status_code=303)
+
+
+@app.post("/tender/{tender_id}/send-mail")
+def tender_send_mail(
+    tender_id: int,
+    request: Request,
+    to: str = Form(...),
+    cc: str = Form(""),
+    subject: str = Form(""),
+    custom_message: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Versendet die Ausschreibung als Mail mit FBE-Branding-Layout."""
+    user = _session_user(request)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    tender = db.get(Tender, tender_id)
+    if not tender:
+        raise HTTPException(404, "Ausschreibung nicht gefunden")
+
+    def _split_emails(s: str) -> list[str]:
+        # Akzeptiert komma- oder semikolon-getrennt, plus Whitespace.
+        if not s:
+            return []
+        parts = re.split(r"[,;\s]+", s.strip())
+        return [p for p in parts if "@" in p and "." in p.split("@")[-1]]
+
+    to_list = _split_emails(to)
+    cc_list = _split_emails(cc)
+    if not to_list:
+        return RedirectResponse(
+            url="/tender/{}?error=Mindestens+eine+gueltige+Empfaenger-Adresse+noetig".format(tender_id),
+            status_code=303,
+        )
+
+    from . import notify as notify_mod
+    if not (settings.smtp_host and settings.smtp_from):
+        return RedirectResponse(
+            url="/tender/{}?error=SMTP+nicht+konfiguriert".format(tender_id),
+            status_code=303,
+        )
+
+    subj = (subject or "").strip() or "Ausschreibung: {}".format(tender.title or "")
+
+    # Reply-To setzt das HTML-Template auf company_email; eine User-Signatur
+    # bauen wir aus username + company defaults.
+    sig = "Mit freundlichen Grüßen\n{}".format(user["username"])
+
+    ok, err = notify_mod.send_tender_mail(
+        tender=tender,
+        to=to_list,
+        cc=cc_list,
+        subject=subj,
+        custom_message=custom_message or "",
+        sender_signature=sig,
+    )
+    if ok:
+        msg = "Mail an {} versendet.".format(", ".join(to_list[:3]))
+        return RedirectResponse(
+            url="/tender/{}?flash=".format(tender_id) + quote(msg, safe=""),
+            status_code=303,
+        )
+    err_msg = err or "Unbekannter Fehler - Logs pruefen"
+    return RedirectResponse(
+        url="/tender/{}?error=".format(tender_id) + quote(err_msg, safe=""),
+        status_code=303,
+    )
 
 
 @app.post("/tender/{tender_id}/quick-status")
@@ -667,10 +761,28 @@ def admin_settings(
     error: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    from . import db_backup
     counts = {
         "tenders": db.query(Tender).count(),
         "comments": db.query(Comment).count(),
         "profiles": db.query(SearchProfile).count(),
+    }
+    backups = db_backup.list_backups()
+    db_path = db_backup._db_file()
+    from . import notify as notify_mod
+    health = {
+        "is_running": is_pipeline_running(),
+        "db_size_kb": (db_path.stat().st_size // 1024) if db_path else 0,
+        "db_path": str(db_path) if db_path else "(non-SQLite)",
+        "backups_count": len(backups),
+        "last_backup": backups[0] if backups else None,
+    }
+    mail = {
+        "configured": notify_mod.is_configured(),
+        "to": settings.notify_email,
+        "from": settings.smtp_from,
+        "host": "{}:{}".format(settings.smtp_host, settings.smtp_port) if settings.smtp_host else "",
+        "summary_time": "{:02d}:{:02d}".format(settings.summary_hour, settings.summary_minute),
     }
     return templates.TemplateResponse(
         request, "settings.html",
@@ -678,9 +790,95 @@ def admin_settings(
             "user": _session_user(request),
             "counts": counts,
             "is_running": is_pipeline_running(),
+            "health": health,
+            "mail": mail,
+            "backups": backups[:5],
             "flash": flash,
             "error": error,
         },
+    )
+
+
+@app.post("/admin/release-lock")
+def admin_release_lock(request: Request):
+    """Notfallfunktion: Pipeline-Lock zwangsweise freigeben."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    was_held = force_release_lock()
+    msg = "Lock freigegeben." if was_held else "Kein aktiver Lock - nichts zu tun."
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/test-mail")
+def admin_test_mail(request: Request):
+    """Sendet eine kurze Test-Mail an NOTIFY_EMAIL um die SMTP-Konfig
+    zu pruefen."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import notify
+    if not notify.is_configured():
+        return RedirectResponse(
+            url="/admin/settings?error=SMTP+nicht+konfiguriert+(NOTIFY_EMAIL+/+SMTP_HOST+leer)",
+            status_code=303,
+        )
+    ok, err = notify.send_test_mail()
+    if ok:
+        msg = "Test-Mail an {} versendet.".format(settings.notify_email)
+        return RedirectResponse(
+            url="/admin/settings?flash=" + quote(msg, safe=""),
+            status_code=303,
+        )
+    return RedirectResponse(
+        url="/admin/settings?error=" + quote(err or "Unbekannter Fehler", safe=""),
+        status_code=303,
+    )
+
+
+@app.post("/admin/send-summary")
+def admin_send_summary(request: Request, days: int = Form(1)):
+    """Sendet die Tageszusammenfassung sofort, unabhaengig vom Cron."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import notify
+    if not notify.is_configured():
+        return RedirectResponse(
+            url="/admin/settings?error=SMTP+nicht+konfiguriert",
+            status_code=303,
+        )
+    days = max(1, min(int(days or 1), 30))
+    ok = notify.send_daily_summary(days=days)
+    if ok:
+        msg = "Zusammenfassung der letzten {} Tage versendet.".format(days)
+    else:
+        msg = ("Keine neuen Treffer in den letzten {} Tagen oder Versand "
+               "fehlgeschlagen.".format(days))
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/backup-now")
+def admin_backup_now(request: Request):
+    """Sofort ein DB-Backup erzeugen."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import db_backup
+    out = db_backup.maybe_backup(force=True)
+    if out:
+        msg = "Backup erstellt: {} ({} KB)".format(out.name, out.stat().st_size // 1024)
+    else:
+        msg = "Backup nicht erstellt - keine SQLite-DB konfiguriert?"
+    return RedirectResponse(
+        url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
     )
 
 
@@ -702,6 +900,15 @@ def admin_reset_tenders(
             url="/admin/settings?error=Reset+nicht+bestaetigt+(Feld+leer)",
             status_code=303,
         )
+
+    # Auto-Backup vor dem zerstoerenden Reset.
+    try:
+        from . import db_backup
+        backup = db_backup.maybe_backup(force=True)
+        if backup:
+            log.info("Pre-Reset-Backup angelegt: %s", backup.name)
+    except Exception as exc:  # pragma: no cover
+        log.warning("Pre-Reset-Backup fehlgeschlagen: %s", exc)
 
     deleted_comments = db.query(Comment).delete(synchronize_session=False)
     deleted_tenders = db.query(Tender).delete(synchronize_session=False)
@@ -893,11 +1100,13 @@ def export_csv(
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
+    include_expired: Optional[str] = None,
 ):
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
         score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()
     return Response(
@@ -921,11 +1130,13 @@ def export_xlsx(
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
+    include_expired: Optional[str] = None,
 ):
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
         score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()
     return Response(

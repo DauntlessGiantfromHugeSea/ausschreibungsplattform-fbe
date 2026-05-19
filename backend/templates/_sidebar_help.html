@@ -1,0 +1,38 @@
+{% set _h = request.url.fragment if request else '' %}
+{% macro item(anchor, label) -%}
+<a href="#{{ anchor }}"
+   class="block px-3 py-2 rounded-lg text-sm text-zinc-700 hover:bg-zinc-100 border border-transparent help-nav-link"
+   data-anchor="{{ anchor }}">
+  {{ label }}
+</a>
+{%- endmacro %}
+
+<nav class="card p-2 space-y-0.5">
+  <div class="px-3 pt-2 pb-1 text-xs uppercase tracking-wider text-zinc-500">Dokumentation</div>
+  {{ item('uebersicht', 'Übersicht') }}
+  {{ item('dashboard', 'Dashboard & Suche') }}
+  {{ item('profile', 'Profile') }}
+  {{ item('portale', 'Portale verwalten') }}
+  {{ item('suchbegriffe', 'Suchbegriffe') }}
+  {{ item('status', 'Status & Probe') }}
+  {{ item('benutzer', 'Benutzer') }}
+  {{ item('faq', 'FAQ') }}
+</nav>
+
+<script>
+  (function(){
+    const links = document.querySelectorAll('.help-nav-link');
+    function setActive(){
+      const h = location.hash.replace('#','') || 'uebersicht';
+      links.forEach(l => {
+        const a = l.dataset.anchor === h;
+        l.classList.toggle('bg-brand-50', a);
+        l.classList.toggle('text-brand-800', a);
+        l.classList.toggle('font-medium', a);
+        l.classList.toggle('border-brand-200', a);
+      });
+    }
+    setActive();
+    window.addEventListener('hashchange', setActive);
+  })();
+</script>

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'help' %}
+{% block title %}Hilfe & Dokumentation – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Hilfe & Dokumentation</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-6">Hilfe & Dokumentation</h1>
+
+<article class="card p-6 space-y-10 prose-zinc dark:prose-invert max-w-none">
+
+  <section id="uebersicht">
+    <h2 class="text-xl font-semibold mb-3">Übersicht</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      Die FBE Ausschreibungsplattform durchsucht regelmäßig die konfigurierten
+      Vergabeportale nach passenden Ausschreibungen, filtert sie anhand der
+      hinterlegten Suchbegriffe und Profile und stellt die Treffer im Dashboard
+      bereit. Über die Top-Leiste erreichst du jederzeit Dashboard, Profile,
+      System-Status (🚦), Einstellungen (⚙️) und diese Hilfe (❓).
+    </p>
+  </section>
+
+  <section id="dashboard">
+    <h2 class="text-xl font-semibold mb-3">Dashboard & Suche</h2>
+    <ul class="list-disc pl-5 text-sm text-zinc-700 dark:text-zinc-300 space-y-1.5">
+      <li><strong>Suche starten</strong>: Knopf oben rechts stößt einen sofortigen Scan aller aktivierten Portale an.</li>
+      <li><strong>Filter</strong>: Über die Chips und Suchfelder lassen sich Treffer nach Status, Portal, Zeitraum oder Stichwort eingrenzen.</li>
+      <li><strong>Detailansicht</strong>: Klick auf eine Ausschreibung öffnet alle Felder, Anhänge und ermöglicht Kommentare sowie Statuswechsel.</li>
+    </ul>
+  </section>
+
+  <section id="profile">
+    <h2 class="text-xl font-semibold mb-3">Profile</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      Profile bündeln einen Satz Suchbegriffe und Portal-Auswahl. Wendet man ein
+      Profil an, wird das Dashboard automatisch danach gefiltert. So lassen sich
+      verschiedene Themengebiete oder Kunden sauber trennen.
+    </p>
+  </section>
+
+  <section id="portale">
+    <h2 class="text-xl font-semibold mb-3">Portale verwalten</h2>
+    <ul class="list-disc pl-5 text-sm text-zinc-700 dark:text-zinc-300 space-y-1.5">
+      <li>Einstellungen → <em>Portale</em>: Liste aller konfigurierten Portale, mit Schalter zum Aktivieren/Deaktivieren.</li>
+      <li>Neue Portale werden über die YAML-Definition (<code>config/portals.yaml</code>) oder den Editor angelegt.</li>
+      <li>Vor dem Scharfschalten Portal mit der <strong>Probe</strong> (🚦 → Probe) testen.</li>
+    </ul>
+  </section>
+
+  <section id="suchbegriffe">
+    <h2 class="text-xl font-semibold mb-3">Suchbegriffe</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      Globale Suchbegriffe gelten für alle Portale. Sie können Synonyme,
+      Ausschlüsse und Gewichtungen enthalten. Über die Profile lassen sich
+      zusätzlich eigene Begriffslisten pflegen.
+    </p>
+  </section>
+
+  <section id="status">
+    <h2 class="text-xl font-semibold mb-3">Status & Probe</h2>
+    <ul class="list-disc pl-5 text-sm text-zinc-700 dark:text-zinc-300 space-y-1.5">
+      <li><strong>🚦 Status</strong>: Letzte Läufe pro Portal, Trefferzahlen, Fehler, Sperren.</li>
+      <li><strong>Probe</strong>: Einzelnes Portal testweise abfragen, ohne Datenbank-Änderung.</li>
+      <li><strong>Alle testen</strong>: Schneller Funktionstest aller Portale auf einmal.</li>
+    </ul>
+  </section>
+
+  <section id="benutzer">
+    <h2 class="text-xl font-semibold mb-3">Benutzer</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      Unter Einstellungen → <em>Benutzer</em> lassen sich Konten anlegen, Rollen
+      vergeben (Admin / Viewer) und Passwörter zurücksetzen. Neue Benutzer
+      bekommen per E-Mail einen Link zum Vergeben des eigenen Passworts.
+    </p>
+  </section>
+
+  <section id="faq">
+    <h2 class="text-xl font-semibold mb-3">FAQ</h2>
+    <dl class="space-y-4 text-sm">
+      <div>
+        <dt class="font-medium text-zinc-900 dark:text-zinc-100">Warum sehe ich keine neuen Treffer?</dt>
+        <dd class="text-zinc-700 dark:text-zinc-300">Prüfe unter 🚦 Status, ob der letzte Lauf fehlerfrei war, und ob das passende Portal aktiviert ist.</dd>
+      </div>
+      <div>
+        <dt class="font-medium text-zinc-900 dark:text-zinc-100">Wie kann ich die Suche manuell auslösen?</dt>
+        <dd class="text-zinc-700 dark:text-zinc-300">Über den Knopf „Suche starten“ in der Kopfleiste.</dd>
+      </div>
+      <div>
+        <dt class="font-medium text-zinc-900 dark:text-zinc-100">Wo finde ich die API-Dokumentation?</dt>
+        <dd class="text-zinc-700 dark:text-zinc-300">In Einstellungen → API-Dokumentation (öffnet <code>/docs</code>).</dd>
+      </div>
+    </dl>
+  </section>
+</article>
+
+{% endblock %}

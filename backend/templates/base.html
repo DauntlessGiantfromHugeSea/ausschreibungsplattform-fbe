@@ -109,6 +109,11 @@
 </head>
 <body class="h-full text-zinc-900 dark:text-zinc-100">
 
+{% set _path = request.url.path if request else '' %}
+{% set _is_status = _path in ['/admin/status', '/admin/probe', '/admin/probe-all'] %}
+{% set _is_settings = _path.startswith('/admin/settings') or _path.startswith('/admin/portals') or _path.startswith('/admin/search-terms') or _path.startswith('/admin/users') %}
+{% set _is_help = _path.startswith('/hilfe') %}
+
 <header class="bg-white border-b border-zinc-200 sticky top-0 z-40">
   <div class="max-w-screen-2xl mx-auto px-6 h-16 flex items-center justify-between">
     <div class="flex items-center gap-6">
@@ -121,16 +126,8 @@
         <span>Ausschreibungen</span>
       </a>
       <nav class="hidden md:flex items-center gap-1 text-sm">
-        <a href="/" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Dashboard</a>
-        <a href="/admin/status" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Status</a>
-        <a href="/profiles" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Profile</a>
-        <a href="/admin/portals" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Portale</a>
-        <a href="/admin/search-terms" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Suchbegriffe</a>
-        <a href="/admin/probe" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Probe</a>
-        <a href="/admin/probe-all" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Alle testen</a>
-        <a href="/admin/users" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Benutzer</a>
-        <a href="/admin/settings" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Einstellungen</a>
-        <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">API</a>
+        <a href="/" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path == '/' %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Dashboard</a>
+        <a href="/profiles" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path.startswith('/profiles') %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Profile</a>
       </nav>
     </div>
     <div class="flex items-center gap-2">
@@ -142,6 +139,57 @@
           <span id="run-search-label">Suche starten</span>
         </button>
       </form>
+
+      {# Ampel: Status / Probe #}
+      <div class="relative" id="status-menu">
+        <button type="button"
+                onclick="document.getElementById('status-dropdown').classList.toggle('hidden')"
+                title="Status & Probe"
+                class="btn-icon h-9 w-9 {% if _is_status %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
+          {# Traffic light icon #}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+            <rect x="7" y="2" width="10" height="20" rx="3"/>
+            <circle cx="12" cy="7"  r="1.6" fill="#ef4444" stroke="none"/>
+            <circle cx="12" cy="12" r="1.6" fill="#eab308" stroke="none"/>
+            <circle cx="12" cy="17" r="1.6" fill="#22c55e" stroke="none"/>
+            <path d="M5 5h2M17 5h2M5 12h2M17 12h2M5 19h2M17 19h2"/>
+          </svg>
+        </button>
+        <div id="status-dropdown" class="hidden absolute right-0 mt-2 w-52 card py-1 z-50">
+          <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">System & Tests</div>
+          <a href="/admin/status" class="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 {% if _path == '/admin/status' %}bg-zinc-50 font-medium{% endif %}">
+            <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span> Status
+          </a>
+          <a href="/admin/probe" class="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 {% if _path == '/admin/probe' %}bg-zinc-50 font-medium{% endif %}">
+            <span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span> Probe
+          </a>
+          <a href="/admin/probe-all" class="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 {% if _path == '/admin/probe-all' %}bg-zinc-50 font-medium{% endif %}">
+            <span class="inline-block h-2 w-2 rounded-full bg-rose-500"></span> Alle testen
+          </a>
+        </div>
+      </div>
+
+      {# Zahnrad: Einstellungen #}
+      <a href="/admin/settings"
+         title="Einstellungen"
+         class="btn-icon h-9 w-9 {% if _is_settings %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+        </svg>
+      </a>
+
+      {# Fragezeichen: Hilfe / Dokumentation #}
+      <a href="/hilfe"
+         title="Hilfe & Dokumentation"
+         class="btn-icon h-9 w-9 {% if _is_help %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </a>
+
       {% if user %}
       {% set _uname = user.username if user is mapping else user %}
       <div class="relative" id="user-menu">
@@ -162,7 +210,18 @@
 </header>
 
 <main class="max-w-screen-2xl mx-auto px-6 py-8">
-  {% block content %}{% endblock %}
+  {% if sidebar_section %}
+  <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
+    <aside class="lg:sticky lg:top-20 lg:self-start">
+      {% include "_sidebar_" + sidebar_section + ".html" %}
+    </aside>
+    <div class="min-w-0">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+  {% else %}
+  {{ self.content() }}
+  {% endif %}
 </main>
 
 <script>
@@ -174,9 +233,12 @@
     lbl.textContent = 'Suche läuft…';
   });
   document.addEventListener('click', (e) => {
-    const m = document.getElementById('user-menu');
-    const d = document.getElementById('user-dropdown');
-    if (m && d && !m.contains(e.target)) d.classList.add('hidden');
+    const um = document.getElementById('user-menu');
+    const ud = document.getElementById('user-dropdown');
+    if (um && ud && !um.contains(e.target)) ud.classList.add('hidden');
+    const sm = document.getElementById('status-menu');
+    const sd = document.getElementById('status-dropdown');
+    if (sm && sd && !sm.contains(e.target)) sd.classList.add('hidden');
   });
 </script>
 <button data-theme-toggle type="button"

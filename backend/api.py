@@ -1470,3 +1470,8 @@ def api_list(
 def health():
     return "ok"
 
+
+@app.get("/hilfe", response_class=HTMLResponse)
+def hilfe(request: Request):
+    return templates.TemplateResponse(request, "hilfe.html", {"user": _session_user(request)})
+

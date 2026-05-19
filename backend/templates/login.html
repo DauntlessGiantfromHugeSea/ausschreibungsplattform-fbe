@@ -32,6 +32,11 @@
     </div>
 
     <form method="post" action="/login" class="bg-white rounded-2xl border border-zinc-200/70 shadow-sm p-6 space-y-4">
+      {% if flash %}
+        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          ✓ {{ flash }}
+        </div>
+      {% endif %}
       {% if error %}
         <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {{ error }}

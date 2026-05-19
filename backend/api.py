@@ -206,10 +206,10 @@ def _apply_sort(query, sort: Optional[str]):
 
 # --- Auth Routes ---------------------------------------------------
 @app.get("/login", response_class=HTMLResponse)
-def login_get(request: Request, next: str = "/", error: Optional[str] = None):
+def login_get(request: Request, next: str = "/", error: Optional[str] = None, flash: Optional[str] = None):
     if request.session.get("user"):
         return RedirectResponse(next, status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"next": next, "error": error})
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": error, "flash": flash})
 
 
 @app.post("/login")
@@ -236,6 +236,166 @@ def login_post(
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+
+def _base_url(request: Request) -> str:
+    """Liefert externe Basis-URL fuer Mail-Links.
+
+    Bevorzugt settings.public_base_url (falls gesetzt), sonst die in der
+    Request enthaltene URL inkl. korrektem Scheme/Host hinter Reverse-Proxy.
+    """
+    base = (getattr(settings, "public_base_url", None) or "").rstrip("/")
+    if base:
+        return base
+    fwd_proto = request.headers.get("x-forwarded-proto")
+    fwd_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    scheme = fwd_proto or request.url.scheme
+    host = fwd_host or request.url.netloc
+    return f"{scheme}://{host}"
+
+
+# --- Passwort vergessen / Reset / Invite ---------------------------------
+@app.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_get(request: Request, flash: Optional[str] = None):
+    return templates.TemplateResponse(
+        request, "forgot_password.html", {"flash": flash, "user": None},
+    )
+
+
+@app.post("/forgot-password")
+def forgot_password_post(
+    request: Request,
+    identifier: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    from .auth import generate_token, reset_expires_at
+    from . import notify as notify_mod
+
+    ident = (identifier or "").strip()
+    # Aus Datenschutzgruenden immer die gleiche Erfolgsmeldung
+    generic_flash = "Falls ein Konto existiert, wurde ein Reset-Link verschickt."
+
+    if ident:
+        user = (
+            db.query(User)
+            .filter(or_(User.username == ident, User.email == ident))
+            .first()
+        )
+        if user and user.is_active and user.email:
+            user.reset_token = generate_token()
+            user.reset_token_expires_at = reset_expires_at()
+            db.commit()
+            link = f"{_base_url(request)}/set-password?token={user.reset_token}&reset=1"
+            try:
+                notify_mod.send_password_reset_mail(user.email, user.username, link)
+            except Exception:
+                log.exception("Passwort-Reset-Mail konnte nicht gesendet werden")
+
+    return RedirectResponse(
+        url=f"/forgot-password?flash={quote(generic_flash)}",
+        status_code=303,
+    )
+
+
+@app.get("/set-password", response_class=HTMLResponse)
+def set_password_get(
+    request: Request,
+    token: str = "",
+    reset: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    is_reset = bool(reset)
+    is_invite = not is_reset
+    user = None
+    if token:
+        if is_reset:
+            user = db.query(User).filter(User.reset_token == token).first()
+            if user and user.reset_token_expires_at and user.reset_token_expires_at < datetime.utcnow():
+                user = None
+        else:
+            user = db.query(User).filter(User.invite_token == token).first()
+            if user and user.invite_token_expires_at and user.invite_token_expires_at < datetime.utcnow():
+                user = None
+    return templates.TemplateResponse(
+        request, "set_password.html",
+        {
+            "token": token if user else "",
+            "username": user.username if user else None,
+            "is_reset": is_reset,
+            "is_invite": is_invite,
+            "user": None,
+        },
+    )
+
+
+def _apply_new_password(
+    request: Request,
+    db: Session,
+    token: str,
+    password: str,
+    password2: str,
+    field: str,
+    expires_field: str,
+    is_reset: bool,
+):
+    if not token:
+        return RedirectResponse(url="/login?error=Token fehlt.", status_code=303)
+    if not password or len(password) < 6:
+        return templates.TemplateResponse(
+            request, "set_password.html",
+            {"token": token, "is_reset": is_reset, "is_invite": not is_reset,
+             "error": "Passwort zu kurz (min. 6 Zeichen).", "user": None},
+        )
+    if password != password2:
+        return templates.TemplateResponse(
+            request, "set_password.html",
+            {"token": token, "is_reset": is_reset, "is_invite": not is_reset,
+             "error": "Passwoerter stimmen nicht ueberein.", "user": None},
+        )
+    user = db.query(User).filter(getattr(User, field) == token).first()
+    exp = getattr(user, expires_field, None) if user else None
+    if not user or (exp and exp < datetime.utcnow()):
+        return templates.TemplateResponse(
+            request, "set_password.html",
+            {"token": "", "is_reset": is_reset, "is_invite": not is_reset, "user": None},
+        )
+    user.password_hash = hash_password(password)
+    user.is_active = True
+    setattr(user, field, None)
+    setattr(user, expires_field, None)
+    db.commit()
+    flash = "Passwort gesetzt - du kannst dich jetzt anmelden."
+    return RedirectResponse(url=f"/login?flash={quote(flash)}", status_code=303)
+
+
+@app.post("/set-password")
+def set_password_post(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    password2: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    return _apply_new_password(
+        request, db, token, password, password2,
+        field="invite_token", expires_field="invite_token_expires_at",
+        is_reset=False,
+    )
+
+
+@app.post("/reset-password")
+def reset_password_post(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    password2: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    return _apply_new_password(
+        request, db, token, password, password2,
+        field="reset_token", expires_field="reset_token_expires_at",
+        is_reset=True,
+    )
 
 
 # --- HTML Routes ----------------------------------------------------

@@ -1142,17 +1142,139 @@ def admin_broadcast_post(
 
     from . import notify as notify_mod
     import html as _html
-    body_html = (
-        "<html><body style=\"font-family:Inter,system-ui,sans-serif;line-height:1.55;"
-        "color:#27272a;max-width:640px;margin:24px auto;padding:0 16px;\">"
-        f"<h2 style=\"color:#7eb064;margin-top:0;\">{_html.escape(subject)}</h2>"
-        f"<div style=\"white-space:pre-wrap;font-size:14px;\">{_html.escape(body)}</div>"
-        "<hr style=\"border:none;border-top:1px solid #e4e4e7;margin:24px 0 12px;\">"
-        f"<p style=\"font-size:12px;color:#71717a;\">Diese Nachricht ging an alle aktiven Nutzer der FBE-Ausschreibungsplattform "
-        f"(Absender: {_html.escape(user['username'])}).</p>"
-        "</body></html>"
+
+    # Body: Plain-Text-Zeilen in HTML. Aufzaehlungen (Zeile beginnt mit
+    # "- ", "* " oder "• ") werden zu sauberen <ul>-Listen, alles andere
+    # bleibt mit weicher Trennung im <p>-Block.
+    def _body_to_html(text: str) -> str:
+        blocks = []
+        current_list: list[str] | None = None
+        current_para: list[str] = []
+
+        def flush_para():
+            if current_para:
+                blocks.append(
+                    "<p style=\"margin:0 0 14px 0;font-size:15px;line-height:1.6;"
+                    "color:#27272a;\">{}</p>".format("<br>".join(current_para))
+                )
+                current_para.clear()
+
+        def flush_list():
+            nonlocal current_list
+            if current_list:
+                items = "".join(
+                    "<li style=\"margin:0 0 6px 0;\">{}</li>".format(i)
+                    for i in current_list
+                )
+                blocks.append(
+                    "<ul style=\"margin:0 0 16px 0;padding-left:20px;font-size:15px;"
+                    "line-height:1.6;color:#27272a;\">{}</ul>".format(items)
+                )
+                current_list = None
+
+        for raw_line in text.splitlines():
+            line = raw_line.rstrip()
+            stripped = line.lstrip()
+            if stripped.startswith(("- ", "* ", "• ")):
+                flush_para()
+                if current_list is None:
+                    current_list = []
+                current_list.append(_html.escape(stripped[2:].lstrip()))
+            elif not line.strip():
+                flush_para()
+                flush_list()
+            else:
+                flush_list()
+                current_para.append(_html.escape(line))
+        flush_para()
+        flush_list()
+        return "".join(blocks)
+
+    company_name = _html.escape(settings.company_name or "FBE Ausschreibungsplattform")
+    logo_url = settings.company_logo_url or ""
+    web = settings.company_web or ""
+    contact_email = settings.company_email or settings.smtp_from or ""
+
+    logo_html = (
+        '<img src="{}" alt="{}" style="height:36px;display:block;">'.format(
+            _html.escape(logo_url), company_name)
+        if logo_url else
+        '<div style="font-weight:700;color:#3f5a30;font-size:18px;">{}</div>'.format(company_name)
     )
-    plain = body + "\n\n---\nFBE-Ausschreibungsplattform · Broadcast"
+
+    footer_links = []
+    if web:
+        footer_links.append('<a href="{0}" style="color:#7eb064;text-decoration:none;">{0}</a>'.format(_html.escape(web)))
+    if contact_email:
+        footer_links.append('<a href="mailto:{0}" style="color:#7eb064;text-decoration:none;">{0}</a>'.format(_html.escape(contact_email)))
+    footer_sep = " &nbsp;·&nbsp; ".join(footer_links)
+
+    body_html = (
+        '<!doctype html><html><body style="margin:0;padding:24px 12px;background:#f4f4f5;'
+        'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Inter,system-ui,sans-serif;'
+        'color:#27272a;">'
+          '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+          'style="max-width:640px;margin:0 auto;background:#ffffff;border-collapse:collapse;'
+          'border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">'
+            # Header
+            '<tr><td style="padding:22px 28px;background:#ffffff;border-bottom:1px solid #ececef;">'
+              '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">'
+                '<tr>'
+                  '<td style="vertical-align:middle;">{logo}</td>'
+                  '<td style="vertical-align:middle;text-align:right;font-size:11px;color:#a1a1aa;'
+                  'text-transform:uppercase;letter-spacing:0.8px;">Systemnachricht</td>'
+                '</tr>'
+              '</table>'
+            '</td></tr>'
+            # Badge
+            '<tr><td style="padding:24px 28px 0 28px;">'
+              '<span style="display:inline-block;padding:4px 10px;background:#eaf3df;color:#3f5a30;'
+              'border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;">'
+              'Plattform-Update</span>'
+            '</td></tr>'
+            # Subject as headline
+            '<tr><td style="padding:10px 28px 0 28px;">'
+              '<h1 style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#1f2937;">'
+              '{subject}</h1>'
+            '</td></tr>'
+            # Body
+            '<tr><td style="padding:18px 28px 8px 28px;">{body_blocks}</td></tr>'
+            # Disclaimer
+            '<tr><td style="padding:6px 28px 22px 28px;">'
+              '<div style="font-size:13px;color:#71717a;background:#fafafa;border:1px solid #ececef;'
+              'border-radius:8px;padding:12px 14px;">'
+              'Dies ist eine automatisch erzeugte Nachricht der {company} – bitte nicht darauf antworten. '
+              'Bei Fragen wende dich an den Administrator der Plattform.'
+              '</div>'
+            '</td></tr>'
+            # Footer
+            '<tr><td style="padding:14px 28px 22px 28px;background:#fafafa;border-top:1px solid #ececef;'
+            'text-align:center;color:#a1a1aa;font-size:12px;line-height:1.6;">'
+              '<div style="color:#71717a;">{company}</div>'
+              '{footer_links}'
+            '</td></tr>'
+          '</table>'
+        '</body></html>'
+    ).format(
+        logo=logo_html,
+        subject=_html.escape(subject),
+        body_blocks=_body_to_html(body),
+        company=company_name,
+        footer_links=("<div style=\"margin-top:4px;\">{}</div>".format(footer_sep) if footer_sep else ""),
+    )
+
+    plain_lines = [
+        f"[{settings.company_name or 'FBE Ausschreibungsplattform'}] Systemnachricht",
+        "=" * 60,
+        "",
+        subject,
+        "",
+        body,
+        "",
+        "-" * 60,
+        "Dies ist eine automatisch erzeugte Nachricht. Bitte nicht antworten.",
+    ]
+    plain = "\n".join(plain_lines)
 
     ok, err = notify_mod._send_to(
         to=[],  # Empfaenger in BCC, damit Adressen nicht gegenseitig sichtbar sind

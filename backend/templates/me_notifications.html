@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Meine Benachrichtigungen – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Meine Benachrichtigungen</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2">Meine Benachrichtigungen</h1>
+<p class="text-sm text-zinc-500 mb-6">
+  Persoenliche Zusammenfassung der wichtigsten Ausschreibungen an deine
+  E-Mail-Adresse - taeglich oder woechentlich, ab einer Score-Schwelle.
+</p>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+    ✓ {{ flash }}
+  </div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+    ✗ {{ error }}
+  </div>
+{% endif %}
+
+{% if not mail_ready %}
+  <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    SMTP ist nicht konfiguriert. Benachrichtigungen koennen aktuell nicht versendet werden.
+  </div>
+{% endif %}
+
+<form method="post" action="/me/notifications" class="card p-6 space-y-5 max-w-2xl">
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">E-Mail-Adresse</label>
+    <input class="input" type="email" name="email"
+           value="{{ me.email or '' }}"
+           placeholder="user@firma.de">
+    <div class="text-xs text-zinc-400 mt-1">
+      An diese Adresse wird die Zusammenfassung versendet.
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Frequenz</label>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {% for val, lbl, hint in [
+            ('off',    'Aus',         'Keine Mails'),
+            ('daily',  'Taeglich',    'Jeden Tag morgens'),
+            ('weekly', 'Woechentlich','Einmal pro Woche')] %}
+      <label class="cursor-pointer">
+        <input type="radio" name="frequency" value="{{ val }}" class="peer sr-only"
+               {% if (me.notify_frequency or 'off') == val %}checked{% endif %}>
+        <div class="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm
+                    peer-checked:border-brand-500 peer-checked:bg-brand-50
+                    peer-checked:text-brand-800 peer-checked:ring-2 peer-checked:ring-brand-500/20
+                    hover:bg-zinc-50 transition">
+          <div class="font-medium">{{ lbl }}</div>
+          <div class="text-xs text-zinc-500">{{ hint }}</div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">
+      Minimaler Score
+      <span class="text-zinc-400 font-normal">(0 - 100)</span>
+    </label>
+    <div class="flex items-center gap-3">
+      <input class="input max-w-[120px]" type="number" name="min_score"
+             min="0" max="100" step="5"
+             value="{{ me.notify_min_score if me.notify_min_score is not none else 60 }}">
+      <span class="text-sm text-zinc-500">
+        Nur Treffer mit Relevanz <strong>>=</strong> diesem Wert kommen in die Mail.
+      </span>
+    </div>
+    <div class="text-xs text-zinc-400 mt-1">
+      Richtwert: 40 = breit, 60 = mittel, 75 = nur sehr passende Ausschreibungen.
+    </div>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100">
+    <button type="submit" class="btn-primary">Speichern</button>
+    <button type="submit" formaction="/me/notifications/test" class="btn-ghost"
+            {% if not mail_ready or not me.email %}disabled title="E-Mail hinterlegen und Einstellungen speichern"{% endif %}>
+      Test-Mail jetzt senden
+    </button>
+    {% if me.notify_last_sent_at %}
+      <span class="text-xs text-zinc-500 ml-auto">
+        Zuletzt versendet: {{ me.notify_last_sent_at.strftime('%d.%m.%Y %H:%M') }}
+      </span>
+    {% endif %}
+  </div>
+</form>
+
+{% endblock %}

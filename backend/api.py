@@ -1893,6 +1893,107 @@ def health():
     return "ok"
 
 
+NOTIFY_FREQ_VALUES = ("off", "daily", "weekly")
+
+
+@app.get("/me/notifications", response_class=HTMLResponse)
+def me_notifications_get(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    sess_user = _session_user(request)
+    if not sess_user:
+        return RedirectResponse(url="/login?next=/me/notifications", status_code=303)
+    db_user = db.query(User).filter(User.username == sess_user["username"]).first()
+    mail_ready = bool(settings.smtp_host and settings.smtp_from)
+    return templates.TemplateResponse(
+        request, "me_notifications.html",
+        {
+            "user": sess_user,
+            "me": db_user,
+            "mail_ready": mail_ready,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/me/notifications")
+def me_notifications_post(
+    request: Request,
+    frequency: str = Form("off"),
+    min_score: int = Form(60),
+    email: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    sess_user = _session_user(request)
+    if not sess_user:
+        raise HTTPException(401, "Nicht angemeldet")
+    db_user = db.query(User).filter(User.username == sess_user["username"]).first()
+    if not db_user:
+        return RedirectResponse(url="/me/notifications?error=Konto+nicht+gefunden", status_code=303)
+    if frequency not in NOTIFY_FREQ_VALUES:
+        frequency = "off"
+    min_score = max(0, min(int(min_score or 0), 100))
+    email = (email or "").strip()
+    if frequency != "off" and not email:
+        return RedirectResponse(
+            url="/me/notifications?error=Fuer+Benachrichtigungen+ist+eine+E-Mail+erforderlich",
+            status_code=303,
+        )
+    db_user.notify_frequency = frequency
+    db_user.notify_min_score = min_score
+    if email:
+        db_user.email = email
+    db.commit()
+    return RedirectResponse(url="/me/notifications?flash=Einstellungen+gespeichert.", status_code=303)
+
+
+@app.post("/me/notifications/test")
+def me_notifications_test(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    sess_user = _session_user(request)
+    if not sess_user:
+        raise HTTPException(401, "Nicht angemeldet")
+    db_user = db.query(User).filter(User.username == sess_user["username"]).first()
+    if not db_user or not db_user.email:
+        return RedirectResponse(
+            url="/me/notifications?error=Keine+E-Mail+hinterlegt",
+            status_code=303,
+        )
+    if not (settings.smtp_host and settings.smtp_from):
+        return RedirectResponse(
+            url="/me/notifications?error=SMTP+nicht+konfiguriert",
+            status_code=303,
+        )
+    from . import notify as notify_mod
+    days = 7 if (db_user.notify_frequency == "weekly") else 1
+    ok, err, count = notify_mod.send_user_digest(
+        to_email=db_user.email,
+        username=db_user.username,
+        days=days,
+        min_score=db_user.notify_min_score or 60,
+    )
+    if not ok:
+        return RedirectResponse(
+            url=f"/me/notifications?error=Versand+fehlgeschlagen:+{quote(err or '-')}",
+            status_code=303,
+        )
+    if count == 0:
+        msg = (f"Keine Treffer mit Score >= {db_user.notify_min_score} in den letzten "
+               f"{days} Tag(en) - es waere also keine Mail rausgegangen.")
+    else:
+        msg = f"Test-Mail an {db_user.email} versendet ({count} Treffer)."
+    return RedirectResponse(
+        url=f"/me/notifications?flash={quote(msg)}",
+        status_code=303,
+    )
+
+
 @app.get("/hilfe", response_class=HTMLResponse)
 def hilfe(request: Request):
     return templates.TemplateResponse(request, "hilfe.html", {"user": _session_user(request)})

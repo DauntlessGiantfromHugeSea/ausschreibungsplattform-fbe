@@ -75,9 +75,80 @@ def start_scheduler() -> BackgroundScheduler:
                  settings.summary_hour, settings.summary_minute,
                  settings.notify_email)
 
+    # Per-User-Digests (taeglich morgens pruefen wer faellig ist).
+    # Laeuft auch ohne globalen notify_email - einzige Bedingung ist SMTP.
+    if settings.smtp_host and settings.smtp_from:
+        sched.add_job(
+            send_due_user_digests,
+            trigger=CronTrigger(
+                hour=settings.summary_hour,
+                minute=settings.summary_minute,
+            ),
+            id="user_digests",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        log.info("User-Digests: taeglich %02d:%02d Pruefung auf faellige Empfaenger",
+                 settings.summary_hour, settings.summary_minute)
+
     sched.start()
     _scheduler = sched
     return sched
+
+
+def send_due_user_digests() -> dict:
+    """Iteriert ueber alle aktiven User und schickt ihnen ihre persoenliche
+    Zusammenfassung, sofern faellig (daily: >=1 Tag, weekly: >=7 Tage seit
+    letzter Mail). Liefert Statistik zum Logging."""
+    from datetime import datetime, timedelta
+    from .database import SessionLocal
+    from .models import User
+    from . import notify
+
+    stats = {"checked": 0, "sent": 0, "empty": 0, "failed": 0}
+    db = SessionLocal()
+    try:
+        users = (
+            db.query(User)
+            .filter(User.is_active == True)  # noqa: E712
+            .filter(User.email.isnot(None))
+            .filter(User.email != "")
+            .filter(User.notify_frequency.in_(("daily", "weekly")))
+            .all()
+        )
+        now = datetime.utcnow()
+        for u in users:
+            stats["checked"] += 1
+            interval = timedelta(days=7) if u.notify_frequency == "weekly" else timedelta(hours=20)
+            if u.notify_last_sent_at and (now - u.notify_last_sent_at) < interval:
+                continue
+            days = 7 if u.notify_frequency == "weekly" else 1
+            ok, err, count = notify.send_user_digest(
+                to_email=u.email,
+                username=u.username,
+                days=days,
+                min_score=u.notify_min_score or 60,
+            )
+            if not ok:
+                stats["failed"] += 1
+                log.warning("User-Digest %s fehlgeschlagen: %s", u.username, err)
+                continue
+            if count == 0:
+                stats["empty"] += 1
+                # Nichts versendet - last_sent_at NICHT setzen, damit beim
+                # naechsten Lauf wieder geprueft wird.
+                continue
+            stats["sent"] += 1
+            u.notify_last_sent_at = now
+        db.commit()
+    except Exception:
+        log.exception("send_due_user_digests fehlgeschlagen")
+        db.rollback()
+    finally:
+        db.close()
+    log.info("User-Digests-Lauf: %s", stats)
+    return stats
 
 
 def shutdown_scheduler() -> None:

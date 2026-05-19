@@ -107,6 +107,11 @@ class User(Base):
     reset_token = Column(String(255), nullable=True)
     reset_token_expires_at = Column(DateTime, nullable=True)
 
+    # Persoenliche Benachrichtigungen: off | daily | weekly
+    notify_frequency = Column(String(10), default="off", nullable=False)
+    notify_min_score = Column(Integer, default=60, nullable=False)
+    notify_last_sent_at = Column(DateTime, nullable=True)
+
 
 class SearchProfile(Base):
     """Gespeicherter Filter, der per Klick aufs Dashboard angewendet wird.

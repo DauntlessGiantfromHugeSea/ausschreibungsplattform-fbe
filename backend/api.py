@@ -1430,34 +1430,34 @@ def admin_user_save(
 
     if db.query(User).filter(User.username == username).first():
         return RedirectResponse(url=f"/admin/users?error=Username '{username}' ist vergeben.", status_code=303)
-    invite_mode = send_invite == "on" and bool(email.strip())
-    if not password.strip() and not invite_mode:
-        return RedirectResponse(url="/admin/users?error=Passwort oder Einladung per Mail erforderlich.", status_code=303)
-    if invite_mode:
-        from backend.auth import generate_token as _gt, invite_expires_at as _exp
-        new_user = User(
-            username=username,
-            email=email.strip(),
-            password_hash="",  # noch leer
-            role=role,
-            is_active=False,
-            invite_token=_gt(),
-            invite_token_expires_at=_exp(),
+    if not email.strip():
+        return RedirectResponse(
+            url="/admin/users?error=E-Mail ist erforderlich (User setzt Passwort selbst via Einladungs-Link).",
+            status_code=303,
         )
-        db.add(new_user); db.commit()
-        link = f"{_base_url(request)}/set-password?token={new_user.invite_token}"
-        from backend import notify as notify_mod
-        ok, err = notify_mod.send_invite_mail(new_user.email, new_user.username, link)
-        if not ok:
-            return RedirectResponse(url=f"/admin/users?flash={username} angelegt, Mailversand fehlgeschlagen: {err or '-'}", status_code=303)
-        return RedirectResponse(url=f"/admin/users?flash={username} angelegt + Einladung verschickt.", status_code=303)
+    from backend.auth import generate_token as _gt, invite_expires_at as _exp
     new_user = User(
-        username=username, email=(email.strip() or None),
-        password_hash=hash_password(password), role=role,
-        is_active=is_active == "on" or is_active is None,
+        username=username,
+        email=email.strip(),
+        password_hash="",
+        role=role,
+        is_active=False,
+        invite_token=_gt(),
+        invite_token_expires_at=_exp(),
     )
     db.add(new_user); db.commit()
-    return RedirectResponse(url=f"/admin/users?flash={username} angelegt.", status_code=303)
+    link = f"{_base_url(request)}/set-password?token={new_user.invite_token}"
+    from backend import notify as notify_mod
+    ok, err = notify_mod.send_invite_mail(new_user.email, new_user.username, link)
+    if not ok:
+        return RedirectResponse(
+            url=f"/admin/users?flash={username} angelegt, Mailversand fehlgeschlagen: {err or '-'}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        url=f"/admin/users?flash={username} angelegt + Einladung verschickt.",
+        status_code=303,
+    )
 
 
 @app.post("/admin/users/{user_id}/delete")

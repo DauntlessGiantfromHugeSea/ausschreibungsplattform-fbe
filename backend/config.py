@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     )
     http_timeout: int = 30
 
+    # robots.txt global ignorieren. Default False (rechtssicher).
+    # Wenn True, wird auf KEINEM Portal mehr robots.txt geprueft.
+    # Empfohlen: lieber pro Portal in portals.yaml setzen
+    #   config: { ignore_robots: true }
+    # Damit nur dort umgangen wird, wo bewusst entschieden.
+    ignore_robots_global: bool = False
+
     # ---- KI-Anbindung (OpenAI) ---------------------------------------
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"

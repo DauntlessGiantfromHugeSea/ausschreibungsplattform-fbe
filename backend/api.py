@@ -872,6 +872,7 @@ def admin_portal_save(
     enabled: Optional[str] = Form(None),
     notes: str = Form(""),
     config_yaml: str = Form(""),
+    ignore_robots: Optional[str] = Form(None),
 ):
     name = name.strip()
     if not name:
@@ -884,6 +885,15 @@ def admin_portal_save(
             url=f"/admin/portals?error=Config-YAML ungueltig: {str(exc)[:200]}",
             status_code=303,
         )
+
+    # ignore_robots-Checkbox aus dem Form-Feld in die portal-config einmischen
+    # (statt im YAML-Block separat pflegen zu muessen).
+    if not isinstance(cfg_data, dict):
+        cfg_data = {}
+    if ignore_robots == "on":
+        cfg_data["ignore_robots"] = True
+    else:
+        cfg_data.pop("ignore_robots", None)
 
     raw = yaml_store.read_portals_raw()
     portals = raw.get("portals", [])

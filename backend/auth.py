@@ -30,7 +30,7 @@ from .database import SessionLocal
 
 log = logging.getLogger(__name__)
 
-PUBLIC_PATHS = {"/login", "/logout", "/api/health"}
+PUBLIC_PATHS = {"/login", "/forgot-password", "/set-password", "/reset-password", "/logout", "/api/health"}
 PUBLIC_PREFIXES = ("/static", "/.well-known")
 ADMIN_PREFIXES = ("/admin/",)
 
@@ -135,3 +135,17 @@ def install_auth(app) -> None:
         same_site="lax",
         https_only=settings.session_https_only,
     )
+
+
+# Token-Helpers fuer Invite + Password-Reset
+import secrets
+from datetime import datetime, timedelta
+
+def generate_token() -> str:
+    return secrets.token_urlsafe(32)
+
+def invite_expires_at():
+    return datetime.utcnow() + timedelta(hours=24)
+
+def reset_expires_at():
+    return datetime.utcnow() + timedelta(hours=1)

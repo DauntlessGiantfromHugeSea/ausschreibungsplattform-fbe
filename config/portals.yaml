@@ -1,569 +1,554 @@
-# =====================================================================
-# Konfigurierte Ausschreibungsportale - DEUTSCHLAND
-# =====================================================================
-#
-# Architektur-Hinweis:
-#   Viele Laenderportale teilen sich eine Backend-Engine. Selektoren sind
-#   deshalb pro "Engine-Familie" sehr aehnlich. Im Zweifel direkt im
-#   Browser (F12 -> Element untersuchen) auf der Trefferseite pruefen
-#   und ueber /admin/portals/{name}/edit anpassen.
-#
-#   Engine-Familien:
-#     1. Cosinex VMP Satellite -> /VMPSatellite/notice/search?searchTerm=X
-#        Brandenburg, Sachsen-Anhalt, Thueringen, Schleswig-Holstein,
-#        Mecklenburg-Vorpommern (teilweise)
-#     2. Cosinex VMP Center    -> /VMPCenter/notice/search?searchTerm=X
-#        NRW, Rheinland-Pfalz, Saarland, Hamburg
-#     3. Vergabemarktplatz Berlin (Spezial)
-#     4. evergabe.sachsen.de (NetServer)
-#     5. DTVP (Healy-Hudson)
-#     6. evergabe.de / evergabe-online.de (Bund/Cosinex)
-#     7. Auftragsboerse Bayern
-#
-# Felder:
-#   strategy : api | rss | search_url | scrape
-#   scraper  : Modulname unter scrapers/ (snake_case -> CamelCaseScraper)
-
 portals:
+- name: bund.de Service-Portal
+  enabled: true
+  scraper: bund
+  base_url: https://www.service.bund.de
+  strategy: search_url
+  notes: 'Bekanntmachungen des Bundes, gefiltert auf Bauleistungen
 
-  # =====================================================================
-  # Bund / EU - hochwertig, eigene Scraper
-  # =====================================================================
+    (cl2Categories_LeistungenErzeugnisse=leistung-bauleistungen). Liefert
 
-  - name: "bund.de Service-Portal"
-    enabled: true
-    scraper: "bund"
-    base_url: "https://www.service.bund.de"
-    strategy: "search_url"
-    notes: |
-      Bekanntmachungen des Bundes, gefiltert auf Bauleistungen
-      (cl2Categories_LeistungenErzeugnisse=leistung-bauleistungen). Liefert
-      mit einem Request 100 frische Bauauftraege, sortiert nach Veroeffent-
-      lichungsdatum. Browser-UA, weil der FBE-Bot-UA vom Server abgelehnt
-      wird (Connection-Reset). filter_by_terms verfeinert client-seitig.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      # Mehr Volumen: 5 Seiten a 100 Items = bis zu 500 Bauleistungen pro Lauf.
-      max_pages: 5
-      enable_keyword_search: false
-      filter_by_terms: true
-      request_delay_s: 1.0
-      listing_params:
-        nn: "4641482"
-        ambit_distance: "10"
-        type: "0"
-        resultsPerPage: 100
-        sortOrder: "dateOfIssue_dt desc"
-        cl2Categories_LeistungenErzeugnisse: "leistung-bauleistungen"
-        jobsrss: "true"
+    mit einem Request 100 frische Bauauftraege, sortiert nach Veroeffent-
 
-  - name: "TED - Tenders Electronic Daily"
-    enabled: true
-    scraper: "ted"
-    base_url: "https://api.ted.europa.eu"
-    strategy: "api"
-    notes: "Offizielle TED Search API v3 - kein Key noetig."
+    lichungsdatum. Browser-UA, weil der FBE-Bot-UA vom Server abgelehnt
 
-  # =====================================================================
-  # Bundesweite Cosinex / Bekanntmachungs-Portale
-  # =====================================================================
+    wird (Connection-Reset). filter_by_terms verfeinert client-seitig.
 
-  - name: "evergabe.de (Cosinex)"
-    enabled: true
-    scraper: "evergabe_de"
-    base_url: "https://www.evergabe.de"
-    strategy: "scrape"
-    notes: |
-      evergabe.de Tailwind-v4-SPA. Dedizierter Scraper:
-        1. Playwright laedt + rendert die Seite
-        2. Jeder /auftrag/-Anchor zaehlt als eine Card
-        3. Eltern-Container (mit h2/h3) wird als Card-Wrapper genommen
-      Damit ist der Scraper robust gegen Tailwind-Klassen-Aenderungen
-      und braucht keine fragilen CSS-Selektoren.
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    max_pages: 5
+    enable_keyword_search: false
+    filter_by_terms: true
+    request_delay_s: 1.0
+    listing_params:
+      nn: '4641482'
+      ambit_distance: '10'
+      type: '0'
+      resultsPerPage: 100
+      sortOrder: dateOfIssue_dt desc
+      cl2Categories_LeistungenErzeugnisse: leistung-bauleistungen
+      jobsrss: 'true'
+- name: TED - Tenders Electronic Daily
+  enabled: true
+  scraper: ted
+  base_url: https://api.ted.europa.eu
+  strategy: api
+  notes: Offizielle TED Search API v3 - kein Key noetig.
+- name: evergabe.de (Cosinex)
+  enabled: true
+  scraper: playwright_html
+  base_url: https://www.evergabe.de
+  strategy: search_url
+  notes: Xvfb + headless=False bypassed Bot-Detection. Cards via /ausschreibung/-Pattern. Breite url_terms + filter_by_terms gegen FBE-Cluster.
+  config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+    timeout: 60
+    wait_timeout_ms: 30000
+    headless: false
+    search_path: /auftraege/auftrag-suchen?search%5Bquery_operator%5D=or&search%5Bregion_type%5D=perimeter&search%5Buse_additional_procedure_stadiums%5D=false&search%5Binclude_archived%5D=false&search%5Binclude_discarded%5D=false&search%5Binclude_remembered%5D=true&search%5Binclude_viewed%5D=true&search%5Bquery%5D={term}&search%5Bper_page%5D=100&search%5Bsort_order%5D=best
+    wait_for_selector: a[href*='/ausschreibung/']
+    filter_by_terms: true
+    result_selector: div:has(> a[href*='/ausschreibung/']), article:has(a[href*='/ausschreibung/'])
+    title_selector: h2.eve-app, h2, h3
+    description_selector: p
+    link_selector: a[href*='/ausschreibung/']
+    url_terms:
+    - baugrube
+    - tiefbau
+    - erdarbeiten
+    - kabelgraben
+    - rohrleitung
+    - verfüllung
+    - leitungsbau
+    - kanalbau
+    - erdbau
+    - spundwand
+    - bohrpfahl
+    - baugrubensicherung
+    - erdkabel
+    - wasserhaltung
+    - schachtbau
+- name: evergabe-online.de (BMI)
+  enabled: true
+  scraper: crawl_html
+  base_url: https://www.evergabe-online.de
+  strategy: scrape
+  notes: 'Bund-Laender-Plattform der Beschaffungsstelle des BMI. Listing
 
-      Voraussetzung Playwright auf VPS:
-          source .venv/bin/activate
-          pip install playwright
-          playwright install chromium
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      timeout: 60
-      wait_timeout_ms: 25000
-      filter_by_terms: true
-      # Vorfilter auf 20 Bauleistungs-Gewerke (Tiefbau, Strassenbau,
-      # Pflasterbau, Erdbau, Kanalbau, Spundwand etc.) + 100 Items pro
-      # Seite + neueste zuerst.
-      search_path: "/auftraege/auftrag-suchen?search%5Bper_page%5D=100&search%5Bsort_order%5D=newest&search%5Bcraft_code_ids%5D%5B%5D=158&search%5Bcraft_code_ids%5D%5B%5D=446&search%5Bcraft_code_ids%5D%5B%5D=445&search%5Bcraft_code_ids%5D%5B%5D=122&search%5Bcraft_code_ids%5D%5B%5D=124&search%5Bcraft_code_ids%5D%5B%5D=132&search%5Bcraft_code_ids%5D%5B%5D=119&search%5Bcraft_code_ids%5D%5B%5D=123&search%5Bcraft_code_ids%5D%5B%5D=131&search%5Bcraft_code_ids%5D%5B%5D=120&search%5Bcraft_code_ids%5D%5B%5D=133&search%5Bcraft_code_ids%5D%5B%5D=130&search%5Bcraft_code_ids%5D%5B%5D=391&search%5Bcraft_code_ids%5D%5B%5D=121&search%5Bcraft_code_ids%5D%5B%5D=128&search%5Bcraft_code_ids%5D%5B%5D=118&search%5Bcraft_code_ids%5D%5B%5D=125&search%5Bcraft_code_ids%5D%5B%5D=126&search%5Bcraft_code_ids%5D%5B%5D=127&search%5Bcraft_code_ids%5D%5B%5D=129"
+    hat 1262+ Bekanntmachungen total. Wir crawlen die ersten
 
-  - name: "evergabe-online.de (BMI)"
-    enabled: true
-    scraper: "crawl_html"
-    base_url: "https://www.evergabe-online.de"
-    strategy: "scrape"
-    notes: |
-      Bund-Laender-Plattform der Beschaffungsstelle des BMI. Listing
-      hat 1262+ Bekanntmachungen total. Wir crawlen die ersten
-      max_details Detailseiten und filtern client-seitig auf die
-      Cluster-Begriffe.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/search.html?publishDateRange=ALL"
-        - "/search.html?1"
-        - "/search.html"
-      link_selector: >
-        table.table-advanced td a,
-        table.table-striped td a,
-        a.searchResultLink,
-        a.publicationLink,
-        a.notice-link
-      link_pattern: "(searchPanel-results|/notice|/announcement|/tender)"
-      # Mehr Volumen: 200 Detail-Crawls pro Lauf (vorher 60).
-      max_details: 200
-      request_delay_s: 0.3
-      detail_title_selector: "h1, .title, .announcement-title, .notice-title"
-      detail_authority_selector: ".authority, .buyer, .vergabestelle, .auftraggeber"
-      detail_location_selector: ".place, .location, .ort, .erfuellungsort"
-      detail_deadline_selector: ".deadline, .frist, .submissionDeadline, .angebotsfrist"
-      detail_publication_selector: ".publicationDate, .published, .veroeffentlicht"
+    max_details Detailseiten und filtern client-seitig auf die
 
-  - name: "DTVP - Deutsches Vergabeportal"
-    enabled: true
-    scraper: "playwright_html"
-    base_url: "https://www.dtvp.de"
-    strategy: "scrape"
-    notes: |
-      DTVP ist eine SPA - der Suchstand liegt in einem base64-codierten
-      Hash-Fragment, das clientseitig in eine API-Anfrage uebersetzt wird.
-      Wir nutzen Playwright (Headless-Chromium), bauen das Hash-JSON
-      pro Suchbegriff und lassen den Browser die Seite vollstaendig
-      rendern. Voraussetzung: pip install playwright && playwright install chromium.
-    config:
-      search_path: "/Center/common/project/search.do?method=showExtendedSearch&fromExternal=true#{hash}"
-      hash_json:
-        cpvCodes: []
-        contractingRules: ["VOL", "VOB", "VSVGV", "SEKTVO", "OTHER"]
-        publicationTypes: ["Tender"]
-        distance: 0
-        postalCode: ""
-        order: "0"
-        page: "1"
-        searchText: "{term}"
-        sortField: "rank"
-      wait_for_selector: ".project-list, .search-result, table.results, [class*='result']"
-      wait_timeout_ms: 15000
-      filter_by_terms: false
-      result_selector: ".project-list-row, .search-result-row, tr.result, [class*='project-row'], [class*='result-row']"
-      title_selector: "a.project-title, a.notice-title, a.title, h2 a, h3 a, a"
-      authority_selector: ".buyer-name, .organisation, .buyer, .vergabestelle"
-      location_selector: ".place, .location, .ort"
-      deadline_selector: ".deadline, .submission-deadline, .frist, .angebotsfrist"
-      description_selector: ".description, .excerpt, .summary"
+    Cluster-Begriffe.
 
-  # =====================================================================
-  # Bundeslaender (alphabetisch)
-  # =====================================================================
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /search.html?publishDateRange=ALL
+    - /search.html?1
+    - /search.html
+    link_selector: 'table.table-advanced td a, table.table-striped td a, a.searchResultLink, a.publicationLink, a.notice-link
 
-  - name: "Vergabe Baden-Württemberg"
-    enabled: true
-    scraper: "crawl_html"
-    base_url: "https://vergabe.service-bw.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: Domain liefert DNS-Fehler (Name or service not known).
-      Weder vergabe.bwl.de noch vergabe.service-bw.de existieren noch.
-      Aktuelle BW-Vergabeplattform muss recherchiert und neue base_url
-      gesetzt werden, dann auf enabled: true umstellen.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/Ausschreibungen.aspx"
-        - "/Vergabesuche.aspx"
-        - "/"
-      link_selector: "a[href]"
-      link_pattern: "(ausschreibung|bekanntmachung|notice|tender|vergabe|auftrag)"
-      max_details: 30
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .title"
-      detail_authority_selector: ".vergabestelle, .buyer, .auftraggeber"
-      detail_location_selector: ".ort, .place, .erfuellungsort"
-      detail_deadline_selector: ".frist, .deadline, .angebotsfrist"
+      '
+    link_pattern: (searchPanel-results|/notice|/announcement|/tender)
+    max_details: 200
+    request_delay_s: 0.3
+    detail_title_selector: h1, .title, .announcement-title, .notice-title
+    detail_authority_selector: .authority, .buyer, .vergabestelle, .auftraggeber
+    detail_location_selector: .place, .location, .ort, .erfuellungsort
+    detail_deadline_selector: .deadline, .frist, .submissionDeadline, .angebotsfrist
+    detail_publication_selector: .publicationDate, .published, .veroeffentlicht
+- name: DTVP - Deutsches Vergabeportal
+  enabled: true
+  scraper: dtvp
+  base_url: https://www.dtvp.de
+  strategy: scrape
+  notes: SPA mit base64-encoded Hash-Fragment. Cards in <tr> mit a.noTextDecorationLink[href*="projectForwarding.do?pid="]. Lauft unter Xvfb (headless=False) wg. Bot-Detection.
+  config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+    headless: false
+    timeout: 90
+    wait_timeout_ms: 30000
+    search_path: /Center/common/project/search.do?method=showExtendedSearch&fromExternal=true#{hash}
+    hash_json:
+      cpvCodes: []
+      contractingRules:
+      - VOL
+      - VOB
+      - VSVGV
+      - SEKTVO
+      - OTHER
+      publicationTypes:
+      - Tender
+      distance: 0
+      postalCode: ''
+      order: '0'
+      page: '1'
+      searchText: '{term}'
+      sortField: PROJECT_PUBLICATION_DATE_LNG
+    wait_for_selector: a[href*='projectForwarding.do']
+    filter_by_terms: true
+    url_terms:
+    - tiefbau
+    - erdarbeiten
+    - kabelgraben
+    - rohrleitung
+    - verfüllung
+    - leitungsbau
+    - kanalbau
+    - spundwand
+    - bohrpfahl
+    - wasserhaltung
+    - schachtbau
+    - baugrube
+- name: Vergabe Baden-Württemberg
+  enabled: true
+  scraper: crawl_html
+  base_url: https://vergabe.service-bw.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: Domain liefert DNS-Fehler (Name or service not known).
 
-  - name: "Auftragsbörse Bayern"
-    enabled: true
-    scraper: "bayern"
-    base_url: "https://www.auftraege.bayern.de"
-    strategy: "scrape"
-    notes: |
-      Bayerische Auftragsboerse. Zwei Quellen werden kombiniert:
-        1. Landingpage / mit <ul id="webTicker"> (50+ aktuelle Auftraege)
-        2. /Dashboards/Dashboard_off?BL=09 mit ASP.NET-Tabelle der
-           ausfuehrlicheren Auftragsliste
-      Beide werden client-seitig auf Cluster-Begriffe gefiltert.
-    config:
-      filter_by_terms: true
-      listing_path: "/"
-      crawl_dashboard: true
-      dashboard_path: "/Dashboards/Dashboard_off?BL=09"
-      request_delay_s: 0.5
+    Weder vergabe.bwl.de noch vergabe.service-bw.de existieren noch.
 
-  - name: "Vergabeplattform Berlin"
-    enabled: true
-    scraper: "crawl_html"
-    base_url: "https://www.berlin.de"
-    strategy: "scrape"
-    notes: |
-      Berlin: alte vergabeplattform.berlin.de leitet auf
-      berlin.de/vergabeplattform/ um. Live-Dump zeigt: 9 Anchors auf
-      /vergabeplattform/veroeffentlichungen/info-XX/ - Kategorie-Listings.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/vergabeplattform/veroeffentlichungen/"
-        - "/vergabeplattform/"
-      max_details: 30
-      request_delay_s: 0.5
+    Aktuelle BW-Vergabeplattform muss recherchiert und neue base_url
 
-  - name: "Vergabemarktplatz Brandenburg"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://vergabemarktplatz.brandenburg.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: robots.txt von vergabemarktplatz.brandenburg.de
-      verbietet Crawling. Wir respektieren das. Workaround waere ein
-      offizieller API-Zugang oder die Nutzung eines RSS-Feeds (sofern
-      vorhanden).
-    config:
-      variant: "satellite"
-      max_pages: 5
-      filter_by_terms: true
+    gesetzt werden, dann auf enabled: true umstellen.
 
-  - name: "Vergabe Bremen"
-    enabled: true
-    scraper: "crawl_html"
-    base_url: "https://vergabe.bremen.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: vergabe.bremen.de liefert nur eine 641-Byte-Stub-
-      Antwort, kein echter Inhalt. Aktuelle Bremen-Vergabeplattform
-      recherchieren - vermutlich auf eine andere Subdomain umgezogen.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/"
-        - "/ausschreibungen"
-        - "/bekanntmachungen"
-      link_selector: "a[href]"
-      link_pattern: "(ausschreibung|bekanntmachung|notice|auftrag)"
-      max_details: 30
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .title"
-      detail_authority_selector: ".vergabestelle, .buyer"
-      detail_location_selector: ".ort, .place"
-      detail_deadline_selector: ".frist, .deadline"
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /Ausschreibungen.aspx
+    - /Vergabesuche.aspx
+    - /
+    link_selector: a[href]
+    link_pattern: (ausschreibung|bekanntmachung|notice|tender|vergabe|auftrag)
+    max_details: 30
+    request_delay_s: 0.5
+    detail_title_selector: h1, .title
+    detail_authority_selector: .vergabestelle, .buyer, .auftraggeber
+    detail_location_selector: .ort, .place, .erfuellungsort
+    detail_deadline_selector: .frist, .deadline, .angebotsfrist
+- name: Auftragsbörse Bayern
+  enabled: true
+  scraper: bayern
+  base_url: https://www.auftraege.bayern.de
+  strategy: scrape
+  notes: "Bayerische Auftragsboerse. Zwei Quellen werden kombiniert:\n  1. Landingpage / mit <ul id=\"webTicker\"> (50+ aktuelle Auftraege)\n  2. /Dashboards/Dashboard_off?BL=09 mit ASP.NET-Tabelle der\n     ausfuehrlicheren Auftragsliste\nBeide werden client-seitig auf Cluster-Begriffe gefiltert.\n"
+  config:
+    filter_by_terms: true
+    listing_path: /
+    crawl_dashboard: true
+    dashboard_path: /Dashboards/Dashboard_off?BL=09
+    request_delay_s: 0.5
+- name: Vergabeplattform Berlin
+  enabled: true
+  scraper: crawl_html
+  base_url: https://www.berlin.de
+  strategy: scrape
+  notes: 'Berlin: alte vergabeplattform.berlin.de leitet auf
 
-  - name: "Vergabe Hamburg"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://vergabe.hamburg.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: Domain liefert DNS-Fehler. Hamburg-Vergabe ist auf
-      eine andere URL umgezogen (z.B. www.vergabe.hamburg). base_url
-      anpassen + enabled: true setzen.
-    config:
-      variant: "center"
-      max_pages: 5
-      filter_by_terms: true
+    berlin.de/vergabeplattform/ um. Live-Dump zeigt: 9 Anchors auf
 
-  - name: "Vergabe Hessen (HAD)"
-    enabled: true
-    scraper: "crawl_html"
-    base_url: "https://www.had.de"
-    strategy: "scrape"
-    notes: |
-      Hessen Ausschreibungsdatenbank (HAD). Live-Dump zeigt echte
-      Listing-URLs: /onlinesuche_login.html (aktuelle Hessen-Aus-
-      schreibungen), /archivsuche_einfach.html (Archiv),
-      /beschafferprofile-beabs-ausschreibungen.html (Beabsichtigt).
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/onlinesuche_login.html"
-        - "/beschafferprofile-beabs-ausschreibungen.html"
-        - "/"
-      max_details: 40
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .title, .had-title"
-      detail_authority_selector: ".vergabestelle, .auftraggeber"
-      detail_location_selector: ".ort, .erfuellungsort"
-      detail_deadline_selector: ".frist, .angebotsfrist"
+    /vergabeplattform/veroeffentlichungen/info-XX/ - Kategorie-Listings.
 
-  - name: "Vergabe Mecklenburg-Vorpommern"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://www.vergabe-mv.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: Domain vergabe-mv.de liefert DNS-Fehler. Aktuelle
-      MV-Vergabeplattform recherchieren und base_url anpassen.
-    config:
-      variant: "satellite"
-      max_pages: 5
-      filter_by_terms: true
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /vergabeplattform/veroeffentlichungen/
+    - /vergabeplattform/
+    max_details: 30
+    request_delay_s: 0.5
+- name: Vergabemarktplatz Brandenburg
+  enabled: true
+  scraper: cosinex
+  base_url: https://vergabemarktplatz.brandenburg.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: robots.txt von vergabemarktplatz.brandenburg.de
 
-  - name: "Vergabe Niedersachsen"
-    enabled: true
-    scraper: "crawl_html"
-    base_url: "https://vergabe.niedersachsen.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: vergabe.niedersachsen.de liefert nur eine 89-Byte-
-      Stub-Antwort. Aktuelle Niedersachsen-Vergabeplattform
-      recherchieren - aktuell wahrscheinlich auf vergabe.nds.de oder
-      einer Cosinex-VMP-Subdomain.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/Veroeffentlichungen"
-        - "/veroeffentlichungen"
-        - "/"
-      link_selector: "a[href*='Veroeffentlichung'], a[href*='bekanntmachung'], a[href*='detail']"
-      max_details: 40
-      request_delay_s: 0.5
-      detail_title_selector: "h1, .title"
-      detail_authority_selector: ".vergabestelle, .auftraggeber"
-      detail_location_selector: ".ort, .erfuellungsort"
-      detail_deadline_selector: ".frist, .angebotsfrist"
+    verbietet Crawling. Wir respektieren das. Workaround waere ein
 
-  - name: "Vergabe Nordrhein-Westfalen"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://www.evergabe.nrw.de"
-    strategy: "scrape"
-    notes: |
-      NRW VMP Center. Live-Dump zeigt: welcome.do hat eine 22-Zeilen-
-      Tabelle direkt mit aktuellen Bekanntmachungen (Spalten:
-      Veroeffentlicht, Frist, Kurzbezeichnung, Typ, Plattform). Der
-      neue Welcome-Page-Tabellen-Parser im cosinex-Scraper extrahiert
-      diese direkt.
-    config:
-      listing_paths:
-        - "/VMPCenter/company/welcome.do"
-        - "/"
-        - "/VMPCenter/company/announcements/categoryOverview.do?method=show"
-      max_pages: 3
-      filter_by_terms: true
+    offizieller API-Zugang oder die Nutzung eines RSS-Feeds (sofern
 
-  - name: "Vergabe Rheinland-Pfalz"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://vergabe.rlp.de"
-    strategy: "scrape"
-    notes: |
-      RLP VMP Center. Wie NRW: welcome.do liefert die 22-Zeilen-
-      Bekanntmachungstabelle direkt.
-    config:
-      listing_paths:
-        - "/VMPCenter/company/welcome.do"
-        - "/"
-        - "/VMPCenter/company/announcements/categoryOverview.do?method=show"
-      max_pages: 3
-      filter_by_terms: true
+    vorhanden).
 
-  - name: "Vergabe Saarland"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://vergabe.saarland.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: vergabe.saarland.de leitet auf saarland.de/.../vergabe um
-      und liefert dort HTTP 403. Aktuelle Saarland-Vergabeplattform
-      recherchieren und base_url anpassen.
-    config:
-      variant: "center"
-      max_pages: 5
-      filter_by_terms: true
+    '
+  config:
+    variant: satellite
+    max_pages: 5
+    filter_by_terms: true
+- name: Vergabe Bremen
+  enabled: true
+  scraper: crawl_html
+  base_url: https://vergabe.bremen.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: vergabe.bremen.de liefert nur eine 641-Byte-Stub-
 
-  - name: "Vergabe Sachsen"
-    enabled: true
-    scraper: "sachsen"
-    base_url: "https://www.evergabe.sachsen.de"
-    strategy: "search_url"
-    notes: |
-      evergabe.sachsen.de NetServer (AI Informatics) - dedizierter Scraper.
-      Pro query_term ein Search.SearchPattern-Request auf
-      /NetServer/PublicationSearchControllerServlet, mit Pagination.
-      Wenn die Suche leer bleibt, faellt der Scraper auf das ungefilterte
-      InvitationToTender-Listing zurueck und filtert client-seitig auf
-      die Cluster-Begriffe.
-    config:
-      search_path: "/NetServer/PublicationSearchControllerServlet?function=SearchPublications&Category=InvitationToTender&thContext=publications"
-      # Pro Page liefert NetServer 50 Eintraege - 6 Seiten = bis 300 Tender.
-      max_pages: 6
-      max_details: 0
-      request_delay_s: 0.4
+    Antwort, kein echter Inhalt. Aktuelle Bremen-Vergabeplattform
 
-  - name: "Vergabe Sachsen-Anhalt"
-    enabled: true
-    scraper: "crawl_html"
-    base_url: "https://www.evergabe.sachsen-anhalt.de"
-    strategy: "scrape"
-    notes: |
-      Sachsen-Anhalt: kein Cosinex-VMP, sondern eigenes evergabe-Portal
-      auf evergabe.sachsen-anhalt.de. Live-Dump: / liefert 105 KB mit
-      einer 10-Zeilen-Tabelle aktueller Vergaben + Form-POST nach
-      /recherche-aktueller-vergaben.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      listing_paths:
-        - "/recherche-aktueller-vergaben"
-        - "/"
-      max_details: 40
-      request_delay_s: 0.5
+    recherchieren - vermutlich auf eine andere Subdomain umgezogen.
 
-  - name: "Vergabe Schleswig-Holstein"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://www.vergabe-sh.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: Domain vergabe-sh.de liefert DNS-Fehler. Aktuelle SH-
-      Vergabeplattform recherchieren und base_url anpassen.
-    config:
-      variant: "satellite"
-      max_pages: 5
-      filter_by_terms: true
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /
+    - /ausschreibungen
+    - /bekanntmachungen
+    link_selector: a[href]
+    link_pattern: (ausschreibung|bekanntmachung|notice|auftrag)
+    max_details: 30
+    request_delay_s: 0.5
+    detail_title_selector: h1, .title
+    detail_authority_selector: .vergabestelle, .buyer
+    detail_location_selector: .ort, .place
+    detail_deadline_selector: .frist, .deadline
+- name: Vergabe Hamburg
+  enabled: true
+  scraper: cosinex
+  base_url: https://vergabe.hamburg.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: Domain liefert DNS-Fehler. Hamburg-Vergabe ist auf
 
-  - name: "Vergabe Thüringen"
-    enabled: true
-    scraper: "cosinex"
-    base_url: "https://www.evergabe-thueringen.de"
-    strategy: "scrape"
-    notes: |
-      DEAKTIVIERT: Server lehnt Verbindung ab (Connection refused). Domain
-      ist erreichbar aber Port 443 antwortet nicht mehr. Vermutlich Umzug
-      auf neue Domain.
-    config:
-      variant: "satellite"
-      max_pages: 5
-      filter_by_terms: true
+    eine andere URL umgezogen (z.B. www.vergabe.hamburg). base_url
 
-  # =====================================================================
-  # Zusaetzliche RSS-Feeds - URL bitte ueber /admin/probe verifizieren,
-  # bevor enabled: true gesetzt wird. Der rss_generic-Scraper akzeptiert
-  # einfach feed_urls + filter_by_terms.
-  # =====================================================================
+    anpassen + enabled: true setzen.
 
-  - name: "bi-medien Bauausschreibungen"
-    enabled: false
-    scraper: "rss_generic"
-    base_url: "https://www.bi-medien.de"
-    strategy: "rss"
-    notes: |
-      Vorlage: bi-medien (Fachverlag Bau) verlinkt auf der Webseite
-      RSS-Feeds zu Bauausschreibungen / Tiefbau. Vor Aktivierung die
-      tatsaechliche Feed-URL pruefen (variiert nach Verlagsangebot).
-      In der Vergangenheit war /feeds/ausschreibungen.xml gaengig.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      feed_urls:
-        - "https://www.bi-medien.de/feeds/ausschreibungen.xml"
-      filter_by_terms: true
-      max_items_per_feed: 200
+    '
+  config:
+    variant: center
+    max_pages: 5
+    filter_by_terms: true
+- name: Vergabe Hessen (HAD)
+  enabled: true
+  scraper: crawl_html
+  base_url: https://www.had.de
+  strategy: scrape
+  notes: 'Hessen Ausschreibungsdatenbank (HAD). Live-Dump zeigt echte
 
-  - name: "TED RSS-Feed (DE)"
-    enabled: false
-    scraper: "rss_generic"
-    base_url: "https://ted.europa.eu"
-    strategy: "rss"
-    notes: |
-      Vorlage: TED hat dokumentierte RSS-Feeds, das aktuelle URL-Format
-      aendert sich aber zwischen v2 und v3. Vor Aktivierung: bei TED
-      auf der Static-Page einen aktuellen Feed-Link ziehen
-      (https://ted.europa.eu/en/static-page/rss) und hier eintragen.
-      Aktuell ueberlappt das Ergebnis mit der TED-API; deshalb
-      standardmaessig deaktiviert.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      feed_urls:
-        - "https://ted.europa.eu/udl?uri=TED:RSS:All:DE&action=display"
-      filter_by_terms: true
-      max_items_per_feed: 200
+    Listing-URLs: /onlinesuche_login.html (aktuelle Hessen-Aus-
 
-  # =====================================================================
-  # Login-/JS-pflichtig - spaeter mit Spezial-Scraper
-  # =====================================================================
+    schreibungen), /archivsuche_einfach.html (Archiv),
 
-  - name: "Subreport ELViS"
-    enabled: false
-    scraper: "subreport"
-    base_url: "https://www.subreport.de"
-    strategy: "scrape"
-    notes: "Login/Account erforderlich. Spezial-Scraper noetig."
+    /beschafferprofile-beabs-ausschreibungen.html (Beabsichtigt).
 
-  - name: "DB Vergabeportal"
-    enabled: true
-    scraper: "playwright_html"
-    base_url: "https://bieterportal.noncd.db.de"
-    strategy: "scrape"
-    notes: |
-      Bieterportal Deutsche Bahn AG (Healy-Hudson eVergabe, gleiche
-      Engine wie DTVP). Listing der oeffentlichen Bekanntmachungen
-      unter /evergabe.bieter/eva/supplierportal/portal. JS-rendered -
-      braucht Playwright (Headless-Chromium).
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /onlinesuche_login.html
+    - /beschafferprofile-beabs-ausschreibungen.html
+    - /
+    max_details: 40
+    request_delay_s: 0.5
+    detail_title_selector: h1, .title, .had-title
+    detail_authority_selector: .vergabestelle, .auftraggeber
+    detail_location_selector: .ort, .erfuellungsort
+    detail_deadline_selector: .frist, .angebotsfrist
+- name: Vergabe Mecklenburg-Vorpommern
+  enabled: true
+  scraper: cosinex
+  base_url: https://www.vergabe-mv.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: Domain vergabe-mv.de liefert DNS-Fehler. Aktuelle
 
-      Auf VPS einmalig:
-          source .venv/bin/activate
-          pip install playwright
-          playwright install chromium
+    MV-Vergabeplattform recherchieren und base_url anpassen.
 
-      Falls Playwright nicht installiert ist, gibt der Scraper einen
-      klaren Hinweis und blockt nicht die anderen Portale.
-    config:
-      user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0"
-      timeout: 60
-      search_path: "/evergabe.bieter/eva/supplierportal/portal"
-      # Auf eines dieser Selektoren warten = Hydration ist durch.
-      wait_for_selector: >
-        table.notice-list, table.results, table.searchResults,
-        .project-list, .search-result, .notice-result,
-        a[href*='/notice'], a[href*='/Verfahren'], a[href*='/Bekanntmachung'],
-        tr.notice, tr.publication, [class*='notice-item'],
-        [class*='result-row']
-      wait_timeout_ms: 25000
-      filter_by_terms: true
-      # Multi-Strategy-Selektoren: zuerst Tabellen-Zeilen, dann Notice-
-      # Container, dann letztens jeden Anchor mit Notice-Pfad als Card.
-      result_selector: >
-        tr.notice, tr.publication, tr.result-row,
-        table.notice-list tbody tr,
-        table.searchResults tbody tr,
-        table.results tbody tr,
-        .project-list-row, .search-result-row,
-        .notice-result, [class*='notice-item'], [class*='publication-item'],
-        article.notice, li.notice
-      title_selector: >
-        a.notice-title, a.publication-title, a.title,
-        h2 a, h3 a, td a[href*='/notice'], td a[href*='/Verfahren'],
-        td a[href*='/Bekanntmachung'], td a
-      authority_selector: ".buyer, .vergabestelle, .auftraggeber, .organisation"
-      location_selector: ".place, .ort, .erfuellungsort, .location"
-      deadline_selector: ".deadline, .frist, .angebotsfrist, .submissionDeadline"
-      description_selector: ".description, .excerpt, .summary, p"
+    '
+  config:
+    variant: satellite
+    max_pages: 5
+    filter_by_terms: true
+- name: Vergabe Niedersachsen
+  enabled: true
+  scraper: crawl_html
+  base_url: https://vergabe.niedersachsen.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: vergabe.niedersachsen.de liefert nur eine 89-Byte-
 
-  - name: "Vergabe24 (Cosinex)"
-    enabled: false
-    scraper: "cosinex"
-    base_url: "https://www.vergabe24.de"
-    strategy: "scrape"
-    notes: |
-      Vorlage: Vergabe24 ist ein Cosinex-Vergabeplattform-Aggregator.
-      Aktivierung: enabled: true setzen, dann ueber /admin/status
-      pruefen ob die Welcome-Page-Tabelle erkannt wird. Falls nicht,
-      listing_paths anpassen.
-    config:
-      variant: "center"
-      max_pages: 2
-      filter_by_terms: true
+    Stub-Antwort. Aktuelle Niedersachsen-Vergabeplattform
+
+    recherchieren - aktuell wahrscheinlich auf vergabe.nds.de oder
+
+    einer Cosinex-VMP-Subdomain.
+
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /Veroeffentlichungen
+    - /veroeffentlichungen
+    - /
+    link_selector: a[href*='Veroeffentlichung'], a[href*='bekanntmachung'], a[href*='detail']
+    max_details: 40
+    request_delay_s: 0.5
+    detail_title_selector: h1, .title
+    detail_authority_selector: .vergabestelle, .auftraggeber
+    detail_location_selector: .ort, .erfuellungsort
+    detail_deadline_selector: .frist, .angebotsfrist
+- name: Vergabe Nordrhein-Westfalen
+  enabled: true
+  scraper: cosinex
+  base_url: https://www.evergabe.nrw.de
+  strategy: scrape
+  notes: 'NRW VMP Center. Live-Dump zeigt: welcome.do hat eine 22-Zeilen-
+
+    Tabelle direkt mit aktuellen Bekanntmachungen (Spalten:
+
+    Veroeffentlicht, Frist, Kurzbezeichnung, Typ, Plattform). Der
+
+    neue Welcome-Page-Tabellen-Parser im cosinex-Scraper extrahiert
+
+    diese direkt.
+
+    '
+  config:
+    listing_paths:
+    - /VMPCenter/company/welcome.do
+    - /
+    - /VMPCenter/company/announcements/categoryOverview.do?method=show
+    max_pages: 3
+    filter_by_terms: true
+- name: Vergabe Rheinland-Pfalz
+  enabled: true
+  scraper: cosinex
+  base_url: https://vergabe.rlp.de
+  strategy: scrape
+  notes: 'RLP VMP Center. Wie NRW: welcome.do liefert die 22-Zeilen-
+
+    Bekanntmachungstabelle direkt.
+
+    '
+  config:
+    listing_paths:
+    - /VMPCenter/company/welcome.do
+    - /
+    - /VMPCenter/company/announcements/categoryOverview.do?method=show
+    max_pages: 3
+    filter_by_terms: true
+- name: Vergabe Saarland
+  enabled: true
+  scraper: cosinex
+  base_url: https://vergabe.saarland.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: vergabe.saarland.de leitet auf saarland.de/.../vergabe um
+
+    und liefert dort HTTP 403. Aktuelle Saarland-Vergabeplattform
+
+    recherchieren und base_url anpassen.
+
+    '
+  config:
+    variant: center
+    max_pages: 5
+    filter_by_terms: true
+- name: Vergabe Sachsen
+  enabled: true
+  scraper: sachsen
+  base_url: https://www.evergabe.sachsen.de
+  strategy: search_url
+  notes: 'evergabe.sachsen.de NetServer (AI Informatics) - dedizierter Scraper.
+
+    Pro query_term ein Search.SearchPattern-Request auf
+
+    /NetServer/PublicationSearchControllerServlet, mit Pagination.
+
+    Wenn die Suche leer bleibt, faellt der Scraper auf das ungefilterte
+
+    InvitationToTender-Listing zurueck und filtert client-seitig auf
+
+    die Cluster-Begriffe.
+
+    '
+  config:
+    search_path: /NetServer/PublicationSearchControllerServlet?function=SearchPublications&Category=InvitationToTender&thContext=publications
+    max_pages: 6
+    max_details: 0
+    request_delay_s: 0.4
+- name: Vergabe Sachsen-Anhalt
+  enabled: true
+  scraper: crawl_html
+  base_url: https://www.evergabe.sachsen-anhalt.de
+  strategy: scrape
+  notes: 'Sachsen-Anhalt: kein Cosinex-VMP, sondern eigenes evergabe-Portal
+
+    auf evergabe.sachsen-anhalt.de. Live-Dump: / liefert 105 KB mit
+
+    einer 10-Zeilen-Tabelle aktueller Vergaben + Form-POST nach
+
+    /recherche-aktueller-vergaben.
+
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /recherche-aktueller-vergaben
+    - /
+    max_details: 40
+    request_delay_s: 0.5
+- name: Vergabe Schleswig-Holstein
+  enabled: true
+  scraper: cosinex
+  base_url: https://www.vergabe-sh.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: Domain vergabe-sh.de liefert DNS-Fehler. Aktuelle SH-
+
+    Vergabeplattform recherchieren und base_url anpassen.
+
+    '
+  config:
+    variant: satellite
+    max_pages: 5
+    filter_by_terms: true
+- name: Vergabe Thüringen
+  enabled: true
+  scraper: cosinex
+  base_url: https://www.evergabe-thueringen.de
+  strategy: scrape
+  notes: 'DEAKTIVIERT: Server lehnt Verbindung ab (Connection refused). Domain
+
+    ist erreichbar aber Port 443 antwortet nicht mehr. Vermutlich Umzug
+
+    auf neue Domain.
+
+    '
+  config:
+    variant: satellite
+    max_pages: 5
+    filter_by_terms: true
+- name: bi-medien Bauausschreibungen
+  enabled: false
+  scraper: rss_generic
+  base_url: https://www.bi-medien.de
+  strategy: rss
+  notes: 'Vorlage: bi-medien (Fachverlag Bau) verlinkt auf der Webseite
+
+    RSS-Feeds zu Bauausschreibungen / Tiefbau. Vor Aktivierung die
+
+    tatsaechliche Feed-URL pruefen (variiert nach Verlagsangebot).
+
+    In der Vergangenheit war /feeds/ausschreibungen.xml gaengig.
+
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    feed_urls:
+    - https://www.bi-medien.de/feeds/ausschreibungen.xml
+    filter_by_terms: true
+    max_items_per_feed: 200
+- name: TED RSS-Feed (DE)
+  enabled: false
+  scraper: rss_generic
+  base_url: https://ted.europa.eu
+  strategy: rss
+  notes: 'Vorlage: TED hat dokumentierte RSS-Feeds, das aktuelle URL-Format
+
+    aendert sich aber zwischen v2 und v3. Vor Aktivierung: bei TED
+
+    auf der Static-Page einen aktuellen Feed-Link ziehen
+
+    (https://ted.europa.eu/en/static-page/rss) und hier eintragen.
+
+    Aktuell ueberlappt das Ergebnis mit der TED-API; deshalb
+
+    standardmaessig deaktiviert.
+
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    feed_urls:
+    - https://ted.europa.eu/udl?uri=TED:RSS:All:DE&action=display
+    filter_by_terms: true
+    max_items_per_feed: 200
+- name: Subreport ELViS
+  enabled: false
+  scraper: subreport
+  base_url: https://www.subreport.de
+  strategy: scrape
+  notes: Login/Account erforderlich. Spezial-Scraper noetig.
+- name: DB Vergabeportal
+  enabled: true
+  scraper: playwright_html
+  base_url: https://bieterportal.noncd.db.de
+  strategy: scrape
+  notes: "Bieterportal Deutsche Bahn AG (Healy-Hudson eVergabe, gleiche\nEngine wie DTVP). Listing der oeffentlichen Bekanntmachungen\nunter /evergabe.bieter/eva/supplierportal/portal. JS-rendered -\nbraucht Playwright (Headless-Chromium).\n\nAuf VPS einmalig:\n    source .venv/bin/activate\n    pip install playwright\n    playwright install chromium\n\nFalls Playwright nicht installiert ist, gibt der Scraper einen\nklaren Hinweis und blockt nicht die anderen Portale.\n"
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    timeout: 60
+    search_path: /evergabe.bieter/eva/supplierportal/portal
+    wait_for_selector: 'table.notice-list, table.results, table.searchResults, .project-list, .search-result, .notice-result, a[href*=''/notice''], a[href*=''/Verfahren''], a[href*=''/Bekanntmachung''], tr.notice, tr.publication, [class*=''notice-item''], [class*=''result-row'']
+
+      '
+    wait_timeout_ms: 25000
+    filter_by_terms: true
+    result_selector: 'tr.notice, tr.publication, tr.result-row, table.notice-list tbody tr, table.searchResults tbody tr, table.results tbody tr, .project-list-row, .search-result-row, .notice-result, [class*=''notice-item''], [class*=''publication-item''], article.notice, li.notice
+
+      '
+    title_selector: 'a.notice-title, a.publication-title, a.title, h2 a, h3 a, td a[href*=''/notice''], td a[href*=''/Verfahren''], td a[href*=''/Bekanntmachung''], td a
+
+      '
+    authority_selector: .buyer, .vergabestelle, .auftraggeber, .organisation
+    location_selector: .place, .ort, .erfuellungsort, .location
+    deadline_selector: .deadline, .frist, .angebotsfrist, .submissionDeadline
+    description_selector: .description, .excerpt, .summary, p
+- name: Vergabe24 (Cosinex)
+  enabled: false
+  scraper: cosinex
+  base_url: https://www.vergabe24.de
+  strategy: scrape
+  notes: 'Vorlage: Vergabe24 ist ein Cosinex-Vergabeplattform-Aggregator.
+
+    Aktivierung: enabled: true setzen, dann ueber /admin/status
+
+    pruefen ob die Welcome-Page-Tabelle erkannt wird. Falls nicht,
+
+    listing_paths anpassen.
+
+    '
+  config:
+    variant: center
+    max_pages: 2
+    filter_by_terms: true

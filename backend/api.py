@@ -57,6 +57,17 @@ def _startup():
 # --- Helpers --------------------------------------------------------
 STATUS_VALUES = [s.value for s in TenderStatus]
 LEVEL_VALUES = ["high", "medium", "low"]
+PER_PAGE_OPTIONS = [50, 100, 250]
+PER_PAGE_ALL = 99999
+
+
+def _normalize_per_page(value: int) -> int:
+    """Keep dashboard page sizes bounded, with 99999 as the explicit all option."""
+    if value == PER_PAGE_ALL:
+        return PER_PAGE_ALL
+    if value in PER_PAGE_OPTIONS:
+        return value
+    return 50
 
 
 def _session_user(request: Request) -> dict | None:
@@ -109,6 +120,8 @@ SORT_OPTIONS = {
     "created_desc":  (Tender.created_at.desc(),),
     "created_asc":   (Tender.created_at.asc(),),
     "title_asc":     (Tender.title.asc(),),
+    "region_asc":    (Tender.region.asc(), Tender.relevance_score.desc()),
+    "region_desc":   (Tender.region.desc(), Tender.relevance_score.desc()),
 }
 
 
@@ -237,14 +250,17 @@ def index(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
-    score_min: Optional[float] = None,
+    score_min: Optional[float] = 30,
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
+    page: int = 1,
+    per_page: int = 50,
     include_expired: Optional[str] = None,
     flash: Optional[str] = None,
     error: Optional[str] = None,
 ):
+    per_page = _normalize_per_page(per_page)
     expired_flag = bool(include_expired)
     query = _filtered_query(
         db,
@@ -253,7 +269,11 @@ def index(
         score_min=score_min, score_max=score_max, quick=quick,
         include_expired=expired_flag,
     )
-    tenders = _apply_sort(query, sort).limit(500).all()
+    total_results = query.count()
+    total_pages = max(1, (total_results + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    offset = (page - 1) * per_page
+    tenders = _apply_sort(query, sort).offset(offset).limit(per_page).all()
 
     # Portal-Filter zeigt ALLE konfigurierten + alle in der DB vorhandenen
     # Portale - nicht nur die mit bisherigen Treffern. Sonst sieht der User
@@ -262,6 +282,14 @@ def index(
     portals_configured = {p.name for p in load_portals() if p.name}
     portals_distinct = sorted(portals_in_db | portals_configured, key=str.lower)
     regions_distinct = [r[0] for r in db.query(Tender.region).distinct().all() if r[0]]
+    # Counts pro Region (auf den AKTUELL gefilterten query, abzüglich region-Filter selbst)
+    from sqlalchemy import func as _sqlfunc
+    _q_for_counts = _filtered_query(db, portal=portal, region=None, status=status, level=level, deadline_from=deadline_from, deadline_to=deadline_to, q=q, score_min=score_min, score_max=score_max, quick=quick)
+    region_counts = dict(_q_for_counts.with_entities(Tender.region, _sqlfunc.count(Tender.id)).group_by(Tender.region).all())
+    region_counts = {k: v for k, v in region_counts.items() if k}
+    _q_for_status_counts = _filtered_query(db, portal=portal, region=region, status=None, level=level, deadline_from=deadline_from, deadline_to=deadline_to, q=q, score_min=score_min, score_max=score_max, quick=quick)
+    status_counts = dict(_q_for_status_counts.with_entities(Tender.status, _sqlfunc.count(Tender.id)).group_by(Tender.status).all())
+    status_counts = {k: v for k, v in status_counts.items() if k}
     total_count = db.query(Tender).count()
     high_count = db.query(Tender).filter(Tender.relevance_level == "high").count()
     interesting_count = db.query(Tender).filter(Tender.status == TenderStatus.INTERESSANT.value).count()
@@ -291,6 +319,12 @@ def index(
             "stats": stats,
             "portals": portals_distinct,
             "regions": regions_distinct,
+            "region_counts": region_counts,
+            "status_counts": status_counts,
+            "total_results": total_results,
+            "total_pages": total_pages,
+            "current_page": page,
+            "per_page": per_page,
             "statuses": STATUS_VALUES,
             "levels": LEVEL_VALUES,
             "filters": {
@@ -1200,9 +1234,11 @@ def admin_user_save(
     request: Request,
     user_id: str = Form(""),
     username: str = Form(...),
+    email: str = Form(""),
     password: str = Form(""),
     role: str = Form("viewer"),
     is_active: Optional[str] = Form(None),
+    send_invite: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     username = username.strip()
@@ -1226,30 +1262,41 @@ def admin_user_save(
             edited.username = username
         edited.role = role
         edited.is_active = is_active == "on"
+        edited.email = email.strip() or None
         if password.strip():
             edited.password_hash = hash_password(password)
         db.commit()
         return RedirectResponse(url=f"/admin/users?flash={username} aktualisiert.", status_code=303)
 
-    # Neu anlegen - Passwort erforderlich
-    if not password.strip():
-        return RedirectResponse(
-            url="/admin/users?error=Passwort ist beim Anlegen erforderlich.",
-            status_code=303,
-        )
     if db.query(User).filter(User.username == username).first():
-        return RedirectResponse(
-            url=f"/admin/users?error=Username '{username}' ist vergeben.",
-            status_code=303,
+        return RedirectResponse(url=f"/admin/users?error=Username '{username}' ist vergeben.", status_code=303)
+    invite_mode = send_invite == "on" and bool(email.strip())
+    if not password.strip() and not invite_mode:
+        return RedirectResponse(url="/admin/users?error=Passwort oder Einladung per Mail erforderlich.", status_code=303)
+    if invite_mode:
+        from backend.auth import generate_token as _gt, invite_expires_at as _exp
+        new_user = User(
+            username=username,
+            email=email.strip(),
+            password_hash="",  # noch leer
+            role=role,
+            is_active=False,
+            invite_token=_gt(),
+            invite_token_expires_at=_exp(),
         )
+        db.add(new_user); db.commit()
+        link = f"{_base_url(request)}/set-password?token={new_user.invite_token}"
+        from backend import notify as notify_mod
+        ok, err = notify_mod.send_invite_mail(new_user.email, new_user.username, link)
+        if not ok:
+            return RedirectResponse(url=f"/admin/users?flash={username} angelegt, Mailversand fehlgeschlagen: {err or '-'}", status_code=303)
+        return RedirectResponse(url=f"/admin/users?flash={username} angelegt + Einladung verschickt.", status_code=303)
     new_user = User(
-        username=username,
-        password_hash=hash_password(password),
-        role=role,
+        username=username, email=(email.strip() or None),
+        password_hash=hash_password(password), role=role,
         is_active=is_active == "on" or is_active is None,
     )
-    db.add(new_user)
-    db.commit()
+    db.add(new_user); db.commit()
     return RedirectResponse(url=f"/admin/users?flash={username} angelegt.", status_code=303)
 
 
@@ -1422,3 +1469,4 @@ def api_list(
 @app.get("/api/health", response_class=PlainTextResponse)
 def health():
     return "ok"
+

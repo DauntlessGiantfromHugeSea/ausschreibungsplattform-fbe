@@ -258,6 +258,45 @@ def test_default_dashboard_hides_expired_tenders(auth_client, db_session):
         db_session.commit()
 
 
+def test_dashboard_per_page_can_show_more_or_all(auth_client, db_session):
+    """Dashboard kann mehr als die Default-50 anzeigen, inkl. 'alle'."""
+    from datetime import datetime, timedelta
+    from backend.models import Tender, TenderStatus
+
+    fps = [f"fp-page-size-{i}" for i in range(60)]
+    for i, fp in enumerate(fps):
+        db_session.add(Tender(
+            title=f"Pager Tender {i:02d}",
+            portal="Pager Portal",
+            url=f"https://pager.example/{i}",
+            fingerprint=fp,
+            relevance_score=80,
+            relevance_level="high",
+            status=TenderStatus.NEU.value,
+            deadline=datetime.utcnow() + timedelta(days=30),
+        ))
+    db_session.commit()
+    try:
+        r = auth_client.get("/?q=Pager%20Tender")
+        assert r.status_code == 200
+        assert "50 angezeigt" in r.text
+        assert "Pager Tender 59" not in r.text
+        assert "per_page=100" in r.text
+        assert "per_page=99999" in r.text
+
+        r = auth_client.get("/?q=Pager%20Tender&per_page=100")
+        assert "60 angezeigt" in r.text
+        assert "Pager Tender 59" in r.text
+
+        r = auth_client.get("/?q=Pager%20Tender&per_page=99999")
+        assert "60 angezeigt" in r.text
+        assert "Pager Tender 59" in r.text
+    finally:
+        for fp in fps:
+            db_session.query(Tender).filter(Tender.fingerprint == fp).delete()
+        db_session.commit()
+
+
 def test_tender_send_mail_validates_recipient(auth_client, tender):
     """Ohne gueltige To-Adresse -> error redirect."""
     r = auth_client.post(

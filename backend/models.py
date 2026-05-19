@@ -101,6 +101,11 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
+    email = Column(String(255), nullable=True)
+    invite_token = Column(String(255), nullable=True)
+    invite_token_expires_at = Column(DateTime, nullable=True)
+    reset_token = Column(String(255), nullable=True)
+    reset_token_expires_at = Column(DateTime, nullable=True)
 
 
 class SearchProfile(Base):

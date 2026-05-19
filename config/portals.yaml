@@ -102,21 +102,15 @@ portals:
     detail_publication_selector: .publicationDate, .published, .veroeffentlicht
 - name: DTVP - Deutsches Vergabeportal
   enabled: true
-  scraper: playwright_html
+  scraper: dtvp
   base_url: https://www.dtvp.de
   strategy: scrape
-  notes: 'DTVP ist eine SPA - der Suchstand liegt in einem base64-codierten
-
-    Hash-Fragment, das clientseitig in eine API-Anfrage uebersetzt wird.
-
-    Wir nutzen Playwright (Headless-Chromium), bauen das Hash-JSON
-
-    pro Suchbegriff und lassen den Browser die Seite vollstaendig
-
-    rendern. Voraussetzung: pip install playwright && playwright install chromium.
-
-    '
+  notes: SPA mit base64-encoded Hash-Fragment. Cards in <tr> mit a.noTextDecorationLink[href*="projectForwarding.do?pid="]. Lauft unter Xvfb (headless=False) wg. Bot-Detection.
   config:
+    user_agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36
+    headless: false
+    timeout: 90
+    wait_timeout_ms: 30000
     search_path: /Center/common/project/search.do?method=showExtendedSearch&fromExternal=true#{hash}
     hash_json:
       cpvCodes: []
@@ -133,16 +127,22 @@ portals:
       order: '0'
       page: '1'
       searchText: '{term}'
-      sortField: rank
-    wait_for_selector: .project-list, .search-result, table.results, [class*='result']
-    wait_timeout_ms: 15000
-    filter_by_terms: false
-    result_selector: .project-list-row, .search-result-row, tr.result, [class*='project-row'], [class*='result-row']
-    title_selector: a.project-title, a.notice-title, a.title, h2 a, h3 a, a
-    authority_selector: .buyer-name, .organisation, .buyer, .vergabestelle
-    location_selector: .place, .location, .ort
-    deadline_selector: .deadline, .submission-deadline, .frist, .angebotsfrist
-    description_selector: .description, .excerpt, .summary
+      sortField: PROJECT_PUBLICATION_DATE_LNG
+    wait_for_selector: a[href*='projectForwarding.do']
+    filter_by_terms: true
+    url_terms:
+    - tiefbau
+    - erdarbeiten
+    - kabelgraben
+    - rohrleitung
+    - verfüllung
+    - leitungsbau
+    - kanalbau
+    - spundwand
+    - bohrpfahl
+    - wasserhaltung
+    - schachtbau
+    - baugrube
 - name: Vergabe Baden-Württemberg
   enabled: true
   scraper: crawl_html

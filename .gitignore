@@ -18,3 +18,4 @@ exports/*.xlsx
 config/*.yaml.bak
 config/portals.local.yaml
 config/search_terms.local.yaml
+config/*.yaml.bak.*

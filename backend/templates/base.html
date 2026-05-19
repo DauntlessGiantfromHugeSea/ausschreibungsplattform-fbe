@@ -1,7 +1,15 @@
 <!DOCTYPE html>
-<html lang="de" class="h-full bg-zinc-50">
+<html lang="de" class="h-full bg-zinc-50 dark:bg-zinc-900">
 <head>
   <meta charset="UTF-8">
+  <script>
+    // Dark mode: localStorage-pref ODER prefers-color-scheme; gesetzt VOR render = kein Flash
+    (function() {
+      const saved = localStorage.getItem('theme');
+      const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      if (dark) document.documentElement.classList.add('dark');
+    })();
+  </script>
   <title>{% block title %}FBE Ausschreibungen{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% if has_logo() %}
@@ -15,14 +23,22 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
           colors: {
             brand: {
-              50: '#f5f7fa', 100: '#e6eaf1', 200: '#c5cedb',
-              500: '#3b5b86', 600: '#2f4a72', 700: '#27406b',
-              800: '#1f3556', 900: '#162741',
+              50:  '#f4f9ef',
+              100: '#e6f2da',
+              200: '#cce5b6',
+              300: '#b3d894',
+              400: '#a3cf85',
+              500: '#92c57a',
+              600: '#7eb064',
+              700: '#6c9954',
+              800: '#587f44',
+              900: '#3f5a30',
             },
             accent: { 500: '#e0a83a', 600: '#c8902a' },
           },
@@ -35,10 +51,10 @@
       body { font-family: 'Inter', system-ui, sans-serif; }
     }
     @layer components {
-      .card { @apply bg-white rounded-xl border border-zinc-200/70 shadow-sm; }
-      .pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+      .card { @apply bg-white dark:bg-zinc-800 rounded-[23px] border border-zinc-200/70 dark:border-zinc-700 shadow-sm dark:shadow-none; }
+      .pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium dark:bg-zinc-700 dark:text-zinc-100; }
       .input {
-        @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm
+        @apply w-full rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm
                shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
                focus:outline-none transition;
       }
@@ -48,7 +64,7 @@
                focus:ring-2 focus:ring-offset-1;
       }
       .btn-primary { @apply btn bg-brand-700 text-white hover:bg-brand-800 focus:ring-brand-500; }
-      .btn-ghost   { @apply btn bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-50 focus:ring-zinc-300; }
+      .btn-ghost   { @apply btn bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600 focus:ring-zinc-300; }
       .btn-icon {
         @apply inline-flex h-8 w-8 items-center justify-center rounded-lg
                border border-zinc-200 bg-white text-zinc-500
@@ -65,18 +81,33 @@
     }
     table.dashboard { @apply w-full text-sm; }
     table.dashboard thead th {
-      @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-200 sticky top-0 bg-white z-10;
+      @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10;
     }
     table.dashboard thead th a { @apply hover:text-zinc-900; }
-    table.dashboard tbody td { @apply px-4 py-3 align-top border-b border-zinc-100; }
-    table.dashboard tbody tr:hover { @apply bg-zinc-50/70; }
+    table.dashboard tbody td { @apply px-3 py-2 align-top border-b border-zinc-100 dark:border-zinc-700/60 text-sm; }
+    table.dashboard tbody tr:hover { @apply bg-zinc-50/70 dark:bg-zinc-700/40; }
     .truncate-2 {
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
       overflow: hidden;
     }
+
+    /* Dark mode global overrides */
+    .dark body { background-color: rgb(24 24 27); color: rgb(244 244 245); }
+    .dark .card { background-color: rgb(39 39 42); border-color: rgb(63 63 70); }
+    .dark header, .dark nav { background-color: rgb(39 39 42) !important; border-color: rgb(63 63 70) !important; color: rgb(244 244 245) !important; }
+    .dark .bg-white { background-color: rgb(39 39 42) !important; }
+    .dark .text-zinc-900 { color: rgb(244 244 245) !important; }
+    .dark .text-zinc-700 { color: rgb(212 212 216) !important; }
+    .dark .text-zinc-600 { color: rgb(161 161 170) !important; }
+    .dark .text-zinc-500 { color: rgb(161 161 170) !important; }
+    .dark .border-zinc-200, .dark .border-zinc-200\/70 { border-color: rgb(63 63 70) !important; }
+    .dark .border-zinc-100 { border-color: rgb(63 63 70) !important; }
+    .dark .hover\:bg-zinc-50:hover { background-color: rgb(63 63 70) !important; }
+    .dark .bg-zinc-50, .dark .bg-zinc-50\/50, .dark .bg-zinc-50\/70 { background-color: rgb(39 39 42) !important; }
+    .dark .bg-zinc-100 { background-color: rgb(63 63 70) !important; }
   </style>
 </head>
-<body class="h-full text-zinc-900">
+<body class="h-full text-zinc-900 dark:text-zinc-100">
 
 <header class="bg-white border-b border-zinc-200 sticky top-0 z-40">
   <div class="max-w-screen-2xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -148,5 +179,12 @@
     if (m && d && !m.contains(e.target)) d.classList.add('hidden');
   });
 </script>
+<button data-theme-toggle type="button"
+        onclick="(function(){const h=document.documentElement;const d=h.classList.toggle('dark');localStorage.setItem('theme',d?'dark':'light')})()"
+        class="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg bg-brand-500 hover:bg-brand-600 text-white flex items-center justify-center transition"
+        title="Theme umschalten" aria-label="Theme umschalten">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-6 w-6 hidden dark:inline"><path d="M9.305 1.667V3.75h1.389V1.667h-1.39zm-4.707 1.95l-.982.982L5.09 6.072l.982-.982-1.473-1.473zm10.802 0L13.927 5.09l.982.982 1.473-1.473-.982-.982zM10 5.139a4.872 4.872 0 0 0-4.862 4.86A4.872 4.872 0 0 0 10 14.862 4.872 4.872 0 0 0 14.86 10 4.872 4.872 0 0 0 10 5.139zm-7.638 4.166V10.7H4.45V9.305H2.362zm13.193 0V10.7h2.083V9.305h-2.083zM5.09 13.928l-1.473 1.473.982.982 1.473-1.473-.982-.982zm9.82 0l-.982.982 1.473 1.473.982-.982-1.473-1.473zM9.305 15.55v2.083h1.389V15.55H9.305z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-6 w-6 inline dark:hidden"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.05 8.05 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Z"/></svg>
+</button>
 </body>
 </html>

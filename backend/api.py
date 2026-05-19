@@ -126,6 +126,17 @@ SORT_OPTIONS = {
 }
 
 
+def _safe_float(value, default=None):
+    """Tolerantes Float-Parsing fuer Query-Parameter aus HTML-Forms:
+    leerer String / None -> default, ungueltige Werte -> default."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _filtered_query(
     db: Session,
     portal: Optional[str] = None,
@@ -411,8 +422,8 @@ def index(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
-    score_min: Optional[float] = 30,
-    score_max: Optional[float] = None,
+    score_min: Optional[str] = "30",
+    score_max: Optional[str] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     page: int = 1,
@@ -423,6 +434,9 @@ def index(
 ):
     per_page = _normalize_per_page(per_page)
     expired_flag = bool(include_expired)
+    # Score-Werte tolerant parsen: leere Strings -> None, ungueltige -> None
+    score_min = _safe_float(score_min, default=30.0)
+    score_max = _safe_float(score_max, default=None)
     query = _filtered_query(
         db,
         portal=portal, region=region, status=status, level=level,
@@ -1556,8 +1570,8 @@ def export_csv(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
-    score_min: Optional[float] = None,
-    score_max: Optional[float] = None,
+    score_min: Optional[str] = None,
+    score_max: Optional[str] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     include_expired: Optional[str] = None,
@@ -1565,7 +1579,8 @@ def export_csv(
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
-        score_min=score_min, score_max=score_max, quick=quick,
+        score_min=_safe_float(score_min), score_max=_safe_float(score_max),
+        quick=quick,
         include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()
@@ -1586,8 +1601,8 @@ def export_xlsx(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
-    score_min: Optional[float] = None,
-    score_max: Optional[float] = None,
+    score_min: Optional[str] = None,
+    score_max: Optional[str] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     include_expired: Optional[str] = None,
@@ -1595,7 +1610,8 @@ def export_xlsx(
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
-        score_min=score_min, score_max=score_max, quick=quick,
+        score_min=_safe_float(score_min), score_max=_safe_float(score_max),
+        quick=quick,
         include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()

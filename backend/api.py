@@ -20,7 +20,7 @@ from . import branding
 from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Comment, Tender, TenderStatus, SearchProfile, User
+from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -540,6 +540,12 @@ def detail(
         .order_by(Comment.created_at.asc())
         .all()
     )
+    events = (
+        db.query(TenderEvent)
+        .filter(TenderEvent.tender_id == tender_id)
+        .order_by(TenderEvent.created_at.desc())
+        .all()
+    )
     mail_ready = bool(settings.smtp_host and settings.smtp_from)
     return templates.TemplateResponse(
         request,
@@ -550,6 +556,7 @@ def detail(
             "user": _session_user(request),
             "score_breakdown": breakdown,
             "comments": comments,
+            "events": events,
             "mail_ready": mail_ready,
             "flash": flash,
             "error": error,
@@ -614,9 +621,20 @@ def delete_comment(
     )
 
 
+def _log_event(db: Session, tender_id: int, user: dict | None, event_type: str, detail: str):
+    db.add(TenderEvent(
+        tender_id=tender_id,
+        user_id=(user["id"] if user and user.get("id", 0) > 0 else None),
+        username=(user["username"] if user else "system")[:80],
+        event_type=event_type,
+        detail=detail,
+    ))
+
+
 @app.post("/tender/{tender_id}/status")
 def set_status(
     tender_id: int,
+    request: Request,
     status: str = Form(...),
     notes: Optional[str] = Form(None),
     db: Session = Depends(get_db),
@@ -626,9 +644,13 @@ def set_status(
         raise HTTPException(404, "Ausschreibung nicht gefunden")
     if status not in STATUS_VALUES:
         raise HTTPException(400, f"Unbekannter Status '{status}'")
+    old = tender.status
     tender.status = status
     if notes is not None:
         tender.notes = notes
+    if old != status:
+        _log_event(db, tender_id, _session_user(request), "status",
+                   f"{old or 'neu'} → {status}")
     db.commit()
     return RedirectResponse(url=f"/tender/{tender_id}", status_code=303)
 
@@ -688,6 +710,13 @@ def tender_send_mail(
         sender_signature=sig,
     )
     if ok:
+        detail = "An: {}".format(", ".join(to_list))
+        if cc_list:
+            detail += "  ·  CC: {}".format(", ".join(cc_list))
+        if subj:
+            detail += "  ·  Betreff: {}".format(subj[:200])
+        _log_event(db, tender_id, user, "mail_sent", detail)
+        db.commit()
         msg = "Mail an {} versendet.".format(", ".join(to_list[:3]))
         return RedirectResponse(
             url="/tender/{}?flash=".format(tender_id) + quote(msg, safe=""),
@@ -701,13 +730,22 @@ def tender_send_mail(
 
 
 @app.post("/tender/{tender_id}/quick-status")
-def quick_status(tender_id: int, status: str = Form(...), db: Session = Depends(get_db)):
+def quick_status(
+    tender_id: int,
+    request: Request,
+    status: str = Form(...),
+    db: Session = Depends(get_db),
+):
     tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "nicht gefunden")
     if status not in STATUS_VALUES:
         raise HTTPException(400, "Unbekannter Status")
+    old = tender.status
     tender.status = status
+    if old != status:
+        _log_event(db, tender_id, _session_user(request), "status",
+                   f"{old or 'neu'} → {status}")
     db.commit()
     return RedirectResponse(url="/", status_code=303)
 
@@ -1029,6 +1067,108 @@ def admin_test_mail(request: Request):
         )
     return RedirectResponse(
         url="/admin/settings?error=" + quote(err or "Unbekannter Fehler", safe=""),
+        status_code=303,
+    )
+
+
+@app.get("/admin/broadcast", response_class=HTMLResponse)
+def admin_broadcast_get(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    recipients = (
+        db.query(User)
+        .filter(User.is_active == True)  # noqa: E712
+        .filter(User.email.isnot(None))
+        .filter(User.email != "")
+        .order_by(User.username)
+        .all()
+    )
+    mail_ready = bool(settings.smtp_host and settings.smtp_from)
+    return templates.TemplateResponse(
+        request, "broadcast.html",
+        {
+            "user": user,
+            "recipients": recipients,
+            "mail_ready": mail_ready,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/admin/broadcast")
+def admin_broadcast_post(
+    request: Request,
+    subject: str = Form(...),
+    body: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+
+    subject = (subject or "").strip()
+    body = (body or "").strip()
+    if not subject or not body:
+        return RedirectResponse(
+            url="/admin/broadcast?error=Betreff+und+Text+sind+Pflicht.",
+            status_code=303,
+        )
+    if not (settings.smtp_host and settings.smtp_from):
+        return RedirectResponse(
+            url="/admin/broadcast?error=SMTP+nicht+konfiguriert.",
+            status_code=303,
+        )
+
+    recipients = (
+        db.query(User)
+        .filter(User.is_active == True)  # noqa: E712
+        .filter(User.email.isnot(None))
+        .filter(User.email != "")
+        .all()
+    )
+    addresses = [u.email.strip() for u in recipients if u.email and u.email.strip()]
+    if not addresses:
+        return RedirectResponse(
+            url="/admin/broadcast?error=Keine+Empfaenger+mit+E-Mail+gefunden.",
+            status_code=303,
+        )
+
+    from . import notify as notify_mod
+    import html as _html
+    body_html = (
+        "<html><body style=\"font-family:Inter,system-ui,sans-serif;line-height:1.55;"
+        "color:#27272a;max-width:640px;margin:24px auto;padding:0 16px;\">"
+        f"<h2 style=\"color:#7eb064;margin-top:0;\">{_html.escape(subject)}</h2>"
+        f"<div style=\"white-space:pre-wrap;font-size:14px;\">{_html.escape(body)}</div>"
+        "<hr style=\"border:none;border-top:1px solid #e4e4e7;margin:24px 0 12px;\">"
+        f"<p style=\"font-size:12px;color:#71717a;\">Diese Nachricht ging an alle aktiven Nutzer der FBE-Ausschreibungsplattform "
+        f"(Absender: {_html.escape(user['username'])}).</p>"
+        "</body></html>"
+    )
+    plain = body + "\n\n---\nFBE-Ausschreibungsplattform · Broadcast"
+
+    ok, err = notify_mod._send_to(
+        to=[],  # Empfaenger in BCC, damit Adressen nicht gegenseitig sichtbar sind
+        bcc=addresses,
+        subject=f"[FBE] {subject}",
+        plain_body=plain,
+        html_body=body_html,
+    )
+    if not ok:
+        return RedirectResponse(
+            url=f"/admin/broadcast?error=Versand+fehlgeschlagen:+{quote(err or '-')}",
+            status_code=303,
+        )
+    msg = f"Broadcast an {len(addresses)} Empfaenger versendet."
+    return RedirectResponse(
+        url=f"/admin/broadcast?flash={quote(msg)}",
         status_code=303,
     )
 

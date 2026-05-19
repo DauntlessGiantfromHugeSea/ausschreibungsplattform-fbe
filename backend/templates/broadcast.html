@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Broadcast-Mail – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/admin/settings" class="hover:text-zinc-900">Einstellungen</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Broadcast</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2">Broadcast an alle User</h1>
+<p class="text-sm text-zinc-500 mb-6">
+  Schickt eine Mail an alle aktiven Nutzer mit hinterlegter E-Mail-Adresse.
+  Empfaenger landen im <strong>BCC</strong> - die Adressen sind untereinander
+  nicht sichtbar.
+</p>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+    ✓ {{ flash }}
+  </div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+    ✗ {{ error }}
+  </div>
+{% endif %}
+
+{% if not mail_ready %}
+  <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    SMTP ist nicht konfiguriert (<code>SMTP_HOST</code> / <code>SMTP_FROM</code> in der <code>.env</code>).
+    Mails koennen so nicht versendet werden.
+  </div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+  <form method="post" action="/admin/broadcast" class="card p-6 space-y-4">
+    <div class="flex flex-wrap items-center gap-2 -mt-1 mb-1">
+      <span class="text-xs text-zinc-500">Vorlage einfuegen:</span>
+      <button type="button" class="chip" onclick="fillTemplate('update')">Update-Ankuendigung</button>
+      <button type="button" class="chip" onclick="fillTemplate('wartung')">Wartungsfenster</button>
+      <button type="button" class="chip" onclick="fillTemplate('empty')" title="leeren">leeren</button>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Betreff *</label>
+      <input class="input" type="text" name="subject" id="bc-subject" required maxlength="200"
+             placeholder="z.B. Wartungsfenster Sonntag 10:00 - 12:00">
+      <div class="text-xs text-zinc-400 mt-1">
+        Wird im Postfach als <code>[FBE] {Betreff}</code> angezeigt.
+      </div>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Nachricht *</label>
+      <textarea class="input min-h-[300px] font-mono text-sm" name="body" id="bc-body" required
+                placeholder="Hi zusammen,&#10;&#10;es gibt folgende Neuerungen ..."></textarea>
+      <div class="text-xs text-zinc-400 mt-1">
+        Plain-Text mit Zeilenumbruechen. Wird automatisch sauber als HTML gerendert.
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="submit" class="btn-primary"
+              {% if not mail_ready or not recipients %}disabled{% endif %}
+              onclick="return confirm('Wirklich an {{ recipients|length }} Empfaenger schicken?')">
+        Broadcast versenden
+      </button>
+      <a href="/admin/settings" class="btn-ghost">Abbrechen</a>
+    </div>
+  </form>
+
+  <aside class="card p-6">
+    <h3 class="text-sm font-semibold mb-3">
+      Empfaenger ({{ recipients|length }})
+    </h3>
+    {% if recipients %}
+      <ul class="space-y-1.5 text-sm max-h-[420px] overflow-y-auto">
+        {% for u in recipients %}
+        <li class="flex items-center gap-2 min-w-0">
+          <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700 text-xs font-semibold">
+            {{ u.username[:1]|upper }}
+          </span>
+          <span class="truncate">
+            <span class="text-zinc-900 dark:text-zinc-100">{{ u.username }}</span>
+            <span class="text-zinc-500"> · {{ u.email }}</span>
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-zinc-500">
+        Keine aktiven Nutzer mit E-Mail-Adresse gefunden.
+      </p>
+    {% endif %}
+  </aside>
+</div>
+
+<script>
+const TEMPLATES = {
+  update: {
+    subject: "Neue Funktionen in der FBE-Ausschreibungsplattform (v0.4.0)",
+    body:
+`Hallo zusammen,
+
+es gibt ein paar Neuerungen auf der FBE-Ausschreibungsplattform:
+
+• Verlauf pro Ausschreibung
+  Auf jeder Detailseite gibt es jetzt eine Timeline, die zeigt, wer den Status
+  wann geaendert hat und an wen Mails versendet wurden.
+
+• Broadcast-Mail fuer Admins
+  Unter Einstellungen > Broadcast koennen Admins eine Mail an alle aktiven
+  Nutzer schicken (so wie diese hier). Adressen landen im BCC und sind
+  untereinander nicht sichtbar.
+
+• Erst-Login mit eigenem Passwort
+  Neu angelegte User bekommen eine Einladungs-Mail mit einem Link und legen
+  ihr Passwort selbst fest. Der Link ist 24 Stunden gueltig.
+
+• Passwort vergessen funktioniert wieder
+  Ueber den Link auf der Login-Seite einen Reset-Link anfordern - kommt per
+  Mail und ist 1 Stunde gueltig.
+
+• Aufgeraeumte Oberflaeche
+  Das Top-Menue ist deutlich minimaler, alles weitere steckt hinter den
+  Icons rechts oben: Ampel fuer Status/Probe, Zahnrad fuer Einstellungen,
+  Fragezeichen fuer Hilfe & Dokumentation.
+
+• Hilfe-Seite mit Doku
+  Unter /hilfe (oder ueber das Fragezeichen-Icon) gibt es jetzt eine
+  Dokumentation zu allen Funktionen plus diesen Update-Verlauf.
+
+Bei Fragen einfach melden.
+
+Viele Gruesse
+{{ user.username if user is mapping else user }}`
+  },
+  wartung: {
+    subject: "Wartungsfenster geplant",
+    body:
+`Hallo zusammen,
+
+am ___TAG___ von ___VON___ bis ___BIS___ wird die FBE-Ausschreibungsplattform
+fuer ein Update kurz nicht erreichbar sein.
+
+Wir bitten um Verstaendnis.
+
+Viele Gruesse
+{{ user.username if user is mapping else user }}`
+  },
+  empty: { subject: "", body: "" }
+};
+
+function fillTemplate(key) {
+  const t = TEMPLATES[key];
+  if (!t) return;
+  document.getElementById('bc-subject').value = t.subject;
+  document.getElementById('bc-body').value = t.body;
+}
+</script>
+
+{% endblock %}

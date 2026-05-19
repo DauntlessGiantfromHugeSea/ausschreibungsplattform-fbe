@@ -107,6 +107,47 @@
       {% endif %}
     </div>
 
+    <!-- Verlauf / Audit-Log -->
+    <div class="card p-6" id="verlauf">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-semibold">Verlauf</h3>
+        <span class="text-xs text-zinc-500">{{ events|length }} Eintrag{% if events|length != 1 %}e{% endif %}</span>
+      </div>
+      {% if events %}
+      <ol class="relative border-l border-zinc-200 dark:border-zinc-700 ml-2 space-y-4">
+        {% for e in events %}
+        <li class="ml-4">
+          <span class="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full
+                       {% if e.event_type == 'mail_sent' %}bg-sky-500
+                       {% elif 'interessant' in (e.detail or '') and 'uninteressant' not in (e.detail or '') %}bg-emerald-500
+                       {% elif 'uninteressant' in (e.detail or '') %}bg-zinc-400
+                       {% elif 'beworben' in (e.detail or '') %}bg-amber-500
+                       {% elif 'archiviert' in (e.detail or '') %}bg-zinc-500
+                       {% else %}bg-brand-500{% endif %}
+                       ring-4 ring-white dark:ring-zinc-800"></span>
+          <div class="flex items-center gap-2 text-xs text-zinc-500">
+            <span class="font-semibold text-zinc-900 dark:text-zinc-100">{{ e.username }}</span>
+            <span>·</span>
+            <span>{{ e.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+            {% if e.event_type == 'mail_sent' %}
+              <span class="pill bg-sky-50 text-sky-700 border border-sky-200">Mail versendet</span>
+            {% elif e.event_type == 'status' %}
+              <span class="pill bg-brand-50 text-brand-800 border border-brand-200">Status</span>
+            {% else %}
+              <span class="pill bg-zinc-100 text-zinc-700">{{ e.event_type }}</span>
+            {% endif %}
+          </div>
+          {% if e.detail %}
+          <div class="mt-1 text-sm text-zinc-800 dark:text-zinc-200 break-words">{{ e.detail }}</div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <p class="text-sm text-zinc-500">Noch kein Verlauf - sobald jemand den Status ändert oder eine Mail verschickt, erscheint es hier.</p>
+      {% endif %}
+    </div>
+
     <!-- Kommentare -->
     <div class="card p-6" id="comments">
       <div class="flex items-center justify-between mb-4">

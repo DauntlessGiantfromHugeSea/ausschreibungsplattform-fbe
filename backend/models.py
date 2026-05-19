@@ -176,3 +176,24 @@ class Comment(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     tender = relationship("Tender", backref="comments")
+
+
+class TenderEvent(Base):
+    """Audit-Eintrag pro Ausschreibung: Status-Wechsel, Mail-Versand etc.
+
+    username wird denormalisiert mitgespeichert, damit der Verlauf auch dann
+    lesbar bleibt, wenn ein User-Account spaeter geloescht wird.
+    """
+    __tablename__ = "tender_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tender_id = Column(Integer, ForeignKey("tenders.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"),
+                     nullable=True, index=True)
+    username = Column(String(80), nullable=False)
+    event_type = Column(String(40), nullable=False, index=True)  # 'status' | 'mail_sent'
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    tender = relationship("Tender", backref="events")

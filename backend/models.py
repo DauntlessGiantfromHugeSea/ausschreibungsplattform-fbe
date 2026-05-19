@@ -54,6 +54,10 @@ class Tender(Base):
     fingerprint = Column(String(64), nullable=False, unique=True, index=True)
     # JSON-Liste mit Score-Komponenten: [{"label":..., "points":..., "detail":...}, ...]
     score_breakdown = Column(Text, nullable=True)
+    # KI-Analyse (Fluessigboden-Eignung + Kosteneinsparungs-Schaetzung).
+    # Wird beim ersten Oeffnen der Detailseite generiert und gecached.
+    ai_analysis = Column(Text, nullable=True)        # JSON-encoded
+    ai_analyzed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

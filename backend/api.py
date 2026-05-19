@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request
+import json
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -547,6 +548,7 @@ def detail(
         .all()
     )
     mail_ready = bool(settings.smtp_host and settings.smtp_from)
+    from . import ai as ai_mod
     return templates.TemplateResponse(
         request,
         "detail.html",
@@ -558,6 +560,8 @@ def detail(
             "comments": comments,
             "events": events,
             "mail_ready": mail_ready,
+            "ai_configured": ai_mod.is_configured(),
+            "ai_auto": settings.ai_auto_analyze,
             "flash": flash,
             "error": error,
         },
@@ -1894,6 +1898,105 @@ def health():
 
 
 NOTIFY_FREQ_VALUES = ("off", "daily", "weekly")
+
+
+# --- KI ------------------------------------------------------------------
+
+@app.get("/admin/ai-knowledge", response_class=HTMLResponse)
+def admin_ai_knowledge_get(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import ai as ai_mod
+    return templates.TemplateResponse(
+        request, "ai_knowledge.html",
+        {
+            "user": user,
+            "knowledge": ai_mod.read_knowledge(),
+            "configured": ai_mod.is_configured(),
+            "model": settings.openai_model,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/admin/ai-knowledge")
+def admin_ai_knowledge_post(
+    request: Request,
+    knowledge: str = Form(...),
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import ai as ai_mod
+    ai_mod.write_knowledge(knowledge)
+    return RedirectResponse(url="/admin/ai-knowledge?flash=Gespeichert.", status_code=303)
+
+
+@app.post("/tender/{tender_id}/ai-analyze")
+def tender_ai_analyze(
+    tender_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Triggert die KI-Analyse (Neu oder Re-Run). Speichert das Ergebnis
+    in tender.ai_analysis und liefert es als JSON zurueck."""
+    tender = db.get(Tender, tender_id)
+    if not tender:
+        raise HTTPException(404, "Ausschreibung nicht gefunden")
+    from . import ai as ai_mod
+    if not ai_mod.is_configured():
+        return JSONResponse({"error": "OPENAI_API_KEY nicht gesetzt"}, status_code=400)
+    result = ai_mod.analyze_tender(tender)
+    if "error" in result:
+        return JSONResponse(result, status_code=502)
+    tender.ai_analysis = json.dumps(result, ensure_ascii=False)
+    tender.ai_analyzed_at = datetime.utcnow()
+    db.commit()
+    return JSONResponse({
+        "analysis": result,
+        "analyzed_at": tender.ai_analyzed_at.isoformat(),
+    })
+
+
+@app.post("/api/ai/chat")
+def ai_chat(
+    request: Request,
+    payload: dict = Body(...),
+):
+    user = _session_user(request)
+    if not user:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    from . import ai as ai_mod
+    if not ai_mod.is_configured():
+        return JSONResponse({"error": "OPENAI_API_KEY nicht gesetzt"}, status_code=400)
+    msgs = payload.get("messages") or []
+    if not isinstance(msgs, list) or not msgs:
+        return JSONResponse({"error": "messages fehlt"}, status_code=400)
+    try:
+        text = ai_mod.chat(msgs)
+    except Exception as exc:
+        log.exception("AI-Chat fehlgeschlagen")
+        return JSONResponse({"error": str(exc)[:200]}, status_code=502)
+    return JSONResponse({"reply": text})
+
+
+@app.get("/assistant", response_class=HTMLResponse)
+def assistant_page(request: Request):
+    user = _session_user(request)
+    if not user:
+        return RedirectResponse(url="/login?next=/assistant", status_code=303)
+    from . import ai as ai_mod
+    return templates.TemplateResponse(
+        request, "assistant.html",
+        {"user": user, "configured": ai_mod.is_configured(),
+         "model": settings.openai_model},
+    )
 
 
 @app.get("/me/notifications", response_class=HTMLResponse)

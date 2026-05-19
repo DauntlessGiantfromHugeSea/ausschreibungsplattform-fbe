@@ -107,6 +107,49 @@
       {% endif %}
     </div>
 
+    <!-- KI-Analyse -->
+    <div class="card p-6" id="ai-analysis"
+         data-tender-id="{{ tender.id }}"
+         data-cached="{{ '1' if tender.ai_analysis else '' }}"
+         data-auto="{{ '1' if ai_auto and not tender.ai_analysis else '' }}">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-brand-600">
+            <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z"/>
+            <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z"/>
+          </svg>
+          <h3 class="text-base font-semibold">KI-Analyse: FBE-Eignung &amp; Ersparnis</h3>
+        </div>
+        <button type="button" id="ai-rerun"
+                class="btn-ghost text-xs"
+                title="KI-Analyse neu generieren">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+          <span>Neu analysieren</span>
+        </button>
+      </div>
+
+      <div id="ai-content">
+        {% if tender.ai_analysis %}
+          <p class="text-sm text-zinc-500">Lade gespeicherte Analyse ...</p>
+          <script id="ai-cached-data" type="application/json">{{ tender.ai_analysis|safe }}</script>
+        {% elif ai_configured %}
+          <p class="text-sm text-zinc-500" id="ai-empty">
+            Analyse wird erstellt - das dauert ein paar Sekunden ...
+          </p>
+        {% else %}
+          <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            KI nicht konfiguriert. Setze <code>OPENAI_API_KEY</code> in der <code>.env</code>.
+          </p>
+        {% endif %}
+      </div>
+
+      {% if tender.ai_analyzed_at %}
+      <div class="text-xs text-zinc-400 mt-3">
+        Analyse vom {{ tender.ai_analyzed_at.strftime('%d.%m.%Y %H:%M') }} (gecached)
+      </div>
+      {% endif %}
+    </div>
+
     <!-- Verlauf / Audit-Log -->
     <div class="card p-6" id="verlauf">
       <div class="flex items-center justify-between mb-4">
@@ -343,5 +386,76 @@
 
   </aside>
 </div>
+
+<script>
+(function(){
+  const wrap = document.getElementById('ai-analysis');
+  if (!wrap) return;
+  const tenderId = wrap.dataset.tenderId;
+  const content = document.getElementById('ai-content');
+  const rerun = document.getElementById('ai-rerun');
+
+  function renderResult(a) {
+    const fitLabel = {high:'Hohe Eignung', medium:'Mittlere Eignung', low:'Geringe Eignung'}[a.fit_level] || 'Eignung';
+    const fitColor = {
+      high:   'bg-emerald-50 text-emerald-700 border-emerald-200',
+      medium: 'bg-amber-50 text-amber-800 border-amber-200',
+      low:    'bg-zinc-100 text-zinc-700 border-zinc-200'
+    }[a.fit_level] || 'bg-zinc-100 text-zinc-700 border-zinc-200';
+
+    let savings = '';
+    if (a.savings_pct != null || a.savings_eur) {
+      savings = `
+        <div class="rounded-xl border border-brand-200 bg-brand-50 dark:bg-brand-900/20 p-4 mt-3">
+          <div class="text-xs uppercase tracking-wider text-brand-700 font-semibold mb-1">Geschaetzte Einsparung durch FBE</div>
+          <div class="flex flex-wrap items-baseline gap-3">
+            ${a.savings_pct != null ? `<div class="text-3xl font-semibold text-brand-800">${a.savings_pct}%</div>` : ''}
+            ${a.savings_eur ? `<div class="text-sm text-brand-700">${esc(a.savings_eur)}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    const sumList = (a.summary || []).map(s => `<li>${esc(s)}</li>`).join('');
+    const caveats = (a.caveats || []).map(s => `<li>${esc(s)}</li>`).join('');
+
+    return `
+      <div>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="pill border ${fitColor}">${fitLabel}</span>
+          ${a.fit_reason ? `<span class="text-sm text-zinc-600 dark:text-zinc-300">${esc(a.fit_reason)}</span>` : ''}
+        </div>
+        ${sumList ? `<ul class="list-disc pl-5 text-sm text-zinc-700 dark:text-zinc-300 space-y-1 mt-2">${sumList}</ul>` : ''}
+        ${savings}
+        ${caveats ? `<div class="mt-3 text-xs text-zinc-500"><strong>Hinweise:</strong><ul class="list-disc pl-5 mt-1 space-y-0.5">${caveats}</ul></div>` : ''}
+      </div>`;
+  }
+  function esc(s){return String(s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+  async function runAnalysis() {
+    content.innerHTML = '<p class="text-sm text-zinc-500">Analyse laeuft ...</p>';
+    try {
+      const r = await fetch(`/tender/${tenderId}/ai-analyze`, {method:'POST'});
+      const data = await r.json();
+      if (data.error) {
+        content.innerHTML = `<p class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">${esc(data.error)}</p>`;
+        return;
+      }
+      content.innerHTML = renderResult(data.analysis);
+    } catch (e) {
+      content.innerHTML = `<p class="text-sm text-rose-700">Netzwerkfehler: ${esc(e.message)}</p>`;
+    }
+  }
+
+  if (rerun) rerun.addEventListener('click', runAnalysis);
+
+  const cached = document.getElementById('ai-cached-data');
+  if (cached) {
+    try { content.innerHTML = renderResult(JSON.parse(cached.textContent)); }
+    catch(e) { content.innerHTML = '<p class="text-sm text-rose-700">Gespeicherte Analyse defekt.</p>'; }
+  } else if (wrap.dataset.auto === '1') {
+    runAnalysis();
+  }
+})();
+</script>
 
 {% endblock %}

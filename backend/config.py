@@ -71,6 +71,16 @@ class Settings(BaseSettings):
     )
     http_timeout: int = 30
 
+    # ---- KI-Anbindung (OpenAI) ---------------------------------------
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    # Optional: eigener Base-URL (z.B. fuer Azure, lokale Proxies).
+    openai_base_url: str = ""
+    # Cache: Wenn True wird die Tender-Analyse beim ersten Oeffnen einer
+    # Detailseite einmal ausgefuehrt und gespeichert - jeder weitere
+    # Aufruf kostet nichts.
+    ai_auto_analyze: bool = True
+
     @property
     def regions_list(self) -> List[str]:
         return [r.strip() for r in self.target_regions.split(",") if r.strip()]

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}KI-Assistent – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">KI-Assistent</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2">KI-Assistent</h1>
+<p class="text-sm text-zinc-500 mb-4">
+  Stelle Fragen rund um Ausschreibungen, Fluessigboden-Eignung und Kosten-
+  einsparungen. Der Assistent kennt das hinterlegte FBE-Wissen.
+</p>
+
+{% if not configured %}
+<div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+  KI ist nicht konfiguriert. Setze <code>OPENAI_API_KEY</code> in der <code>.env</code>.
+</div>
+{% endif %}
+
+<div class="card p-0 overflow-hidden flex flex-col" style="height: calc(100vh - 240px); min-height: 480px;">
+  <div id="chatlog" class="flex-1 overflow-y-auto p-6 space-y-4 text-sm"></div>
+
+  <form id="chatform" class="border-t border-zinc-100 p-3 flex items-end gap-2">
+    <textarea id="chatinput" rows="2"
+              class="input flex-1 resize-none"
+              placeholder="Frage stellen... (Enter senden, Shift+Enter = Zeilenumbruch)"
+              {% if not configured %}disabled{% endif %}></textarea>
+    <button type="submit" class="btn-primary" {% if not configured %}disabled{% endif %}>
+      Senden
+    </button>
+  </form>
+</div>
+
+<script>
+(function(){
+  const log = document.getElementById('chatlog');
+  const form = document.getElementById('chatform');
+  const input = document.getElementById('chatinput');
+  const history = [];
+
+  function bubble(role, text) {
+    const wrap = document.createElement('div');
+    wrap.className = role === 'user'
+      ? 'flex justify-end'
+      : 'flex justify-start';
+    const b = document.createElement('div');
+    b.className = role === 'user'
+      ? 'max-w-[80%] rounded-2xl rounded-br-sm bg-brand-700 text-white px-4 py-2.5 whitespace-pre-wrap'
+      : 'max-w-[80%] rounded-2xl rounded-bl-sm bg-zinc-100 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 px-4 py-2.5 whitespace-pre-wrap';
+    b.textContent = text;
+    wrap.appendChild(b);
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+    return b;
+  }
+
+  bubble('assistant', "Hallo! Frag mich z.B.:\n• Welche FBE-Vorteile passen zu einer Grabenverfuellung in der Innenstadt?\n• Wie schaetze ich die Einsparung bei 200 m Leitungsgraben?\n• Welche Kriterien sprechen gegen FBE?");
+
+  async function send(text) {
+    if (!text.trim()) return;
+    bubble('user', text);
+    history.push({role:'user', content:text});
+    input.value = '';
+    input.disabled = true;
+
+    const thinking = bubble('assistant', '...');
+    thinking.classList.add('opacity-60');
+
+    try {
+      const r = await fetch('/api/ai/chat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({messages: history}),
+      });
+      const data = await r.json();
+      thinking.classList.remove('opacity-60');
+      if (data.error) {
+        thinking.textContent = 'Fehler: ' + data.error;
+        thinking.className += ' !bg-rose-50 !text-rose-800';
+      } else {
+        thinking.textContent = data.reply || '(leere Antwort)';
+        history.push({role:'assistant', content: data.reply || ''});
+      }
+    } catch (e) {
+      thinking.textContent = 'Netzwerkfehler: ' + e.message;
+    } finally {
+      input.disabled = false;
+      input.focus();
+    }
+  }
+
+  form.addEventListener('submit', e => { e.preventDefault(); send(input.value); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input.value); }
+  });
+})();
+</script>
+{% endblock %}

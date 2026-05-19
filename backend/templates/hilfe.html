@@ -78,6 +78,47 @@
     </p>
   </section>
 
+  <section id="assistent">
+    <h2 class="text-xl font-semibold mb-3">Frag den Assistenten</h2>
+    <p class="text-sm text-zinc-500 mb-3">
+      Schnelle Frage ohne den vollen Chat zu oeffnen. Fuer laengere Gespraeche das
+      Sparkles-Icon oben rechts verwenden.
+    </p>
+    <form id="help-ai-form" class="card p-4 space-y-3">
+      <textarea id="help-ai-q" rows="2" class="input"
+                placeholder="z.B. Wann passt Fluessigboden besonders gut?"></textarea>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="btn-primary">Fragen</button>
+        <a href="/assistant" class="btn-ghost">Voller Assistent</a>
+      </div>
+    </form>
+    <div id="help-ai-answer" class="hidden mt-3 card p-4 text-sm whitespace-pre-wrap"></div>
+    <script>
+    (function(){
+      const f = document.getElementById('help-ai-form');
+      const q = document.getElementById('help-ai-q');
+      const out = document.getElementById('help-ai-answer');
+      f.addEventListener('submit', async e => {
+        e.preventDefault();
+        const txt = q.value.trim();
+        if (!txt) return;
+        out.classList.remove('hidden');
+        out.textContent = 'Antwort wird generiert ...';
+        try {
+          const r = await fetch('/api/ai/chat', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({messages:[{role:'user', content:txt}]}),
+          });
+          const data = await r.json();
+          out.textContent = data.error ? ('Fehler: ' + data.error) : (data.reply || '(keine Antwort)');
+        } catch (e) {
+          out.textContent = 'Netzwerkfehler: ' + e.message;
+        }
+      });
+    })();
+    </script>
+  </section>
+
   <section id="changelog">
     <h2 class="text-xl font-semibold mb-3">Update-Verlauf</h2>
     <p class="text-sm text-zinc-500 mb-4">Neueste Aenderungen zuerst. Versionsnummern folgen <code>major.minor.patch</code>.</p>

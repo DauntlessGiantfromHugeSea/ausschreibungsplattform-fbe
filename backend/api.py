@@ -1841,12 +1841,14 @@ def admin_users(
 
 
 @app.get("/admin/users/new", response_class=HTMLResponse)
-def admin_user_new(request: Request):
+def admin_user_new(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request, "user_edit.html",
         {
             "edited": None, "is_new": True, "roles": ROLES,
             "user": request.session.get("user"),
+            "all_profiles": db.query(SearchProfile).order_by(SearchProfile.name).all(),
+            "assigned_profile_ids": set(),
         },
     )
 
@@ -1861,8 +1863,25 @@ def admin_user_edit(user_id: int, request: Request, db: Session = Depends(get_db
         {
             "edited": edited, "is_new": False, "roles": ROLES,
             "user": request.session.get("user"),
+            "all_profiles": db.query(SearchProfile).order_by(SearchProfile.name).all(),
+            "assigned_profile_ids": {p.id for p in edited.assigned_profiles},
         },
     )
+
+
+def _apply_profile_assignments(db: Session, user: User, profile_ids_csv: str) -> int:
+    """Setzt die SearchProfile-Zuweisungen eines Users aus einer CSV-Liste.
+
+    Admins werden weiterhin zugewiesen falls explizit gewuenscht, aber haben
+    semantisch keine Wirkung (sie sehen ohnehin alles).
+    """
+    ids = [int(x) for x in profile_ids_csv.split(",") if x.strip().isdigit()]
+    if ids:
+        profs = db.query(SearchProfile).filter(SearchProfile.id.in_(ids)).all()
+    else:
+        profs = []
+    user.assigned_profiles = profs
+    return len(profs)
 
 
 @app.post("/admin/users/save")
@@ -1875,6 +1894,7 @@ def admin_user_save(
     role: str = Form("user"),
     is_active: Optional[str] = Form(None),
     send_invite: Optional[str] = Form(None),
+    profile_ids: str = Form(""),
     db: Session = Depends(get_db),
 ):
     username = username.strip()
@@ -1901,8 +1921,10 @@ def admin_user_save(
         edited.email = email.strip() or None
         if password.strip():
             edited.password_hash = hash_password(password)
+        n_profiles = _apply_profile_assignments(db, edited, profile_ids)
         db.commit()
-        return RedirectResponse(url=f"/admin/users?flash={username} aktualisiert.", status_code=303)
+        msg = f"{username} aktualisiert ({n_profiles} Profile zugewiesen)."
+        return RedirectResponse(url=f"/admin/users?flash={msg}", status_code=303)
 
     if db.query(User).filter(User.username == username).first():
         return RedirectResponse(url=f"/admin/users?error=Username '{username}' ist vergeben.", status_code=303)
@@ -1921,7 +1943,9 @@ def admin_user_save(
         invite_token=_gt(),
         invite_token_expires_at=_exp(),
     )
-    db.add(new_user); db.commit()
+    db.add(new_user); db.flush()
+    _apply_profile_assignments(db, new_user, profile_ids)
+    db.commit()
     link = f"{_base_url(request)}/set-password?token={new_user.invite_token}"
     from backend import notify as notify_mod
     ok, err = notify_mod.send_invite_mail(new_user.email, new_user.username, link)

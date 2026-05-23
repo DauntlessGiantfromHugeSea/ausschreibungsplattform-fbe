@@ -63,7 +63,7 @@
 
     <div>
       <label class="block text-xs font-medium text-zinc-600 mb-1">Rolle</label>
-      <select class="input max-w-xs" name="role">
+      <select class="input max-w-xs" name="role" id="role-select">
         {% for r in roles %}
           <option value="{{ r }}" {% if edited and edited.role == r %}selected{% endif %}>
             {{ r }}
@@ -71,7 +71,7 @@
         {% endfor %}
       </select>
       <div class="text-xs text-zinc-400 mt-1">
-        <strong>admin</strong>: alles · <strong>viewer</strong>: kein Zugriff auf /admin/*
+        <strong>admin</strong>: alles · <strong>user</strong>: sieht nur Ausschreibungen aus zugewiesenen Suchprofilen
       </div>
     </div>
 
@@ -84,10 +84,55 @@
     </div>
   </div>
 
+  <div class="card p-6" id="profile-assign-card">
+    <h3 class="text-base font-semibold mb-2">Zugewiesene Suchprofile</h3>
+    <p class="text-xs text-zinc-500 mb-4">
+      Bei Rolle <strong>user</strong> sieht der Benutzer ausschliesslich Ausschreibungen, die zu mindestens einem dieser Profile passen. Bei Rolle <strong>admin</strong> hat die Zuweisung keine Wirkung (Admins sehen alles).
+    </p>
+    <input type="hidden" name="profile_ids" id="profile-ids-csv" value="">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-auto border border-zinc-200 rounded-lg p-3">
+      {% if all_profiles %}
+        {% for p in all_profiles %}
+          <label class="inline-flex items-start gap-2 text-sm">
+            <input type="checkbox" class="assign-profile-cb h-4 w-4 mt-0.5 rounded border-zinc-300 text-brand-700"
+                   value="{{ p.id }}"
+                   {% if p.id in assigned_profile_ids %}checked{% endif %}>
+            <span>
+              <span class="font-medium text-zinc-800">{{ p.name }}</span>
+              {% if p.description %}<br><span class="text-xs text-zinc-500">{{ p.description }}</span>{% endif %}
+            </span>
+          </label>
+        {% endfor %}
+      {% else %}
+        <div class="md:col-span-2 text-sm text-zinc-500">
+          Noch keine Suchprofile angelegt. Erst unter
+          <a href="/admin/profiles" class="text-brand-700 hover:underline">→ Suchprofile</a> ein Profil anlegen.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
   <div class="flex gap-2">
     <button type="submit" class="btn-primary">Speichern</button>
     <a href="/admin/users" class="btn-ghost">Abbrechen</a>
   </div>
 </form>
+
+<script>
+  // Checkbox-Auswahl ins hidden CSV-Feld serialisieren, bevor abgeschickt wird.
+  document.querySelector('form[action="/admin/users/save"]')?.addEventListener('submit', () => {
+    const ids = [...document.querySelectorAll('.assign-profile-cb:checked')].map(cb => cb.value);
+    document.getElementById('profile-ids-csv').value = ids.join(',');
+  });
+  // Profil-Block visuell ausgrauen, wenn Rolle = admin (Hinweis: keine Wirkung).
+  const roleSel = document.getElementById('role-select');
+  const card = document.getElementById('profile-assign-card');
+  function syncProfileCardOpacity() {
+    if (!roleSel || !card) return;
+    card.style.opacity = roleSel.value === 'admin' ? '0.55' : '1';
+  }
+  roleSel?.addEventListener('change', syncProfileCardOpacity);
+  syncProfileCardOpacity();
+</script>
 
 {% endblock %}

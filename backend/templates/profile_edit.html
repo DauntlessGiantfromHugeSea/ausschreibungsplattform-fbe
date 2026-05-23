@@ -14,6 +14,50 @@
   {{ 'Neues Suchprofil anlegen' if is_new else 'Profil bearbeiten' }}
 </h1>
 
+{% if not is_new %}
+<div class="card p-4 mb-6 max-w-3xl bg-zinc-50">
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <div class="text-sm font-medium text-zinc-700">Treffer-Vorschau</div>
+      <div class="text-xs text-zinc-500">Live pruefen, wie viele Tender mit den gespeicherten Keywords matchen.</div>
+    </div>
+    <button type="button" class="btn-ghost" id="preview-btn"
+            data-url="/admin/profiles/{{ profile.id }}/preview">Treffer pruefen</button>
+  </div>
+  <div id="preview-result" class="hidden mt-4 text-sm"></div>
+</div>
+<script>
+  document.getElementById('preview-btn')?.addEventListener('click', async (e) => {
+    const out = document.getElementById('preview-result');
+    out.classList.remove('hidden');
+    out.innerHTML = '<span class="text-zinc-500">Lade …</span>';
+    try {
+      const r = await fetch(e.currentTarget.dataset.url, { headers: { 'Accept': 'application/json' }});
+      const j = await r.json();
+      if (j.error) { out.innerHTML = '<span class="text-rose-600">' + j.error + '</span>'; return; }
+      let html = '<div class="font-medium mb-2">' + j.match_count + ' von ' + j.db_total + ' Tendern matchen dieses Profil.</div>';
+      html += '<div class="text-xs text-zinc-500 mb-2">Keywords: ' + (j.keywords.length ? j.keywords.map(k => '<code class="bg-white border border-zinc-200 rounded px-1">' + k + '</code>').join(' ') : '<em>(keine)</em>');
+      if (j.extra_query) html += ' &middot; Zusatz-Query: <code>' + j.extra_query + '</code>';
+      if (j.portal_filter) html += ' &middot; Portal=' + j.portal_filter;
+      if (j.region_filter) html += ' &middot; Region=' + j.region_filter;
+      html += '</div>';
+      if (j.examples.length) {
+        html += '<ul class="list-disc pl-5 space-y-1">';
+        j.examples.forEach(t => {
+          html += '<li><a href="/tender/' + t.id + '" class="text-brand-700 hover:underline" target="_blank">' + (t.title || '(ohne Titel)') + '</a> <span class="text-xs text-zinc-400">[' + (t.portal || '') + ', Score ' + (t.score ?? '-') + ']</span></li>';
+        });
+        html += '</ul>';
+      } else {
+        html += '<div class="text-rose-600 text-sm">Keine Treffer. Pruefe: Schreibweise der Keywords (Umlaute!), evtl. weitere Filter (Portal/Region/Score), oder ob in der DB ueberhaupt passende Tender liegen.</div>';
+      }
+      out.innerHTML = html;
+    } catch (err) {
+      out.innerHTML = '<span class="text-rose-600">Fehler: ' + err + '</span>';
+    }
+  });
+</script>
+{% endif %}
+
 <form method="post" action="/admin/profiles/save" class="space-y-6 max-w-3xl">
   {% if not is_new %}
     <input type="hidden" name="profile_id" value="{{ profile.id }}">
@@ -156,6 +200,7 @@
       Diese User sehen ausschliesslich Ausschreibungen, die zu diesem Profil (oder ihren anderen zugewiesenen Profilen) passen.
       Admins sind hier nicht aufgelistet – sie sehen ohnehin alles.
     </p>
+    <input type="hidden" name="user_assign_present" value="1">
     <input type="hidden" name="user_ids" id="assign-users-csv" value="">
     <div class="grid grid-cols-2 gap-2 max-h-64 overflow-auto border border-zinc-200 rounded-lg p-3">
       {% set has_non_admin = namespace(found=false) %}

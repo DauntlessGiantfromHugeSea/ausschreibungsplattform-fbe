@@ -89,6 +89,7 @@
     <p class="text-xs text-zinc-500 mb-4">
       Bei Rolle <strong>user</strong> sieht der Benutzer ausschliesslich Ausschreibungen, die zu mindestens einem dieser Profile passen. Bei Rolle <strong>admin</strong> hat die Zuweisung keine Wirkung (Admins sehen alles).
     </p>
+    <input type="hidden" name="profile_assign_present" value="1">
     <input type="hidden" name="profile_ids" id="profile-ids-csv" value="">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-auto border border-zinc-200 rounded-lg p-3">
       {% if all_profiles %}

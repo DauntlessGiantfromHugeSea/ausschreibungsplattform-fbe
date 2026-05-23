@@ -1870,11 +1870,7 @@ def admin_user_edit(user_id: int, request: Request, db: Session = Depends(get_db
 
 
 def _apply_profile_assignments(db: Session, user: User, profile_ids_csv: str) -> int:
-    """Setzt die SearchProfile-Zuweisungen eines Users aus einer CSV-Liste.
-
-    Admins werden weiterhin zugewiesen falls explizit gewuenscht, aber haben
-    semantisch keine Wirkung (sie sehen ohnehin alles).
-    """
+    """Setzt die SearchProfile-Zuweisungen eines Users aus einer CSV-Liste."""
     ids = [int(x) for x in profile_ids_csv.split(",") if x.strip().isdigit()]
     if ids:
         profs = db.query(SearchProfile).filter(SearchProfile.id.in_(ids)).all()
@@ -1895,6 +1891,7 @@ def admin_user_save(
     is_active: Optional[str] = Form(None),
     send_invite: Optional[str] = Form(None),
     profile_ids: str = Form(""),
+    profile_assign_present: str = Form(""),  # Sentinel: '1' wenn die Checkbox-UI im Form war
     db: Session = Depends(get_db),
 ):
     username = username.strip()
@@ -1921,9 +1918,14 @@ def admin_user_save(
         edited.email = email.strip() or None
         if password.strip():
             edited.password_hash = hash_password(password)
-        n_profiles = _apply_profile_assignments(db, edited, profile_ids)
+        # Nur dann Zuweisungen ueberschreiben, wenn der Block tatsaechlich im
+        # Form vorhanden war. Verhindert versehentliches Leeren beim Save.
+        if profile_assign_present == "1":
+            n_profiles = _apply_profile_assignments(db, edited, profile_ids)
+            msg = f"{username} aktualisiert ({n_profiles} Profile zugewiesen)."
+        else:
+            msg = f"{username} aktualisiert."
         db.commit()
-        msg = f"{username} aktualisiert ({n_profiles} Profile zugewiesen)."
         return RedirectResponse(url=f"/admin/users?flash={msg}", status_code=303)
 
     if db.query(User).filter(User.username == username).first():
@@ -1944,7 +1946,8 @@ def admin_user_save(
         invite_token_expires_at=_exp(),
     )
     db.add(new_user); db.flush()
-    _apply_profile_assignments(db, new_user, profile_ids)
+    if profile_assign_present == "1":
+        _apply_profile_assignments(db, new_user, profile_ids)
     db.commit()
     link = f"{_base_url(request)}/set-password?token={new_user.invite_token}"
     from backend import notify as notify_mod
@@ -2073,6 +2076,7 @@ def profile_save(
     sort: str = Form("score_desc"),
     notify: Optional[str] = Form(None),
     user_ids: str = Form(""),
+    user_assign_present: str = Form(""),  # Sentinel: '1' wenn die Checkbox-UI im Form war
     db: Session = Depends(get_db),
 ):
     name = name.strip()
@@ -2110,18 +2114,59 @@ def profile_save(
     # existiert, bevor wir die M2M-Beziehung setzen. db.flush() reicht.
     db.flush()
 
-    # User-Zuweisung aus dem Form-Feld 'user_ids' (CSV der gewaehlten User-IDs).
-    # Admins werden defensiv rausgefiltert, falls jemand die Liste manipuliert.
-    ids = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
-    if ids:
-        users = db.query(User).filter(User.id.in_(ids), User.role != "admin").all()
+    # User-Zuweisung nur uebernehmen, wenn die Checkbox-Sektion im Form war
+    # (sonst wuerde das blosse Speichern der Profil-Daten alle Zuweisungen
+    # ueberschreiben).
+    if user_assign_present == "1":
+        ids = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
+        if ids:
+            users = db.query(User).filter(User.id.in_(ids), User.role != "admin").all()
+        else:
+            users = []
+        profile.assigned_users = users
+        flash_msg = f"{name} gespeichert ({len(users)} User zugewiesen)."
     else:
-        users = []
-    profile.assigned_users = users
+        flash_msg = f"{name} gespeichert."
 
     db.commit()
-    flash_msg = f"{name} gespeichert ({len(users)} User zugewiesen)."
     return RedirectResponse(url=f"/admin/profiles?flash={flash_msg}", status_code=303)
+
+
+@app.get("/admin/profiles/{profile_id}/preview")
+def profile_preview(profile_id: int, db: Session = Depends(get_db)):
+    """Liefert JSON: wie viele Tender matched dieses Profil + erste 10 Titel.
+
+    Zum Debuggen direkt im Profil-Edit-UI. Admin-only via Middleware.
+    """
+    profile = db.get(SearchProfile, profile_id)
+    if not profile:
+        return JSONResponse({"error": "Profil nicht gefunden"}, status_code=404)
+    expr = _profile_filter_expr(profile)
+    total = db.query(Tender).count()
+    matches = (
+        db.query(Tender)
+        .filter(expr)
+        .order_by(Tender.relevance_score.desc(), Tender.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    count = db.query(Tender).filter(expr).count()
+    return JSONResponse({
+        "profile": profile.name,
+        "keywords": profile.keyword_list(),
+        "extra_query": profile.query,
+        "portal_filter": profile.portal,
+        "region_filter": profile.region,
+        "score_min": profile.score_min,
+        "score_max": profile.score_max,
+        "match_count": count,
+        "db_total": total,
+        "examples": [
+            {"id": t.id, "title": t.title, "portal": t.portal,
+             "score": t.relevance_score, "region": t.region}
+            for t in matches
+        ],
+    })
 
 
 @app.post("/admin/profiles/{profile_id}/assign-users")

@@ -87,6 +87,14 @@ class BaseScraper:
         return rp
 
     def can_fetch(self, url: str) -> bool:
+        # Override per Portal (config.ignore_robots = true) oder global
+        # (settings.ignore_robots_global). Wird einmal pro Scraper geloggt,
+        # damit der Bypass nachvollziehbar bleibt.
+        if self.config.get("ignore_robots") or getattr(settings, "ignore_robots_global", False):
+            if not getattr(self, "_robots_bypass_logged", False):
+                log.warning("[%s] robots.txt wird ignoriert (config-flag aktiv)", self.name)
+                self._robots_bypass_logged = True
+            return True
         rp = self._load_robots()
         # Wir pruefen mit DEM User-Agent, mit dem wir auch tatsaechlich
         # anfragen. Wenn das Portal robots.txt-Disallow nur fuer den

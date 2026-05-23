@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request
+import json
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,7 +21,7 @@ from . import branding
 from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Comment, Tender, TenderStatus, SearchProfile, User
+from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -125,6 +126,17 @@ SORT_OPTIONS = {
 }
 
 
+def _safe_float(value, default=None):
+    """Tolerantes Float-Parsing fuer Query-Parameter aus HTML-Forms:
+    leerer String / None -> default, ungueltige Werte -> default."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _filtered_query(
     db: Session,
     portal: Optional[str] = None,
@@ -206,10 +218,10 @@ def _apply_sort(query, sort: Optional[str]):
 
 # --- Auth Routes ---------------------------------------------------
 @app.get("/login", response_class=HTMLResponse)
-def login_get(request: Request, next: str = "/", error: Optional[str] = None):
+def login_get(request: Request, next: str = "/", error: Optional[str] = None, flash: Optional[str] = None):
     if request.session.get("user"):
         return RedirectResponse(next, status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"next": next, "error": error})
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": error, "flash": flash})
 
 
 @app.post("/login")
@@ -238,6 +250,166 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
+def _base_url(request: Request) -> str:
+    """Liefert externe Basis-URL fuer Mail-Links.
+
+    Bevorzugt settings.public_base_url (falls gesetzt), sonst die in der
+    Request enthaltene URL inkl. korrektem Scheme/Host hinter Reverse-Proxy.
+    """
+    base = (getattr(settings, "public_base_url", None) or "").rstrip("/")
+    if base:
+        return base
+    fwd_proto = request.headers.get("x-forwarded-proto")
+    fwd_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    scheme = fwd_proto or request.url.scheme
+    host = fwd_host or request.url.netloc
+    return f"{scheme}://{host}"
+
+
+# --- Passwort vergessen / Reset / Invite ---------------------------------
+@app.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_get(request: Request, flash: Optional[str] = None):
+    return templates.TemplateResponse(
+        request, "forgot_password.html", {"flash": flash, "user": None},
+    )
+
+
+@app.post("/forgot-password")
+def forgot_password_post(
+    request: Request,
+    identifier: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    from .auth import generate_token, reset_expires_at
+    from . import notify as notify_mod
+
+    ident = (identifier or "").strip()
+    # Aus Datenschutzgruenden immer die gleiche Erfolgsmeldung
+    generic_flash = "Falls ein Konto existiert, wurde ein Reset-Link verschickt."
+
+    if ident:
+        user = (
+            db.query(User)
+            .filter(or_(User.username == ident, User.email == ident))
+            .first()
+        )
+        if user and user.is_active and user.email:
+            user.reset_token = generate_token()
+            user.reset_token_expires_at = reset_expires_at()
+            db.commit()
+            link = f"{_base_url(request)}/set-password?token={user.reset_token}&reset=1"
+            try:
+                notify_mod.send_password_reset_mail(user.email, user.username, link)
+            except Exception:
+                log.exception("Passwort-Reset-Mail konnte nicht gesendet werden")
+
+    return RedirectResponse(
+        url=f"/forgot-password?flash={quote(generic_flash)}",
+        status_code=303,
+    )
+
+
+@app.get("/set-password", response_class=HTMLResponse)
+def set_password_get(
+    request: Request,
+    token: str = "",
+    reset: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    is_reset = bool(reset)
+    is_invite = not is_reset
+    user = None
+    if token:
+        if is_reset:
+            user = db.query(User).filter(User.reset_token == token).first()
+            if user and user.reset_token_expires_at and user.reset_token_expires_at < datetime.utcnow():
+                user = None
+        else:
+            user = db.query(User).filter(User.invite_token == token).first()
+            if user and user.invite_token_expires_at and user.invite_token_expires_at < datetime.utcnow():
+                user = None
+    return templates.TemplateResponse(
+        request, "set_password.html",
+        {
+            "token": token if user else "",
+            "username": user.username if user else None,
+            "is_reset": is_reset,
+            "is_invite": is_invite,
+            "user": None,
+        },
+    )
+
+
+def _apply_new_password(
+    request: Request,
+    db: Session,
+    token: str,
+    password: str,
+    password2: str,
+    field: str,
+    expires_field: str,
+    is_reset: bool,
+):
+    if not token:
+        return RedirectResponse(url="/login?error=Token fehlt.", status_code=303)
+    if not password or len(password) < 6:
+        return templates.TemplateResponse(
+            request, "set_password.html",
+            {"token": token, "is_reset": is_reset, "is_invite": not is_reset,
+             "error": "Passwort zu kurz (min. 6 Zeichen).", "user": None},
+        )
+    if password != password2:
+        return templates.TemplateResponse(
+            request, "set_password.html",
+            {"token": token, "is_reset": is_reset, "is_invite": not is_reset,
+             "error": "Passwoerter stimmen nicht ueberein.", "user": None},
+        )
+    user = db.query(User).filter(getattr(User, field) == token).first()
+    exp = getattr(user, expires_field, None) if user else None
+    if not user or (exp and exp < datetime.utcnow()):
+        return templates.TemplateResponse(
+            request, "set_password.html",
+            {"token": "", "is_reset": is_reset, "is_invite": not is_reset, "user": None},
+        )
+    user.password_hash = hash_password(password)
+    user.is_active = True
+    setattr(user, field, None)
+    setattr(user, expires_field, None)
+    db.commit()
+    flash = "Passwort gesetzt - du kannst dich jetzt anmelden."
+    return RedirectResponse(url=f"/login?flash={quote(flash)}", status_code=303)
+
+
+@app.post("/set-password")
+def set_password_post(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    password2: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    return _apply_new_password(
+        request, db, token, password, password2,
+        field="invite_token", expires_field="invite_token_expires_at",
+        is_reset=False,
+    )
+
+
+@app.post("/reset-password")
+def reset_password_post(
+    request: Request,
+    token: str = Form(...),
+    password: str = Form(...),
+    password2: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    return _apply_new_password(
+        request, db, token, password, password2,
+        field="reset_token", expires_field="reset_token_expires_at",
+        is_reset=True,
+    )
+
+
 # --- HTML Routes ----------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def index(
@@ -250,8 +422,8 @@ def index(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
-    score_min: Optional[float] = 30,
-    score_max: Optional[float] = None,
+    score_min: Optional[str] = "30",
+    score_max: Optional[str] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     page: int = 1,
@@ -262,6 +434,9 @@ def index(
 ):
     per_page = _normalize_per_page(per_page)
     expired_flag = bool(include_expired)
+    # Score-Werte tolerant parsen: leere Strings -> None, ungueltige -> None
+    score_min = _safe_float(score_min, default=30.0)
+    score_max = _safe_float(score_max, default=None)
     query = _filtered_query(
         db,
         portal=portal, region=region, status=status, level=level,
@@ -380,7 +555,14 @@ def detail(
         .order_by(Comment.created_at.asc())
         .all()
     )
+    events = (
+        db.query(TenderEvent)
+        .filter(TenderEvent.tender_id == tender_id)
+        .order_by(TenderEvent.created_at.desc())
+        .all()
+    )
     mail_ready = bool(settings.smtp_host and settings.smtp_from)
+    from . import ai as ai_mod
     return templates.TemplateResponse(
         request,
         "detail.html",
@@ -390,7 +572,10 @@ def detail(
             "user": _session_user(request),
             "score_breakdown": breakdown,
             "comments": comments,
+            "events": events,
             "mail_ready": mail_ready,
+            "ai_configured": ai_mod.is_configured(),
+            "ai_auto": settings.ai_auto_analyze,
             "flash": flash,
             "error": error,
         },
@@ -454,9 +639,20 @@ def delete_comment(
     )
 
 
+def _log_event(db: Session, tender_id: int, user: dict | None, event_type: str, detail: str):
+    db.add(TenderEvent(
+        tender_id=tender_id,
+        user_id=(user["id"] if user and user.get("id", 0) > 0 else None),
+        username=(user["username"] if user else "system")[:80],
+        event_type=event_type,
+        detail=detail,
+    ))
+
+
 @app.post("/tender/{tender_id}/status")
 def set_status(
     tender_id: int,
+    request: Request,
     status: str = Form(...),
     notes: Optional[str] = Form(None),
     db: Session = Depends(get_db),
@@ -466,9 +662,13 @@ def set_status(
         raise HTTPException(404, "Ausschreibung nicht gefunden")
     if status not in STATUS_VALUES:
         raise HTTPException(400, f"Unbekannter Status '{status}'")
+    old = tender.status
     tender.status = status
     if notes is not None:
         tender.notes = notes
+    if old != status:
+        _log_event(db, tender_id, _session_user(request), "status",
+                   f"{old or 'neu'} → {status}")
     db.commit()
     return RedirectResponse(url=f"/tender/{tender_id}", status_code=303)
 
@@ -528,6 +728,13 @@ def tender_send_mail(
         sender_signature=sig,
     )
     if ok:
+        detail = "An: {}".format(", ".join(to_list))
+        if cc_list:
+            detail += "  ·  CC: {}".format(", ".join(cc_list))
+        if subj:
+            detail += "  ·  Betreff: {}".format(subj[:200])
+        _log_event(db, tender_id, user, "mail_sent", detail)
+        db.commit()
         msg = "Mail an {} versendet.".format(", ".join(to_list[:3]))
         return RedirectResponse(
             url="/tender/{}?flash=".format(tender_id) + quote(msg, safe=""),
@@ -541,13 +748,22 @@ def tender_send_mail(
 
 
 @app.post("/tender/{tender_id}/quick-status")
-def quick_status(tender_id: int, status: str = Form(...), db: Session = Depends(get_db)):
+def quick_status(
+    tender_id: int,
+    request: Request,
+    status: str = Form(...),
+    db: Session = Depends(get_db),
+):
     tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "nicht gefunden")
     if status not in STATUS_VALUES:
         raise HTTPException(400, "Unbekannter Status")
+    old = tender.status
     tender.status = status
+    if old != status:
+        _log_event(db, tender_id, _session_user(request), "status",
+                   f"{old or 'neu'} → {status}")
     db.commit()
     return RedirectResponse(url="/", status_code=303)
 
@@ -656,6 +872,7 @@ def admin_portal_save(
     enabled: Optional[str] = Form(None),
     notes: str = Form(""),
     config_yaml: str = Form(""),
+    ignore_robots: Optional[str] = Form(None),
 ):
     name = name.strip()
     if not name:
@@ -668,6 +885,15 @@ def admin_portal_save(
             url=f"/admin/portals?error=Config-YAML ungueltig: {str(exc)[:200]}",
             status_code=303,
         )
+
+    # ignore_robots-Checkbox aus dem Form-Feld in die portal-config einmischen
+    # (statt im YAML-Block separat pflegen zu muessen).
+    if not isinstance(cfg_data, dict):
+        cfg_data = {}
+    if ignore_robots == "on":
+        cfg_data["ignore_robots"] = True
+    else:
+        cfg_data.pop("ignore_robots", None)
 
     raw = yaml_store.read_portals_raw()
     portals = raw.get("portals", [])
@@ -869,6 +1095,230 @@ def admin_test_mail(request: Request):
         )
     return RedirectResponse(
         url="/admin/settings?error=" + quote(err or "Unbekannter Fehler", safe=""),
+        status_code=303,
+    )
+
+
+@app.get("/admin/broadcast", response_class=HTMLResponse)
+def admin_broadcast_get(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    recipients = (
+        db.query(User)
+        .filter(User.is_active == True)  # noqa: E712
+        .filter(User.email.isnot(None))
+        .filter(User.email != "")
+        .order_by(User.username)
+        .all()
+    )
+    mail_ready = bool(settings.smtp_host and settings.smtp_from)
+    return templates.TemplateResponse(
+        request, "broadcast.html",
+        {
+            "user": user,
+            "recipients": recipients,
+            "mail_ready": mail_ready,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/admin/broadcast")
+def admin_broadcast_post(
+    request: Request,
+    subject: str = Form(...),
+    body: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+
+    subject = (subject or "").strip()
+    body = (body or "").strip()
+    if not subject or not body:
+        return RedirectResponse(
+            url="/admin/broadcast?error=Betreff+und+Text+sind+Pflicht.",
+            status_code=303,
+        )
+    if not (settings.smtp_host and settings.smtp_from):
+        return RedirectResponse(
+            url="/admin/broadcast?error=SMTP+nicht+konfiguriert.",
+            status_code=303,
+        )
+
+    recipients = (
+        db.query(User)
+        .filter(User.is_active == True)  # noqa: E712
+        .filter(User.email.isnot(None))
+        .filter(User.email != "")
+        .all()
+    )
+    addresses = [u.email.strip() for u in recipients if u.email and u.email.strip()]
+    if not addresses:
+        return RedirectResponse(
+            url="/admin/broadcast?error=Keine+Empfaenger+mit+E-Mail+gefunden.",
+            status_code=303,
+        )
+
+    from . import notify as notify_mod
+    import html as _html
+
+    # Body: Plain-Text-Zeilen in HTML. Aufzaehlungen (Zeile beginnt mit
+    # "- ", "* " oder "• ") werden zu sauberen <ul>-Listen, alles andere
+    # bleibt mit weicher Trennung im <p>-Block.
+    def _body_to_html(text: str) -> str:
+        blocks = []
+        current_list: list[str] | None = None
+        current_para: list[str] = []
+
+        def flush_para():
+            if current_para:
+                blocks.append(
+                    "<p style=\"margin:0 0 14px 0;font-size:15px;line-height:1.6;"
+                    "color:#27272a;\">{}</p>".format("<br>".join(current_para))
+                )
+                current_para.clear()
+
+        def flush_list():
+            nonlocal current_list
+            if current_list:
+                items = "".join(
+                    "<li style=\"margin:0 0 6px 0;\">{}</li>".format(i)
+                    for i in current_list
+                )
+                blocks.append(
+                    "<ul style=\"margin:0 0 16px 0;padding-left:20px;font-size:15px;"
+                    "line-height:1.6;color:#27272a;\">{}</ul>".format(items)
+                )
+                current_list = None
+
+        for raw_line in text.splitlines():
+            line = raw_line.rstrip()
+            stripped = line.lstrip()
+            if stripped.startswith(("- ", "* ", "• ")):
+                flush_para()
+                if current_list is None:
+                    current_list = []
+                current_list.append(_html.escape(stripped[2:].lstrip()))
+            elif not line.strip():
+                flush_para()
+                flush_list()
+            else:
+                flush_list()
+                current_para.append(_html.escape(line))
+        flush_para()
+        flush_list()
+        return "".join(blocks)
+
+    company_name = _html.escape(settings.company_name or "FBE Ausschreibungsplattform")
+    logo_url = settings.company_logo_url or ""
+    web = settings.company_web or ""
+    contact_email = settings.company_email or settings.smtp_from or ""
+
+    logo_html = (
+        '<img src="{}" alt="{}" style="height:36px;display:block;">'.format(
+            _html.escape(logo_url), company_name)
+        if logo_url else
+        '<div style="font-weight:700;color:#3f5a30;font-size:18px;">{}</div>'.format(company_name)
+    )
+
+    footer_links = []
+    if web:
+        footer_links.append('<a href="{0}" style="color:#7eb064;text-decoration:none;">{0}</a>'.format(_html.escape(web)))
+    if contact_email:
+        footer_links.append('<a href="mailto:{0}" style="color:#7eb064;text-decoration:none;">{0}</a>'.format(_html.escape(contact_email)))
+    footer_sep = " &nbsp;·&nbsp; ".join(footer_links)
+
+    body_html = (
+        '<!doctype html><html><body style="margin:0;padding:24px 12px;background:#f4f4f5;'
+        'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Inter,system-ui,sans-serif;'
+        'color:#27272a;">'
+          '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+          'style="max-width:640px;margin:0 auto;background:#ffffff;border-collapse:collapse;'
+          'border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">'
+            # Header
+            '<tr><td style="padding:22px 28px;background:#ffffff;border-bottom:1px solid #ececef;">'
+              '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;">'
+                '<tr>'
+                  '<td style="vertical-align:middle;">{logo}</td>'
+                  '<td style="vertical-align:middle;text-align:right;font-size:11px;color:#a1a1aa;'
+                  'text-transform:uppercase;letter-spacing:0.8px;">Systemnachricht</td>'
+                '</tr>'
+              '</table>'
+            '</td></tr>'
+            # Badge
+            '<tr><td style="padding:24px 28px 0 28px;">'
+              '<span style="display:inline-block;padding:4px 10px;background:#eaf3df;color:#3f5a30;'
+              'border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;">'
+              'Plattform-Update</span>'
+            '</td></tr>'
+            # Subject as headline
+            '<tr><td style="padding:10px 28px 0 28px;">'
+              '<h1 style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#1f2937;">'
+              '{subject}</h1>'
+            '</td></tr>'
+            # Body
+            '<tr><td style="padding:18px 28px 8px 28px;">{body_blocks}</td></tr>'
+            # Disclaimer
+            '<tr><td style="padding:6px 28px 22px 28px;">'
+              '<div style="font-size:13px;color:#71717a;background:#fafafa;border:1px solid #ececef;'
+              'border-radius:8px;padding:12px 14px;">'
+              'Dies ist eine automatisch erzeugte Nachricht der {company} – bitte nicht darauf antworten. '
+              'Bei Fragen wende dich an den Administrator der Plattform.'
+              '</div>'
+            '</td></tr>'
+            # Footer
+            '<tr><td style="padding:14px 28px 22px 28px;background:#fafafa;border-top:1px solid #ececef;'
+            'text-align:center;color:#a1a1aa;font-size:12px;line-height:1.6;">'
+              '<div style="color:#71717a;">{company}</div>'
+              '{footer_links}'
+            '</td></tr>'
+          '</table>'
+        '</body></html>'
+    ).format(
+        logo=logo_html,
+        subject=_html.escape(subject),
+        body_blocks=_body_to_html(body),
+        company=company_name,
+        footer_links=("<div style=\"margin-top:4px;\">{}</div>".format(footer_sep) if footer_sep else ""),
+    )
+
+    plain_lines = [
+        f"[{settings.company_name or 'FBE Ausschreibungsplattform'}] Systemnachricht",
+        "=" * 60,
+        "",
+        subject,
+        "",
+        body,
+        "",
+        "-" * 60,
+        "Dies ist eine automatisch erzeugte Nachricht. Bitte nicht antworten.",
+    ]
+    plain = "\n".join(plain_lines)
+
+    ok, err = notify_mod._send_to(
+        to=[],  # Empfaenger in BCC, damit Adressen nicht gegenseitig sichtbar sind
+        bcc=addresses,
+        subject=f"[FBE] {subject}",
+        plain_body=plain,
+        html_body=body_html,
+    )
+    if not ok:
+        return RedirectResponse(
+            url=f"/admin/broadcast?error=Versand+fehlgeschlagen:+{quote(err or '-')}",
+            status_code=303,
+        )
+    msg = f"Broadcast an {len(addresses)} Empfaenger versendet."
+    return RedirectResponse(
+        url=f"/admin/broadcast?flash={quote(msg)}",
         status_code=303,
     )
 
@@ -1130,8 +1580,8 @@ def export_csv(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
-    score_min: Optional[float] = None,
-    score_max: Optional[float] = None,
+    score_min: Optional[str] = None,
+    score_max: Optional[str] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     include_expired: Optional[str] = None,
@@ -1139,7 +1589,8 @@ def export_csv(
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
-        score_min=score_min, score_max=score_max, quick=quick,
+        score_min=_safe_float(score_min), score_max=_safe_float(score_max),
+        quick=quick,
         include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()
@@ -1160,8 +1611,8 @@ def export_xlsx(
     deadline_from: Optional[str] = None,
     deadline_to: Optional[str] = None,
     q: Optional[str] = None,
-    score_min: Optional[float] = None,
-    score_max: Optional[float] = None,
+    score_min: Optional[str] = None,
+    score_max: Optional[str] = None,
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     include_expired: Optional[str] = None,
@@ -1169,7 +1620,8 @@ def export_xlsx(
     query = _filtered_query(
         db, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
-        score_min=score_min, score_max=score_max, quick=quick,
+        score_min=_safe_float(score_min), score_max=_safe_float(score_max),
+        quick=quick,
         include_expired=bool(include_expired),
     )
     tenders = _apply_sort(query, sort).all()
@@ -1270,34 +1722,34 @@ def admin_user_save(
 
     if db.query(User).filter(User.username == username).first():
         return RedirectResponse(url=f"/admin/users?error=Username '{username}' ist vergeben.", status_code=303)
-    invite_mode = send_invite == "on" and bool(email.strip())
-    if not password.strip() and not invite_mode:
-        return RedirectResponse(url="/admin/users?error=Passwort oder Einladung per Mail erforderlich.", status_code=303)
-    if invite_mode:
-        from backend.auth import generate_token as _gt, invite_expires_at as _exp
-        new_user = User(
-            username=username,
-            email=email.strip(),
-            password_hash="",  # noch leer
-            role=role,
-            is_active=False,
-            invite_token=_gt(),
-            invite_token_expires_at=_exp(),
+    if not email.strip():
+        return RedirectResponse(
+            url="/admin/users?error=E-Mail ist erforderlich (User setzt Passwort selbst via Einladungs-Link).",
+            status_code=303,
         )
-        db.add(new_user); db.commit()
-        link = f"{_base_url(request)}/set-password?token={new_user.invite_token}"
-        from backend import notify as notify_mod
-        ok, err = notify_mod.send_invite_mail(new_user.email, new_user.username, link)
-        if not ok:
-            return RedirectResponse(url=f"/admin/users?flash={username} angelegt, Mailversand fehlgeschlagen: {err or '-'}", status_code=303)
-        return RedirectResponse(url=f"/admin/users?flash={username} angelegt + Einladung verschickt.", status_code=303)
+    from backend.auth import generate_token as _gt, invite_expires_at as _exp
     new_user = User(
-        username=username, email=(email.strip() or None),
-        password_hash=hash_password(password), role=role,
-        is_active=is_active == "on" or is_active is None,
+        username=username,
+        email=email.strip(),
+        password_hash="",
+        role=role,
+        is_active=False,
+        invite_token=_gt(),
+        invite_token_expires_at=_exp(),
     )
     db.add(new_user); db.commit()
-    return RedirectResponse(url=f"/admin/users?flash={username} angelegt.", status_code=303)
+    link = f"{_base_url(request)}/set-password?token={new_user.invite_token}"
+    from backend import notify as notify_mod
+    ok, err = notify_mod.send_invite_mail(new_user.email, new_user.username, link)
+    if not ok:
+        return RedirectResponse(
+            url=f"/admin/users?flash={username} angelegt, Mailversand fehlgeschlagen: {err or '-'}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        url=f"/admin/users?flash={username} angelegt + Einladung verschickt.",
+        status_code=303,
+    )
 
 
 @app.post("/admin/users/{user_id}/delete")
@@ -1469,4 +1921,209 @@ def api_list(
 @app.get("/api/health", response_class=PlainTextResponse)
 def health():
     return "ok"
+
+
+NOTIFY_FREQ_VALUES = ("off", "daily", "weekly")
+
+
+# --- KI ------------------------------------------------------------------
+
+@app.get("/admin/ai-knowledge", response_class=HTMLResponse)
+def admin_ai_knowledge_get(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import ai as ai_mod
+    return templates.TemplateResponse(
+        request, "ai_knowledge.html",
+        {
+            "user": user,
+            "knowledge": ai_mod.read_knowledge(),
+            "configured": ai_mod.is_configured(),
+            "model": settings.openai_model,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/admin/ai-knowledge")
+def admin_ai_knowledge_post(
+    request: Request,
+    knowledge: str = Form(...),
+):
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import ai as ai_mod
+    ai_mod.write_knowledge(knowledge)
+    return RedirectResponse(url="/admin/ai-knowledge?flash=Gespeichert.", status_code=303)
+
+
+@app.post("/tender/{tender_id}/ai-analyze")
+def tender_ai_analyze(
+    tender_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Triggert die KI-Analyse (Neu oder Re-Run). Speichert das Ergebnis
+    in tender.ai_analysis und liefert es als JSON zurueck."""
+    tender = db.get(Tender, tender_id)
+    if not tender:
+        raise HTTPException(404, "Ausschreibung nicht gefunden")
+    from . import ai as ai_mod
+    if not ai_mod.is_configured():
+        return JSONResponse({"error": "OPENAI_API_KEY nicht gesetzt"}, status_code=400)
+    result = ai_mod.analyze_tender(tender)
+    if "error" in result:
+        return JSONResponse(result, status_code=502)
+    tender.ai_analysis = json.dumps(result, ensure_ascii=False)
+    tender.ai_analyzed_at = datetime.utcnow()
+    db.commit()
+    return JSONResponse({
+        "analysis": result,
+        "analyzed_at": tender.ai_analyzed_at.isoformat(),
+    })
+
+
+@app.post("/api/ai/chat")
+def ai_chat(
+    request: Request,
+    payload: dict = Body(...),
+):
+    user = _session_user(request)
+    if not user:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    from . import ai as ai_mod
+    if not ai_mod.is_configured():
+        return JSONResponse({"error": "OPENAI_API_KEY nicht gesetzt"}, status_code=400)
+    msgs = payload.get("messages") or []
+    if not isinstance(msgs, list) or not msgs:
+        return JSONResponse({"error": "messages fehlt"}, status_code=400)
+    try:
+        text = ai_mod.chat(msgs)
+    except Exception as exc:
+        log.exception("AI-Chat fehlgeschlagen")
+        return JSONResponse({"error": str(exc)[:200]}, status_code=502)
+    return JSONResponse({"reply": text})
+
+
+@app.get("/assistant", response_class=HTMLResponse)
+def assistant_page(request: Request):
+    user = _session_user(request)
+    if not user:
+        return RedirectResponse(url="/login?next=/assistant", status_code=303)
+    from . import ai as ai_mod
+    return templates.TemplateResponse(
+        request, "assistant.html",
+        {"user": user, "configured": ai_mod.is_configured(),
+         "model": settings.openai_model},
+    )
+
+
+@app.get("/me/notifications", response_class=HTMLResponse)
+def me_notifications_get(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    sess_user = _session_user(request)
+    if not sess_user:
+        return RedirectResponse(url="/login?next=/me/notifications", status_code=303)
+    db_user = db.query(User).filter(User.username == sess_user["username"]).first()
+    mail_ready = bool(settings.smtp_host and settings.smtp_from)
+    return templates.TemplateResponse(
+        request, "me_notifications.html",
+        {
+            "user": sess_user,
+            "me": db_user,
+            "mail_ready": mail_ready,
+            "flash": flash,
+            "error": error,
+        },
+    )
+
+
+@app.post("/me/notifications")
+def me_notifications_post(
+    request: Request,
+    frequency: str = Form("off"),
+    min_score: int = Form(60),
+    email: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    sess_user = _session_user(request)
+    if not sess_user:
+        raise HTTPException(401, "Nicht angemeldet")
+    db_user = db.query(User).filter(User.username == sess_user["username"]).first()
+    if not db_user:
+        return RedirectResponse(url="/me/notifications?error=Konto+nicht+gefunden", status_code=303)
+    if frequency not in NOTIFY_FREQ_VALUES:
+        frequency = "off"
+    min_score = max(0, min(int(min_score or 0), 100))
+    email = (email or "").strip()
+    if frequency != "off" and not email:
+        return RedirectResponse(
+            url="/me/notifications?error=Fuer+Benachrichtigungen+ist+eine+E-Mail+erforderlich",
+            status_code=303,
+        )
+    db_user.notify_frequency = frequency
+    db_user.notify_min_score = min_score
+    if email:
+        db_user.email = email
+    db.commit()
+    return RedirectResponse(url="/me/notifications?flash=Einstellungen+gespeichert.", status_code=303)
+
+
+@app.post("/me/notifications/test")
+def me_notifications_test(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    sess_user = _session_user(request)
+    if not sess_user:
+        raise HTTPException(401, "Nicht angemeldet")
+    db_user = db.query(User).filter(User.username == sess_user["username"]).first()
+    if not db_user or not db_user.email:
+        return RedirectResponse(
+            url="/me/notifications?error=Keine+E-Mail+hinterlegt",
+            status_code=303,
+        )
+    if not (settings.smtp_host and settings.smtp_from):
+        return RedirectResponse(
+            url="/me/notifications?error=SMTP+nicht+konfiguriert",
+            status_code=303,
+        )
+    from . import notify as notify_mod
+    days = 7 if (db_user.notify_frequency == "weekly") else 1
+    ok, err, count = notify_mod.send_user_digest(
+        to_email=db_user.email,
+        username=db_user.username,
+        days=days,
+        min_score=db_user.notify_min_score or 60,
+    )
+    if not ok:
+        return RedirectResponse(
+            url=f"/me/notifications?error=Versand+fehlgeschlagen:+{quote(err or '-')}",
+            status_code=303,
+        )
+    if count == 0:
+        msg = (f"Keine Treffer mit Score >= {db_user.notify_min_score} in den letzten "
+               f"{days} Tag(en) - es waere also keine Mail rausgegangen.")
+    else:
+        msg = f"Test-Mail an {db_user.email} versendet ({count} Treffer)."
+    return RedirectResponse(
+        url=f"/me/notifications?flash={quote(msg)}",
+        status_code=303,
+    )
+
+
+@app.get("/hilfe", response_class=HTMLResponse)
+def hilfe(request: Request):
+    return templates.TemplateResponse(request, "hilfe.html", {"user": _session_user(request)})
 

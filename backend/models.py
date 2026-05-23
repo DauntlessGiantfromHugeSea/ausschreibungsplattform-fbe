@@ -54,6 +54,10 @@ class Tender(Base):
     fingerprint = Column(String(64), nullable=False, unique=True, index=True)
     # JSON-Liste mit Score-Komponenten: [{"label":..., "points":..., "detail":...}, ...]
     score_breakdown = Column(Text, nullable=True)
+    # KI-Analyse (Fluessigboden-Eignung + Kosteneinsparungs-Schaetzung).
+    # Wird beim ersten Oeffnen der Detailseite generiert und gecached.
+    ai_analysis = Column(Text, nullable=True)        # JSON-encoded
+    ai_analyzed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -106,6 +110,11 @@ class User(Base):
     invite_token_expires_at = Column(DateTime, nullable=True)
     reset_token = Column(String(255), nullable=True)
     reset_token_expires_at = Column(DateTime, nullable=True)
+
+    # Persoenliche Benachrichtigungen: off | daily | weekly
+    notify_frequency = Column(String(10), default="off", nullable=False)
+    notify_min_score = Column(Integer, default=60, nullable=False)
+    notify_last_sent_at = Column(DateTime, nullable=True)
 
 
 class SearchProfile(Base):
@@ -176,3 +185,24 @@ class Comment(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     tender = relationship("Tender", backref="comments")
+
+
+class TenderEvent(Base):
+    """Audit-Eintrag pro Ausschreibung: Status-Wechsel, Mail-Versand etc.
+
+    username wird denormalisiert mitgespeichert, damit der Verlauf auch dann
+    lesbar bleibt, wenn ein User-Account spaeter geloescht wird.
+    """
+    __tablename__ = "tender_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tender_id = Column(Integer, ForeignKey("tenders.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"),
+                     nullable=True, index=True)
+    username = Column(String(80), nullable=False)
+    event_type = Column(String(40), nullable=False, index=True)  # 'status' | 'mail_sent'
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    tender = relationship("Tender", backref="events")

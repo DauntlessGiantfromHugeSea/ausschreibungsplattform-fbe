@@ -1,31 +1,8 @@
 {% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
 {% block title %}{{ 'Neuer Benutzer' if is_new else 'Benutzer bearbeiten' }} – FBE Ausschreibungen
 
 
-
-{% if is_new %}
-<script>
-  (function() {
-    const cb = document.getElementById('invite-cb');
-    const pw = document.getElementById('pw-input');
-    if (!cb || !pw) return;
-    function sync() {
-      if (cb.checked) {
-        pw.removeAttribute('required');
-        pw.disabled = true;
-        pw.value = '';
-        pw.placeholder = 'wird vom User gesetzt';
-      } else {
-        pw.setAttribute('required', 'required');
-        pw.disabled = false;
-        pw.placeholder = 'Mindestens 6 Zeichen';
-      }
-    }
-    cb.addEventListener('change', sync);
-    sync();
-  })();
-</script>
-{% endif %}
 
 {% endblock %}
 {% block content %}
@@ -56,33 +33,33 @@
     </div>
 
     <div>
-      <label class="block text-xs font-medium text-zinc-600 mb-1">E-Mail (optional, nötig für Einladung/Reset)</label>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">
+        E-Mail {% if is_new %}*{% else %}(optional, nötig für Reset){% endif %}
+      </label>
       <input class="input" type="email" name="email"
+             {% if is_new %}required{% endif %}
              value="{{ edited.email if edited and edited.email else '' }}"
              placeholder="user@firma.de">
+      {% if is_new %}
+      <div class="text-xs text-zinc-400 mt-1">
+        Der User bekommt eine Einladungs-Mail mit Link zum Passwort-Setzen (24 Std. gültig).
+      </div>
+      {% endif %}
     </div>
 
-    {% if is_new %}
-    <div>
-      <label class="inline-flex items-center gap-2">
-        <input type="checkbox" name="send_invite" id="invite-cb" class="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-500">
-        <span class="text-sm">Per Einladungs-Mail anlegen (User setzt Passwort selbst)</span>
-      </label>
-    </div>
-    {% endif %}
-
+    {% if not is_new %}
     <div>
       <label class="block text-xs font-medium text-zinc-600 mb-1">
-        Passwort {% if is_new %}*{% else %}(leer lassen, um nicht zu ändern){% endif %}
+        Passwort zurücksetzen (leer lassen, um nicht zu ändern)
       </label>
       <input class="input" type="password" name="password" id="pw-input"
-             {% if is_new %}required{% endif %}
              autocomplete="new-password"
-             placeholder="{{ 'Mindestens 6 Zeichen' if is_new else '••••••• (unverändert)' }}">
+             placeholder="••••••• (unverändert)">
       <div class="text-xs text-zinc-400 mt-1">
         Wird mit bcrypt gehasht — Klartext landet nicht in der DB.
       </div>
     </div>
+    {% endif %}
 
     <div>
       <label class="block text-xs font-medium text-zinc-600 mb-1">Rolle</label>

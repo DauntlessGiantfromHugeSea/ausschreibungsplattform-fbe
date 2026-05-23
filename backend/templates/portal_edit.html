@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
 {% block title %}{{ 'Neues Portal' if is_new else 'Portal bearbeiten' }} – FBE Ausschreibungen{% endblock %}
 {% block content %}
 
@@ -63,6 +64,23 @@
         <input type="checkbox" name="enabled" {% if portal is none or portal.enabled %}checked{% endif %}
                class="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-500">
         <span class="text-sm">Aktiv (wird beim nächsten Suchlauf abgefragt)</span>
+      </label>
+    </div>
+
+    <div class="border-t border-zinc-100 pt-4">
+      <label class="inline-flex items-start gap-2">
+        <input type="checkbox" name="ignore_robots"
+               {% if portal and portal.config and portal.config.get('ignore_robots') %}checked{% endif %}
+               class="h-4 w-4 mt-0.5 rounded border-zinc-300 text-rose-600 focus:ring-rose-500">
+        <span class="text-sm">
+          <strong class="text-rose-700">robots.txt für dieses Portal ignorieren</strong>
+          <span class="block text-xs text-zinc-500 mt-0.5">
+            Default ist <em>aus</em>. Aktivieren nur, wenn du dir des juristischen
+            und reputativen Risikos bewusst bist (Hausrecht des Portal-Betreibers,
+            ggf. § 202a StGB, Risiko von IP-Sperren). Bypass wird im Server-Log
+            protokolliert.
+          </span>
+        </span>
       </label>
     </div>
   </div>

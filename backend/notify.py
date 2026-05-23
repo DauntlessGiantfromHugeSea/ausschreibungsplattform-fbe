@@ -550,6 +550,57 @@ def send_invite_mail(to_email: str, username: str, link: str) -> tuple[bool, str
     return _send_to([to_email], "Einladung zur FBE-Ausschreibungsplattform", plain, html)
 
 
+def send_user_digest(
+    to_email: str,
+    username: str,
+    days: int,
+    min_score: int,
+) -> tuple[bool, str | None, int]:
+    """Persoenliche Zusammenfassung: Treffer der letzten N Tage ueber Score-
+    Schwelle des Users. Liefert (ok, error_message, anzahl).
+
+    Wenn keine Treffer da sind, wird nichts versendet (ok=True, count=0).
+    """
+    if not to_email:
+        return False, "Kein Empfaenger", 0
+    if not (settings.smtp_host and settings.smtp_from):
+        return False, "SMTP nicht konfiguriert", 0
+
+    since = datetime.utcnow() - timedelta(days=days)
+    now = datetime.utcnow()
+
+    db = SessionLocal()
+    try:
+        items = (
+            db.query(Tender)
+            .filter(Tender.created_at >= since)
+            .filter(Tender.relevance_score >= min_score)
+            .filter(or_(Tender.deadline.is_(None), Tender.deadline >= now))
+            .order_by(Tender.relevance_score.desc(), Tender.created_at.desc())
+            .limit(100)
+            .all()
+        )
+    finally:
+        db.close()
+
+    if not items:
+        return True, None, 0
+
+    period = "den letzten 24 Stunden" if days <= 1 else f"den letzten {days} Tagen"
+    period_label = "Tagesuebersicht" if days <= 1 else "Wochenuebersicht"
+    subj = "[FBE] {}: {} relevante Treffer (Score >= {})".format(
+        period_label, len(items), min_score)
+    plain = _format_plain(items, header=f"Treffer aus {period} (Score >= {min_score}):")
+    plain = (
+        f"Hallo {username},\n\n"
+        f"hier deine persoenliche {period_label} mit Treffern ueber Score {min_score}.\n\n"
+        + plain
+    )
+    html = _format_html(items, header=f"{period_label} ({len(items)} Treffer, Score >= {min_score})")
+    ok, err = _send_to([to_email], subj, plain, html)
+    return ok, err, len(items)
+
+
 def send_password_reset_mail(to_email: str, username: str, link: str) -> tuple[bool, str | None]:
     plain = (
         f"Hallo {username},\n\n"

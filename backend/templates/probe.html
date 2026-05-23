@@ -58,7 +58,7 @@
     <pre class="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-900 overflow-auto">{{ result.error }}</pre>
   {% elif result.count > 0 %}
     <div class="space-y-3">
-      {% for it in result.items %}
+      {% for it in result['items'] %}
         <div class="rounded-lg border border-zinc-200 p-3">
           <div class="flex items-center justify-between gap-3">
             <a href="{{ it.url }}" target="_blank" rel="noopener" class="font-medium text-zinc-900 hover:text-brand-700">{{ it.title }}</a>

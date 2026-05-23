@@ -97,17 +97,86 @@
     .dark header, .dark nav { background-color: rgb(39 39 42) !important; border-color: rgb(63 63 70) !important; color: rgb(244 244 245) !important; }
     .dark .bg-white { background-color: rgb(39 39 42) !important; }
     .dark .text-zinc-900 { color: rgb(244 244 245) !important; }
+    .dark .text-zinc-800 { color: rgb(228 228 231) !important; }
     .dark .text-zinc-700 { color: rgb(212 212 216) !important; }
     .dark .text-zinc-600 { color: rgb(161 161 170) !important; }
     .dark .text-zinc-500 { color: rgb(161 161 170) !important; }
+    .dark .text-zinc-400 { color: rgb(113 113 122) !important; }
     .dark .border-zinc-200, .dark .border-zinc-200\/70 { border-color: rgb(63 63 70) !important; }
     .dark .border-zinc-100 { border-color: rgb(63 63 70) !important; }
+    .dark .border-zinc-300 { border-color: rgb(82 82 91) !important; }
     .dark .hover\:bg-zinc-50:hover { background-color: rgb(63 63 70) !important; }
     .dark .bg-zinc-50, .dark .bg-zinc-50\/50, .dark .bg-zinc-50\/70 { background-color: rgb(39 39 42) !important; }
     .dark .bg-zinc-100 { background-color: rgb(63 63 70) !important; }
+
+    /* Coloured tints: in Dark Mode dunkler + saturierter Text */
+    .dark .bg-emerald-50  { background-color: rgb(6 78 59 / 0.35) !important; }
+    .dark .text-emerald-800, .dark .text-emerald-700 { color: rgb(167 243 208) !important; }
+    .dark .border-emerald-200 { border-color: rgb(6 95 70) !important; }
+
+    .dark .bg-rose-50     { background-color: rgb(76 5 25 / 0.45) !important; }
+    .dark .text-rose-800, .dark .text-rose-700, .dark .text-rose-900 { color: rgb(254 205 211) !important; }
+    .dark .border-rose-200 { border-color: rgb(136 19 55) !important; }
+
+    .dark .bg-amber-50    { background-color: rgb(120 53 15 / 0.35) !important; }
+    .dark .text-amber-800, .dark .text-amber-700 { color: rgb(253 230 138) !important; }
+    .dark .border-amber-200 { border-color: rgb(146 64 14) !important; }
+
+    .dark .bg-sky-50      { background-color: rgb(8 47 73 / 0.45) !important; }
+    .dark .text-sky-700, .dark .text-sky-800 { color: rgb(186 230 253) !important; }
+    .dark .border-sky-200 { border-color: rgb(7 89 133) !important; }
+
+    .dark .bg-brand-50    { background-color: rgb(63 90 48 / 0.40) !important; }
+    .dark .bg-brand-100   { background-color: rgb(63 90 48 / 0.55) !important; }
+    .dark .text-brand-700, .dark .text-brand-800 { color: rgb(179 216 148) !important; }
+    .dark .border-brand-200 { border-color: rgb(88 127 68) !important; }
+
+    /* Form-Inputs in den Templates verwenden .input - sicherstellen, dass sie
+       im Dark Mode genau passen. */
+    .dark .input {
+      background-color: rgb(24 24 27) !important;
+      color: rgb(244 244 245) !important;
+      border-color: rgb(82 82 91) !important;
+    }
+    .dark .input::placeholder { color: rgb(113 113 122); }
+
+    /* Buttons im Dark Mode */
+    .dark .btn-ghost {
+      background-color: rgb(63 63 70) !important;
+      color: rgb(228 228 231) !important;
+      border-color: rgb(82 82 91) !important;
+    }
+    .dark .btn-icon {
+      background-color: rgb(39 39 42) !important;
+      color: rgb(212 212 216) !important;
+      border-color: rgb(63 63 70) !important;
+    }
+    .dark .btn-icon:hover { background-color: rgb(63 63 70) !important; color: rgb(244 244 245) !important; }
+
+    /* Code / pre */
+    .dark code, .dark pre {
+      background-color: rgb(24 24 27);
+      color: rgb(228 228 231);
+      border-color: rgb(63 63 70);
+    }
+
+    /* Tabellen */
+    .dark table.dashboard thead th { background-color: rgb(39 39 42) !important; color: rgb(212 212 216) !important; border-bottom-color: rgb(63 63 70) !important; }
+    .dark table.dashboard tbody tr:hover { background-color: rgb(63 63 70 / 0.5) !important; }
+
+    /* Dropdowns & Menues */
+    .dark .card.py-1 { background-color: rgb(39 39 42); }
+
+    /* Pills mit hellem Standard-Background */
+    .dark .pill.bg-zinc-100 { background-color: rgb(63 63 70) !important; color: rgb(228 228 231) !important; }
   </style>
 </head>
 <body class="h-full text-zinc-900 dark:text-zinc-100">
+
+{% set _path = request.url.path if request else '' %}
+{% set _is_status = _path in ['/admin/status', '/admin/probe', '/admin/probe-all'] %}
+{% set _is_settings = _path.startswith('/admin/settings') or _path.startswith('/admin/portals') or _path.startswith('/admin/search-terms') or _path.startswith('/admin/users') %}
+{% set _is_help = _path.startswith('/hilfe') %}
 
 <header class="bg-white border-b border-zinc-200 sticky top-0 z-40">
   <div class="max-w-screen-2xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -121,16 +190,8 @@
         <span>Ausschreibungen</span>
       </a>
       <nav class="hidden md:flex items-center gap-1 text-sm">
-        <a href="/" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Dashboard</a>
-        <a href="/admin/status" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Status</a>
-        <a href="/profiles" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Profile</a>
-        <a href="/admin/portals" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Portale</a>
-        <a href="/admin/search-terms" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Suchbegriffe</a>
-        <a href="/admin/probe" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Probe</a>
-        <a href="/admin/probe-all" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Alle testen</a>
-        <a href="/admin/users" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Benutzer</a>
-        <a href="/admin/settings" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">Einstellungen</a>
-        <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700">API</a>
+        <a href="/" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path == '/' %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Dashboard</a>
+        <a href="/profiles" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path.startswith('/profiles') %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Profile</a>
       </nav>
     </div>
     <div class="flex items-center gap-2">
@@ -142,6 +203,67 @@
           <span id="run-search-label">Suche starten</span>
         </button>
       </form>
+
+      {# Ampel: Status / Probe #}
+      <div class="relative" id="status-menu">
+        <button type="button"
+                onclick="document.getElementById('status-dropdown').classList.toggle('hidden')"
+                title="Status & Probe"
+                class="btn-icon h-9 w-9 {% if _is_status %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
+          {# Traffic light icon #}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+            <rect x="7" y="2" width="10" height="20" rx="3"/>
+            <circle cx="12" cy="7"  r="1.6" fill="#ef4444" stroke="none"/>
+            <circle cx="12" cy="12" r="1.6" fill="#eab308" stroke="none"/>
+            <circle cx="12" cy="17" r="1.6" fill="#22c55e" stroke="none"/>
+            <path d="M5 5h2M17 5h2M5 12h2M17 12h2M5 19h2M17 19h2"/>
+          </svg>
+        </button>
+        <div id="status-dropdown" class="hidden absolute right-0 mt-2 w-52 card py-1 z-50">
+          <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">System & Tests</div>
+          <a href="/admin/status" class="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 {% if _path == '/admin/status' %}bg-zinc-50 font-medium{% endif %}">
+            <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span> Status
+          </a>
+          <a href="/admin/probe" class="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 {% if _path == '/admin/probe' %}bg-zinc-50 font-medium{% endif %}">
+            <span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span> Probe
+          </a>
+          <a href="/admin/probe-all" class="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 {% if _path == '/admin/probe-all' %}bg-zinc-50 font-medium{% endif %}">
+            <span class="inline-block h-2 w-2 rounded-full bg-rose-500"></span> Alle testen
+          </a>
+        </div>
+      </div>
+
+      {# Zahnrad: Einstellungen #}
+      <a href="/admin/settings"
+         title="Einstellungen"
+         class="btn-icon h-9 w-9 {% if _is_settings %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+        </svg>
+      </a>
+
+      {# Sparkles: KI-Assistent #}
+      <a href="/assistant"
+         title="KI-Assistent"
+         class="btn-icon h-9 w-9 {% if _path.startswith('/assistant') %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+          <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/>
+          <path d="M18 14l.9 2.4L21.3 17l-2.4.9L18 20l-.9-2.1L14.7 17l2.4-.6z"/>
+        </svg>
+      </a>
+
+      {# Fragezeichen: Hilfe / Dokumentation #}
+      <a href="/hilfe"
+         title="Hilfe & Dokumentation"
+         class="btn-icon h-9 w-9 {% if _is_help %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </a>
+
       {% if user %}
       {% set _uname = user.username if user is mapping else user %}
       <div class="relative" id="user-menu">
@@ -153,7 +275,8 @@
         </button>
         <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-44 card py-1 z-50">
           <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">Angemeldet als <strong class="text-zinc-700">{{ _uname }}</strong></div>
-          <a href="/logout" class="block px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50">Abmelden</a>
+          <a href="/me/notifications" class="block px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50">Meine Benachrichtigungen</a>
+          <a href="/logout" class="block px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 border-t border-zinc-100">Abmelden</a>
         </div>
       </div>
       {% endif %}
@@ -162,7 +285,18 @@
 </header>
 
 <main class="max-w-screen-2xl mx-auto px-6 py-8">
-  {% block content %}{% endblock %}
+  {% if sidebar_section %}
+  <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
+    <aside class="lg:sticky lg:top-20 lg:self-start">
+      {% include "_sidebar_" + sidebar_section + ".html" %}
+    </aside>
+    <div class="min-w-0">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+  {% else %}
+  {{ self.content() }}
+  {% endif %}
 </main>
 
 <script>
@@ -174,9 +308,12 @@
     lbl.textContent = 'Suche läuft…';
   });
   document.addEventListener('click', (e) => {
-    const m = document.getElementById('user-menu');
-    const d = document.getElementById('user-dropdown');
-    if (m && d && !m.contains(e.target)) d.classList.add('hidden');
+    const um = document.getElementById('user-menu');
+    const ud = document.getElementById('user-dropdown');
+    if (um && ud && !um.contains(e.target)) ud.classList.add('hidden');
+    const sm = document.getElementById('status-menu');
+    const sd = document.getElementById('status-dropdown');
+    if (sm && sd && !sm.contains(e.target)) sd.classList.add('hidden');
   });
 </script>
 <button data-theme-toggle type="button"

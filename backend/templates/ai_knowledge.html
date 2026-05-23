@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}KI-Wissensbasis – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/admin/settings" class="hover:text-zinc-900">Einstellungen</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">KI-Wissensbasis</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2">KI-Wissensbasis</h1>
+<p class="text-sm text-zinc-500 mb-6">
+  Dieser Text wird der KI bei jeder Anfrage als Kontext mitgegeben - sowohl bei
+  der automatischen Tender-Analyse als auch im Assistenten. Je genauer hier
+  steht, was Fluessigboden kann, wo Ersparnisse entstehen und wann es passt,
+  desto belastbarer werden die Antworten.
+</p>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✗ {{ error }}</div>
+{% endif %}
+
+<div class="card p-4 mb-4 flex flex-wrap items-center gap-3 text-sm">
+  <span class="text-zinc-500">Status:</span>
+  {% if configured %}
+    <span class="pill bg-emerald-50 text-emerald-700 border border-emerald-200">API-Key gesetzt</span>
+    <span class="text-zinc-500">Modell:</span>
+    <code class="text-zinc-700">{{ model }}</code>
+  {% else %}
+    <span class="pill bg-rose-50 text-rose-700 border border-rose-200">Kein API-Key</span>
+    <span class="text-zinc-500">Setze <code>OPENAI_API_KEY</code> in der <code>.env</code>.</span>
+  {% endif %}
+</div>
+
+<form method="post" action="/admin/ai-knowledge" class="card p-6 space-y-4">
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Wissens-Dokument (Markdown)</label>
+    <textarea class="input font-mono text-xs leading-relaxed" name="knowledge"
+              style="min-height:520px;">{{ knowledge }}</textarea>
+    <div class="text-xs text-zinc-400 mt-1">
+      Markdown wird als Plain-Text an die KI uebergeben. Aenderungen wirken sofort.
+    </div>
+  </div>
+  <div class="flex gap-2">
+    <button type="submit" class="btn-primary">Speichern</button>
+    <a href="/admin/settings" class="btn-ghost">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

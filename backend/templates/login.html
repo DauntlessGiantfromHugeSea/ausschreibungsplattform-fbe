@@ -1,7 +1,14 @@
 <!DOCTYPE html>
-<html lang="de" class="h-full bg-zinc-50">
+<html lang="de" class="h-full bg-zinc-50 dark:bg-zinc-900">
 <head>
   <meta charset="UTF-8">
+  <script>
+    (function() {
+      const saved = localStorage.getItem('theme');
+      const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      if (dark) document.documentElement.classList.add('dark');
+    })();
+  </script>
   <title>Anmelden – FBE Ausschreibungen</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% if has_logo() %}
@@ -14,12 +21,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] },
+    tailwind.config = { darkMode:'class',
+      theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] },
       colors: { brand: { 500:'#3b5b86', 700:'#27406b', 800:'#1f3556' } } } } }
   </script>
-  <style>body{font-family:Inter,system-ui,sans-serif}</style>
+  <style>
+    body{font-family:Inter,system-ui,sans-serif}
+    .dark body { background-color: rgb(24 24 27); color: rgb(244 244 245); }
+    .dark .bg-white { background-color: rgb(39 39 42) !important; }
+    .dark .border-zinc-200, .dark .border-zinc-200\/70, .dark .border-zinc-300 { border-color: rgb(63 63 70) !important; }
+    .dark input { background-color: rgb(24 24 27) !important; color: rgb(244 244 245) !important; border-color: rgb(82 82 91) !important; }
+    .dark .text-zinc-900 { color: rgb(244 244 245) !important; }
+    .dark .text-zinc-700, .dark .text-zinc-600, .dark .text-zinc-500, .dark .text-zinc-400 { color: rgb(161 161 170) !important; }
+    .dark .bg-rose-50 { background-color: rgb(76 5 25 / 0.4) !important; }
+    .dark .text-rose-800 { color: rgb(254 205 211) !important; }
+    .dark .border-rose-200 { border-color: rgb(136 19 55) !important; }
+    .dark .bg-emerald-50 { background-color: rgb(6 78 59 / 0.35) !important; }
+    .dark .text-emerald-800 { color: rgb(167 243 208) !important; }
+    .dark .border-emerald-200 { border-color: rgb(6 95 70) !important; }
+  </style>
 </head>
-<body class="h-full text-zinc-900 flex items-center justify-center px-4">
+<body class="h-full text-zinc-900 dark:text-zinc-100 flex items-center justify-center px-4">
   <div class="w-full max-w-sm">
     <div class="text-center mb-6">
       {% if has_logo() %}
@@ -32,6 +54,11 @@
     </div>
 
     <form method="post" action="/login" class="bg-white rounded-2xl border border-zinc-200/70 shadow-sm p-6 space-y-4">
+      {% if flash %}
+        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          ✓ {{ flash }}
+        </div>
+      {% endif %}
       {% if error %}
         <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {{ error }}

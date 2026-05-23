@@ -104,10 +104,58 @@ def backfill_regions() -> int:
     return updated
 
 
+def add_tender_ai_columns() -> bool:
+    """Fuegt die Spalten tenders.ai_analysis und tenders.ai_analyzed_at
+    bei Bestandsdatenbanken nach."""
+    added = False
+    statements = [
+        ("ai_analysis",     "ALTER TABLE tenders ADD COLUMN ai_analysis TEXT"),
+        ("ai_analyzed_at",  "ALTER TABLE tenders ADD COLUMN ai_analyzed_at DATETIME"),
+    ]
+    for col, ddl in statements:
+        if _column_exists("tenders", col):
+            continue
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            log.info("Migration: Spalte tenders.%s hinzugefuegt.", col)
+            added = True
+        except Exception as exc:  # pragma: no cover
+            log.exception("Migration tenders.%s fehlgeschlagen: %s", col, exc)
+    return added
+
+
+def add_user_notify_columns() -> bool:
+    """Fuegt die Spalten users.notify_frequency / notify_min_score /
+    notify_last_sent_at bei Bestandsdatenbanken nach."""
+    added = False
+    statements = [
+        ("notify_frequency",
+         "ALTER TABLE users ADD COLUMN notify_frequency VARCHAR(10) DEFAULT 'off' NOT NULL"),
+        ("notify_min_score",
+         "ALTER TABLE users ADD COLUMN notify_min_score INTEGER DEFAULT 60 NOT NULL"),
+        ("notify_last_sent_at",
+         "ALTER TABLE users ADD COLUMN notify_last_sent_at DATETIME"),
+    ]
+    for col, ddl in statements:
+        if _column_exists("users", col):
+            continue
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            log.info("Migration: Spalte users.%s hinzugefuegt.", col)
+            added = True
+        except Exception as exc:  # pragma: no cover
+            log.exception("Migration users.%s fehlgeschlagen: %s", col, exc)
+    return added
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
         "score_breakdown_added": add_score_breakdown_column(),
         "portal_names_normalized": normalize_portal_names(),
         "regions_backfilled": backfill_regions(),
+        "user_notify_columns_added": add_user_notify_columns(),
+        "tender_ai_columns_added": add_tender_ai_columns(),
     }

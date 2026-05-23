@@ -150,40 +150,40 @@
     </div>
   </div>
 
+  <div class="card p-6 max-w-3xl">
+    <h3 class="text-base font-semibold mb-2">Zugewiesene User</h3>
+    <p class="text-xs text-zinc-500 mb-4">
+      Diese User sehen ausschliesslich Ausschreibungen, die zu diesem Profil (oder ihren anderen zugewiesenen Profilen) passen.
+      Admins sind hier nicht aufgelistet – sie sehen ohnehin alles.
+    </p>
+    <input type="hidden" name="user_ids" id="assign-users-csv" value="">
+    <div class="grid grid-cols-2 gap-2 max-h-64 overflow-auto border border-zinc-200 rounded-lg p-3">
+      {% set has_non_admin = namespace(found=false) %}
+      {% for u in all_users %}
+        {% if u.role != 'admin' %}
+          {% set has_non_admin.found = true %}
+          <label class="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" class="assign-user-cb h-4 w-4 rounded border-zinc-300 text-brand-700"
+                   value="{{ u.id }}"
+                   {% if u.id in assigned_user_ids %}checked{% endif %}>
+            <span>{{ u.username }} <span class="text-xs text-zinc-400">{{ u.email or '' }}</span></span>
+          </label>
+        {% endif %}
+      {% endfor %}
+      {% if not has_non_admin.found %}
+        <div class="col-span-2 text-sm text-zinc-500">Noch keine Non-Admin-User angelegt. Lege zuerst unter „Einstellungen → User" einen User mit Rolle „user" an.</div>
+      {% endif %}
+    </div>
+  </div>
+
   <div class="flex gap-2">
     <button type="submit" class="btn-primary">Speichern</button>
     <a href="/admin/profiles" class="btn-ghost">Abbrechen</a>
   </div>
 </form>
-
-{% if not is_new %}
-<div class="card p-6 max-w-3xl mt-6">
-  <h3 class="text-base font-semibold mb-3">Zugewiesene User</h3>
-  <p class="text-xs text-zinc-500 mb-4">
-    Diese User sehen ausschliesslich Ausschreibungen, die zu diesem Profil (oder ihren anderen zugewiesenen Profilen) passen.
-    Admins sind hier irrelevant – sie sehen ohnehin alles.
-  </p>
-  <form method="post" action="/admin/profiles/{{ profile.id }}/assign-users" id="assign-users-form">
-    <input type="hidden" name="user_ids" id="assign-users-csv" value="">
-    <div class="grid grid-cols-2 gap-2 mb-4 max-h-64 overflow-auto border border-zinc-200 rounded-lg p-3">
-      {% for u in all_users %}
-        {% if u.role != 'admin' %}
-          <label class="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" class="assign-user-cb" value="{{ u.id }}"
-                   {% if u.id in assigned_user_ids %}checked{% endif %}
-                   class="h-4 w-4 rounded border-zinc-300 text-brand-700">
-            <span>{{ u.username }} <span class="text-xs text-zinc-400">{{ u.email or '' }}</span></span>
-          </label>
-        {% endif %}
-      {% else %}
-        <div class="col-span-2 text-sm text-zinc-500">Keine Non-Admin-User vorhanden.</div>
-      {% endfor %}
-    </div>
-    <button type="submit" class="btn-primary">Zuweisung speichern</button>
-  </form>
-</div>
 <script>
-  document.getElementById('assign-users-form')?.addEventListener('submit', (e) => {
+  // Checkbox-Auswahl in hidden CSV-Feld serialisieren, BEVOR das Form abgeschickt wird.
+  document.querySelector('form[action="/admin/profiles/save"]')?.addEventListener('submit', () => {
     const ids = [...document.querySelectorAll('.assign-user-cb:checked')].map(cb => cb.value);
     document.getElementById('assign-users-csv').value = ids.join(',');
   });

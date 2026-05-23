@@ -2048,6 +2048,7 @@ def profile_save(
     deadline_days: str = Form(""),
     sort: str = Form("score_desc"),
     notify: Optional[str] = Form(None),
+    user_ids: str = Form(""),
     db: Session = Depends(get_db),
 ):
     name = name.strip()
@@ -2081,8 +2082,22 @@ def profile_save(
     profile.sort = sort.strip() or "score_desc"
     profile.notify = 1 if notify == "on" else 0
 
+    # Neue Profile muessen erst ein commit/flush sehen, damit profile.id
+    # existiert, bevor wir die M2M-Beziehung setzen. db.flush() reicht.
+    db.flush()
+
+    # User-Zuweisung aus dem Form-Feld 'user_ids' (CSV der gewaehlten User-IDs).
+    # Admins werden defensiv rausgefiltert, falls jemand die Liste manipuliert.
+    ids = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
+    if ids:
+        users = db.query(User).filter(User.id.in_(ids), User.role != "admin").all()
+    else:
+        users = []
+    profile.assigned_users = users
+
     db.commit()
-    return RedirectResponse(url=f"/admin/profiles?flash={name} gespeichert.", status_code=303)
+    flash_msg = f"{name} gespeichert ({len(users)} User zugewiesen)."
+    return RedirectResponse(url=f"/admin/profiles?flash={flash_msg}", status_code=303)
 
 
 @app.post("/admin/profiles/{profile_id}/assign-users")

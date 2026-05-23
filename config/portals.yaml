@@ -552,3 +552,27 @@ portals:
     variant: center
     max_pages: 2
     filter_by_terms: true
+- name: myFUTURA (Futura Solutions)
+  enabled: true
+  scraper: generic_html
+  base_url: https://www.myfutura.eu
+  strategy: scrape
+  notes: "myFUTURA ist eine SAP-native Sourcing-Plattform der Futura Solutions\nGmbH (Wiesbaden). Das Bietermodul liegt unter\n/myfutura/bietermodul/maincontroller.php und ist primaer login-\ngeschuetzt - oeffentliche Bekanntmachungen werden vom jeweiligen\nMandanten dort eingestellt (z.B. n-ergie, RWE, BASF).\n\nUmsetzung: generic_html im Listing-Modus probiert mehrere\nEinstiegspfade (Bietermodul, public-notice-Liste, Login-Page mit\nNotices-Block). Wenn keiner Bekanntmachungs-Karten liefert, springt\nder Auto-Discovery-Fallback im Scraper auf gaengige Pfade an\n(/ausschreibungen, /notices ...).\n\nFalls das Portal nur per Login Karten zeigt, /admin/status pruefen:\nhttp_log zeigt dann 200 + 0 Treffer. In dem Fall braucht die\nAnbindung credentials -> playwright_html mit Login-Schritt\n(analog Subreport ELViS, separat zu konfigurieren).\n"
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    timeout: 45
+    request_delay_s: 0.5
+    listing_paths:
+    - /myfutura/bietermodul/maincontroller.php
+    - /4build/loginnopopup.phtml
+    - /myfutura/myf/index.html
+    - /
+    result_selector: 'tr.notice, tr.publication, table.notices tbody tr, table.tenderlist tbody tr, .notice-item, .tender-item, .ausschreibung, li:has(a[href*=''notice'']), li:has(a[href*=''bekanntmachung''])'
+    title_selector: 'a.notice-title, a.tender-title, h2 a, h3 a, td a[href*=''notice''], td a[href*=''bekanntmachung''], td a[href*=''ausschreibung''], a'
+    link_selector: 'a[href*=''notice''], a[href*=''bekanntmachung''], a[href*=''ausschreibung''], a[href*=''bietermodul''], a'
+    authority_selector: .auftraggeber, .vergabestelle, .buyer
+    location_selector: .ort, .erfuellungsort, .location
+    deadline_selector: .frist, .angebotsfrist, .deadline
+    description_selector: .description, .beschreibung, p
+    filter_by_terms: true
+    auto_discover: true

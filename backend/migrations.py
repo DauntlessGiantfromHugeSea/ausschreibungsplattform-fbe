@@ -150,6 +150,65 @@ def add_user_notify_columns() -> bool:
     return added
 
 
+def add_search_profile_keywords_column() -> bool:
+    """Fuegt search_profiles.keywords (JSON-Text-Liste) bei Bestandsdatenbanken nach."""
+    if _column_exists("search_profiles", "keywords"):
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE search_profiles ADD COLUMN keywords TEXT"))
+        log.info("Migration: Spalte search_profiles.keywords hinzugefuegt.")
+        return True
+    except Exception as exc:  # pragma: no cover
+        log.exception("Migration search_profiles.keywords fehlgeschlagen: %s", exc)
+        return False
+
+
+def create_profile_users_table() -> bool:
+    """Legt die M2M-Tabelle profile_users an, falls noch nicht vorhanden."""
+    insp = inspect(engine)
+    if "profile_users" in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE profile_users ("
+                "profile_id INTEGER NOT NULL, "
+                "user_id INTEGER NOT NULL, "
+                "PRIMARY KEY (profile_id, user_id), "
+                "FOREIGN KEY (profile_id) REFERENCES search_profiles(id) ON DELETE CASCADE, "
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+                ")"
+            ))
+        log.info("Migration: Tabelle profile_users angelegt.")
+        return True
+    except Exception as exc:  # pragma: no cover
+        log.exception("Migration profile_users fehlgeschlagen: %s", exc)
+        return False
+
+
+def migrate_viewer_role_to_user() -> int:
+    """Bestehende Rolle 'viewer' wird durch 'user' (= profilgebunden) ersetzt.
+
+    Liefert die Anzahl der aktualisierten User-Datensaetze.
+    """
+    db = SessionLocal()
+    try:
+        n = db.execute(
+            text("UPDATE users SET role='user' WHERE role='viewer'")
+        ).rowcount or 0
+        if n:
+            db.commit()
+            log.info("Migration: %d User-Rollen von 'viewer' auf 'user' migriert.", n)
+        return int(n)
+    except Exception as exc:  # pragma: no cover
+        db.rollback()
+        log.exception("Migration viewer->user fehlgeschlagen: %s", exc)
+        return 0
+    finally:
+        db.close()
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -158,4 +217,7 @@ def run_all() -> dict:
         "regions_backfilled": backfill_regions(),
         "user_notify_columns_added": add_user_notify_columns(),
         "tender_ai_columns_added": add_tender_ai_columns(),
+        "search_profile_keywords_added": add_search_profile_keywords_column(),
+        "profile_users_table_created": create_profile_users_table(),
+        "viewer_role_migrated": migrate_viewer_role_to_user(),
     }

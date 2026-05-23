@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .auth import authenticate, hash_password, install_auth, require_admin
+from .auth import authenticate, hash_password, install_auth, is_restricted, require_admin
 from . import branding
 from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
@@ -214,6 +214,108 @@ def _filtered_query(
 def _apply_sort(query, sort: Optional[str]):
     cols = SORT_OPTIONS.get(sort or "score_desc", SORT_OPTIONS["score_desc"])
     return query.order_by(*cols)
+
+
+# --- Profil-Enforcement fuer restricted-User ----------------------
+def _profile_filter_expr(profile: SearchProfile):
+    """SQLAlchemy-Filter, der EINEN Profil-Filter beschreibt.
+
+    Mehrere keywords innerhalb eines Profils sind OR-verknuepft;
+    keywords + portal/region/score sind AND-verknuepft.
+    """
+    from sqlalchemy import and_ as _and
+
+    conds = []
+
+    kws = profile.keyword_list()
+    if kws:
+        kw_or = []
+        for kw in kws:
+            like = f"%{kw}%"
+            kw_or.append(or_(
+                Tender.title.ilike(like),
+                Tender.description.ilike(like),
+                Tender.matched_terms.ilike(like),
+                Tender.contracting_authority.ilike(like),
+            ))
+        conds.append(or_(*kw_or))
+    elif profile.query:
+        # Legacy-Profile ohne keywords-Liste: query-Feld als einziger Begriff
+        like = f"%{profile.query}%"
+        conds.append(or_(
+            Tender.title.ilike(like),
+            Tender.description.ilike(like),
+            Tender.matched_terms.ilike(like),
+            Tender.contracting_authority.ilike(like),
+        ))
+
+    if profile.portal:
+        conds.append(Tender.portal == profile.portal)
+    if profile.region:
+        conds.append(Tender.region == profile.region)
+    if profile.status:
+        conds.append(Tender.status == profile.status)
+    if profile.level:
+        conds.append(Tender.relevance_level == profile.level)
+    if profile.score_min is not None:
+        conds.append(Tender.relevance_score >= profile.score_min)
+    if profile.score_max is not None:
+        conds.append(Tender.relevance_score <= profile.score_max)
+    if profile.deadline_days:
+        until = datetime.utcnow() + timedelta(days=profile.deadline_days)
+        conds.append(Tender.deadline.isnot(None))
+        conds.append(Tender.deadline <= until)
+
+    if not conds:
+        # Leeres Profil matched nichts - sonst koennte ein leeres Profil
+        # einem User unbeabsichtigt ALLE Tender oeffnen.
+        return Tender.id == -1
+    return _and(*conds)
+
+
+def _user_assigned_profiles(db: Session, request: Request) -> list[SearchProfile]:
+    """Liefert die SearchProfiles, die dem eingeloggten User zugewiesen sind.
+
+    Nutzt session.user_id; fuer den Env-Admin-Fallback (id=0) leer.
+    """
+    uid = request.session.get("user_id")
+    if not uid:
+        return []
+    user = db.get(User, uid)
+    if not user:
+        return []
+    return list(user.assigned_profiles)
+
+
+def _enforce_restricted(
+    db: Session,
+    request: Request,
+    base_query,
+    selected_profile_id: Optional[int] = None,
+) -> tuple[object, list[SearchProfile], Optional[SearchProfile]]:
+    """Schraenkt base_query auf die zugewiesenen Profile des Restricted-Users ein.
+
+    Liefert (query, alle_zugewiesenen_profile, gewaehltes_profil_oder_None).
+    Wenn selected_profile_id gesetzt aber dem User nicht zugewiesen -> 403-aequivalent
+    (query auf 'nichts'). Wenn keine Profile zugewiesen -> query auf 'nichts'.
+    """
+    profiles = _user_assigned_profiles(db, request)
+    if not profiles:
+        return base_query.filter(Tender.id == -1), [], None
+
+    selected = None
+    if selected_profile_id:
+        for p in profiles:
+            if p.id == selected_profile_id:
+                selected = p
+                break
+        if not selected:
+            return base_query.filter(Tender.id == -1), profiles, None
+
+    if selected:
+        return base_query.filter(_profile_filter_expr(selected)), profiles, selected
+    # Kein konkretes Profil gewaehlt - Union ueber alle zugewiesenen
+    return base_query.filter(or_(*[_profile_filter_expr(p) for p in profiles])), profiles, None
 
 
 # --- Auth Routes ---------------------------------------------------
@@ -429,21 +531,41 @@ def index(
     page: int = 1,
     per_page: int = 50,
     include_expired: Optional[str] = None,
+    profile: Optional[int] = None,
     flash: Optional[str] = None,
     error: Optional[str] = None,
 ):
     per_page = _normalize_per_page(per_page)
     expired_flag = bool(include_expired)
-    # Score-Werte tolerant parsen: leere Strings -> None, ungueltige -> None
-    score_min = _safe_float(score_min, default=30.0)
-    score_max = _safe_float(score_max, default=None)
-    query = _filtered_query(
-        db,
-        portal=portal, region=region, status=status, level=level,
-        deadline_from=deadline_from, deadline_to=deadline_to, q=q,
-        score_min=score_min, score_max=score_max, quick=quick,
-        include_expired=expired_flag,
-    )
+    restricted = is_restricted(request)
+
+    if restricted:
+        # Restricted-User: ALLE freien Filter-Params werden ignoriert.
+        # Nur 'profile', 'status', 'sort', 'page', 'per_page' werden respektiert.
+        portal = region = level = deadline_from = deadline_to = None
+        q = None
+        score_min = None
+        score_max = None
+        quick = None
+        expired_flag = False
+        query = _filtered_query(db, status=status, include_expired=False)
+        query, user_profiles, selected_profile = _enforce_restricted(
+            db, request, query, selected_profile_id=profile,
+        )
+    else:
+        # Score-Werte tolerant parsen: leere Strings -> None, ungueltige -> None
+        score_min = _safe_float(score_min, default=30.0)
+        score_max = _safe_float(score_max, default=None)
+        query = _filtered_query(
+            db,
+            portal=portal, region=region, status=status, level=level,
+            deadline_from=deadline_from, deadline_to=deadline_to, q=q,
+            score_min=score_min, score_max=score_max, quick=quick,
+            include_expired=expired_flag,
+        )
+        user_profiles = []
+        selected_profile = None
+
     total_results = query.count()
     total_pages = max(1, (total_results + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
@@ -459,21 +581,45 @@ def index(
     regions_distinct = [r[0] for r in db.query(Tender.region).distinct().all() if r[0]]
     # Counts pro Region (auf den AKTUELL gefilterten query, abzüglich region-Filter selbst)
     from sqlalchemy import func as _sqlfunc
-    _q_for_counts = _filtered_query(db, portal=portal, region=None, status=status, level=level, deadline_from=deadline_from, deadline_to=deadline_to, q=q, score_min=score_min, score_max=score_max, quick=quick)
-    region_counts = dict(_q_for_counts.with_entities(Tender.region, _sqlfunc.count(Tender.id)).group_by(Tender.region).all())
-    region_counts = {k: v for k, v in region_counts.items() if k}
-    _q_for_status_counts = _filtered_query(db, portal=portal, region=region, status=None, level=level, deadline_from=deadline_from, deadline_to=deadline_to, q=q, score_min=score_min, score_max=score_max, quick=quick)
-    status_counts = dict(_q_for_status_counts.with_entities(Tender.status, _sqlfunc.count(Tender.id)).group_by(Tender.status).all())
-    status_counts = {k: v for k, v in status_counts.items() if k}
-    total_count = db.query(Tender).count()
-    high_count = db.query(Tender).filter(Tender.relevance_level == "high").count()
-    interesting_count = db.query(Tender).filter(Tender.status == TenderStatus.INTERESSANT.value).count()
-    soon_count = (
-        db.query(Tender)
-        .filter(Tender.deadline >= datetime.utcnow())
-        .filter(Tender.deadline <= datetime.utcnow() + timedelta(days=14))
-        .count()
-    )
+    if restricted:
+        # Restricted: Region-Counts wuerden Inhalte ausserhalb des Profils
+        # zeigen koennen - bleibt leer, im UI sind die Filter ohnehin weg.
+        region_counts = {}
+        _q_status = _filtered_query(db, include_expired=False)
+        _q_status, _, _ = _enforce_restricted(db, request, _q_status, selected_profile_id=profile)
+        status_counts = dict(_q_status.with_entities(Tender.status, _sqlfunc.count(Tender.id)).group_by(Tender.status).all())
+        status_counts = {k: v for k, v in status_counts.items() if k}
+    else:
+        _q_for_counts = _filtered_query(db, portal=portal, region=None, status=status, level=level, deadline_from=deadline_from, deadline_to=deadline_to, q=q, score_min=score_min, score_max=score_max, quick=quick)
+        region_counts = dict(_q_for_counts.with_entities(Tender.region, _sqlfunc.count(Tender.id)).group_by(Tender.region).all())
+        region_counts = {k: v for k, v in region_counts.items() if k}
+        _q_for_status_counts = _filtered_query(db, portal=portal, region=region, status=None, level=level, deadline_from=deadline_from, deadline_to=deadline_to, q=q, score_min=score_min, score_max=score_max, quick=quick)
+        status_counts = dict(_q_for_status_counts.with_entities(Tender.status, _sqlfunc.count(Tender.id)).group_by(Tender.status).all())
+        status_counts = {k: v for k, v in status_counts.items() if k}
+    if restricted:
+        # Stats werden im UI fuer Restricted nicht angezeigt, aber wir
+        # liefern konsistente Werte fuer das Profil-gefilterte Set.
+        total_count = total_results
+        high_q = _filtered_query(db, include_expired=False).filter(Tender.relevance_level == "high")
+        high_q, _, _ = _enforce_restricted(db, request, high_q, selected_profile_id=profile)
+        high_count = high_q.count()
+        interesting_count = status_counts.get(TenderStatus.INTERESSANT.value, 0)
+        soon_q = _filtered_query(db, include_expired=False).filter(
+            Tender.deadline >= datetime.utcnow(),
+            Tender.deadline <= datetime.utcnow() + timedelta(days=14),
+        )
+        soon_q, _, _ = _enforce_restricted(db, request, soon_q, selected_profile_id=profile)
+        soon_count = soon_q.count()
+    else:
+        total_count = db.query(Tender).count()
+        high_count = db.query(Tender).filter(Tender.relevance_level == "high").count()
+        interesting_count = db.query(Tender).filter(Tender.status == TenderStatus.INTERESSANT.value).count()
+        soon_count = (
+            db.query(Tender)
+            .filter(Tender.deadline >= datetime.utcnow())
+            .filter(Tender.deadline <= datetime.utcnow() + timedelta(days=14))
+            .count()
+        )
     stats = {
         "total": total_count,
         "high": high_count,
@@ -483,7 +629,12 @@ def index(
 
     last_run = load_run_state()
     next_run = next_run_time()
-    profiles = db.query(SearchProfile).order_by(SearchProfile.name).all()
+    if restricted:
+        # Restricted-User sehen nur ihre zugewiesenen Profile - nur name +
+        # description, KEINE Filter-Felder (keywords, query etc.).
+        profiles = user_profiles
+    else:
+        profiles = db.query(SearchProfile).order_by(SearchProfile.name).all()
 
     return templates.TemplateResponse(
         request,
@@ -525,6 +676,8 @@ def index(
             "is_running": is_pipeline_running(),
             "user": request.session.get("user"),
             "profiles": profiles,
+            "restricted": restricted,
+            "selected_profile": selected_profile,
         },
     )
 
@@ -540,6 +693,14 @@ def detail(
     tender = db.get(Tender, tender_id)
     if not tender:
         raise HTTPException(404, "Ausschreibung nicht gefunden")
+
+    # Restricted-User: nur sichtbar, wenn der Tender zu einem zugewiesenen
+    # Profil passt. Sonst gleiche Antwort wie 404 (keine Existenz-Info leaken).
+    if is_restricted(request):
+        q = db.query(Tender).filter(Tender.id == tender_id)
+        q, _, _ = _enforce_restricted(db, request, q)
+        if q.first() is None:
+            raise HTTPException(404, "Ausschreibung nicht gefunden")
 
     breakdown: list = []
     if tender.score_breakdown:
@@ -1570,8 +1731,30 @@ def _probe_diagnostic(scraper, portal_cfg) -> dict:
 
 
 # --- Export ---------------------------------------------------------
+def _export_query(db, request, **filters):
+    """Baut die Filter-Query fuer Exporte. Restricted-User: serverseitig
+    auf zugewiesene Profile begrenzen, freie Filter aus der URL ignorieren."""
+    if is_restricted(request):
+        q = _filtered_query(db, status=filters.get("status"), include_expired=False)
+        q, _, _ = _enforce_restricted(db, request, q,
+                                      selected_profile_id=filters.get("profile"))
+        return q
+    return _filtered_query(
+        db,
+        portal=filters.get("portal"), region=filters.get("region"),
+        status=filters.get("status"), level=filters.get("level"),
+        deadline_from=filters.get("deadline_from"),
+        deadline_to=filters.get("deadline_to"), q=filters.get("q"),
+        score_min=_safe_float(filters.get("score_min")),
+        score_max=_safe_float(filters.get("score_max")),
+        quick=filters.get("quick"),
+        include_expired=bool(filters.get("include_expired")),
+    )
+
+
 @app.get("/export/csv")
 def export_csv(
+    request: Request,
     db: Session = Depends(get_db),
     portal: Optional[str] = None,
     region: Optional[str] = None,
@@ -1585,13 +1768,13 @@ def export_csv(
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     include_expired: Optional[str] = None,
+    profile: Optional[int] = None,
 ):
-    query = _filtered_query(
-        db, portal=portal, region=region, status=status, level=level,
+    query = _export_query(
+        db, request, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
-        score_min=_safe_float(score_min), score_max=_safe_float(score_max),
-        quick=quick,
-        include_expired=bool(include_expired),
+        score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=include_expired, profile=profile,
     )
     tenders = _apply_sort(query, sort).all()
     return Response(
@@ -1603,6 +1786,7 @@ def export_csv(
 
 @app.get("/export/xlsx")
 def export_xlsx(
+    request: Request,
     db: Session = Depends(get_db),
     portal: Optional[str] = None,
     region: Optional[str] = None,
@@ -1616,13 +1800,13 @@ def export_xlsx(
     quick: Optional[str] = None,
     sort: Optional[str] = "score_desc",
     include_expired: Optional[str] = None,
+    profile: Optional[int] = None,
 ):
-    query = _filtered_query(
-        db, portal=portal, region=region, status=status, level=level,
+    query = _export_query(
+        db, request, portal=portal, region=region, status=status, level=level,
         deadline_from=deadline_from, deadline_to=deadline_to, q=q,
-        score_min=_safe_float(score_min), score_max=_safe_float(score_max),
-        quick=quick,
-        include_expired=bool(include_expired),
+        score_min=score_min, score_max=score_max, quick=quick,
+        include_expired=include_expired, profile=profile,
     )
     tenders = _apply_sort(query, sort).all()
     return Response(
@@ -1633,7 +1817,7 @@ def export_xlsx(
 
 
 # --- Admin: User-Verwaltung ------------------------------------------
-ROLES = ["admin", "viewer"]
+ROLES = ["admin", "user"]
 
 
 @app.get("/admin/users", response_class=HTMLResponse)
@@ -1688,7 +1872,7 @@ def admin_user_save(
     username: str = Form(...),
     email: str = Form(""),
     password: str = Form(""),
-    role: str = Form("viewer"),
+    role: str = Form("user"),
     is_active: Optional[str] = Form(None),
     send_invite: Optional[str] = Form(None),
     db: Session = Depends(get_db),
@@ -1697,7 +1881,7 @@ def admin_user_save(
     if not username:
         return RedirectResponse(url="/admin/users?error=Username ist erforderlich.", status_code=303)
     if role not in ROLES:
-        role = "viewer"
+        role = "user"
 
     pid = int(user_id) if user_id and user_id.isdigit() else None
     edited = db.get(User, pid) if pid else None
@@ -1769,7 +1953,9 @@ def admin_user_delete(user_id: int, request: Request, db: Session = Depends(get_
 
 
 # --- Suchprofile -----------------------------------------------------
-@app.get("/profiles", response_class=HTMLResponse)
+# Verwaltungs-Routen liegen unter /admin/profiles/* und sind damit
+# automatisch durch das AuthMiddleware-Admin-Gate geschuetzt.
+@app.get("/admin/profiles", response_class=HTMLResponse)
 def profiles_list(
     request: Request,
     db: Session = Depends(get_db),
@@ -1788,38 +1974,37 @@ def profiles_list(
     )
 
 
-@app.get("/profiles/new", response_class=HTMLResponse)
+def _profile_edit_ctx(db: Session, profile: Optional[SearchProfile], is_new: bool, request: Request):
+    return {
+        "profile": profile,
+        "is_new": is_new,
+        "portals": [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]],
+        "regions": [r[0] for r in db.query(Tender.region).distinct().all() if r[0]],
+        "statuses": STATUS_VALUES,
+        "levels": LEVEL_VALUES,
+        "all_users": db.query(User).order_by(User.username).all(),
+        "assigned_user_ids": {u.id for u in (profile.assigned_users if profile else [])},
+        "keywords_text": "\n".join(profile.keyword_list()) if profile else "",
+        "user": request.session.get("user"),
+    }
+
+
+@app.get("/admin/profiles/new", response_class=HTMLResponse)
 def profile_new(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request, "profile_edit.html",
-        {
-            "profile": None,
-            "is_new": True,
-            "portals": [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]],
-            "regions": [r[0] for r in db.query(Tender.region).distinct().all() if r[0]],
-            "statuses": STATUS_VALUES,
-            "levels": LEVEL_VALUES,
-            "user": request.session.get("user"),
-        },
+        _profile_edit_ctx(db, None, is_new=True, request=request),
     )
 
 
-@app.get("/profiles/{profile_id}/edit", response_class=HTMLResponse)
+@app.get("/admin/profiles/{profile_id}/edit", response_class=HTMLResponse)
 def profile_edit(profile_id: int, request: Request, db: Session = Depends(get_db)):
     profile = db.get(SearchProfile, profile_id)
     if not profile:
         raise HTTPException(404, "Profil nicht gefunden")
     return templates.TemplateResponse(
         request, "profile_edit.html",
-        {
-            "profile": profile,
-            "is_new": False,
-            "portals": [r[0] for r in db.query(Tender.portal).distinct().all() if r[0]],
-            "regions": [r[0] for r in db.query(Tender.region).distinct().all() if r[0]],
-            "statuses": STATUS_VALUES,
-            "levels": LEVEL_VALUES,
-            "user": request.session.get("user"),
-        },
+        _profile_edit_ctx(db, profile, is_new=False, request=request),
     )
 
 
@@ -1832,11 +2017,27 @@ def _to_int(s: str | None) -> int | None:
         return None
 
 
-@app.post("/profiles/save")
+def _parse_keywords_textarea(raw: str) -> list[str]:
+    """Trennt Eingabe an Newline/Komma/Semikolon, dedupliziert, ohne Leerzeichen."""
+    if not raw:
+        return []
+    parts = raw.replace(";", "\n").replace(",", "\n").splitlines()
+    out, seen = [], set()
+    for p in parts:
+        p = p.strip()
+        if p and p.lower() not in seen:
+            seen.add(p.lower())
+            out.append(p)
+    return out
+
+
+@app.post("/admin/profiles/save")
 def profile_save(
+    request: Request,
     profile_id: str = Form(""),
     name: str = Form(...),
     description: str = Form(""),
+    keywords: str = Form(""),
     query: str = Form(""),
     portal: str = Form(""),
     region: str = Form(""),
@@ -1851,15 +2052,14 @@ def profile_save(
 ):
     name = name.strip()
     if not name:
-        return RedirectResponse(url="/profiles?error=Name ist erforderlich.", status_code=303)
+        return RedirectResponse(url="/admin/profiles?error=Name ist erforderlich.", status_code=303)
 
     pid = _to_int(profile_id)
     profile = db.get(SearchProfile, pid) if pid else None
     if not profile:
-        # Name-Eindeutigkeit pruefen (nur fuer neu)
         if db.query(SearchProfile).filter(SearchProfile.name == name).first():
             return RedirectResponse(
-                url=f"/profiles?error=Profil mit Name '{name}' existiert bereits.",
+                url=f"/admin/profiles?error=Profil mit Name '{name}' existiert bereits.",
                 status_code=303,
             )
         profile = SearchProfile(name=name)
@@ -1867,6 +2067,9 @@ def profile_save(
 
     profile.name = name
     profile.description = description.strip() or None
+    kw_list = _parse_keywords_textarea(keywords)
+    import json as _json
+    profile.keywords = _json.dumps(kw_list, ensure_ascii=False) if kw_list else None
     profile.query = query.strip() or None
     profile.portal = portal.strip() or None
     profile.region = region.strip() or None
@@ -1879,25 +2082,51 @@ def profile_save(
     profile.notify = 1 if notify == "on" else 0
 
     db.commit()
-    return RedirectResponse(url=f"/profiles?flash={name} gespeichert.", status_code=303)
+    return RedirectResponse(url=f"/admin/profiles?flash={name} gespeichert.", status_code=303)
 
 
-@app.post("/profiles/{profile_id}/delete")
+@app.post("/admin/profiles/{profile_id}/assign-users")
+def profile_assign_users(
+    profile_id: int,
+    user_ids: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    profile = db.get(SearchProfile, profile_id)
+    if not profile:
+        return RedirectResponse(url="/admin/profiles?error=Profil nicht gefunden", status_code=303)
+    ids = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
+    users = db.query(User).filter(User.id.in_(ids)).all() if ids else []
+    profile.assigned_users = users
+    db.commit()
+    return RedirectResponse(url=f"/admin/profiles?flash={profile.name}: {len(users)} User zugewiesen.", status_code=303)
+
+
+@app.post("/admin/profiles/{profile_id}/delete")
 def profile_delete(profile_id: int, db: Session = Depends(get_db)):
     profile = db.get(SearchProfile, profile_id)
     if not profile:
-        return RedirectResponse(url="/profiles?error=Profil nicht gefunden", status_code=303)
+        return RedirectResponse(url="/admin/profiles?error=Profil nicht gefunden", status_code=303)
     name = profile.name
     db.delete(profile)
     db.commit()
-    return RedirectResponse(url=f"/profiles?flash={name} geloescht.", status_code=303)
+    return RedirectResponse(url=f"/admin/profiles?flash={name} geloescht.", status_code=303)
 
 
 @app.get("/profiles/{profile_id}/apply")
-def profile_apply(profile_id: int, db: Session = Depends(get_db)):
+def profile_apply(profile_id: int, request: Request, db: Session = Depends(get_db)):
+    """Wendet ein Profil an. Restricted-User: nur zugewiesene Profile,
+    Redirect auf /?profile=N (keine Keywords in der URL).
+    Admin: Legacy-Verhalten - voller Query-String."""
     profile = db.get(SearchProfile, profile_id)
     if not profile:
         raise HTTPException(404, "Profil nicht gefunden")
+
+    if is_restricted(request):
+        assigned = _user_assigned_profiles(db, request)
+        if profile not in assigned:
+            raise HTTPException(404, "Profil nicht gefunden")
+        return RedirectResponse(url=f"/?profile={profile.id}", status_code=303)
+
     qs = profile.to_query_string()
     return RedirectResponse(url=f"/?{qs}", status_code=303)
 
@@ -1905,15 +2134,21 @@ def profile_apply(profile_id: int, db: Session = Depends(get_db)):
 # --- JSON-API -------------------------------------------------------
 @app.get("/api/tenders")
 def api_list(
+    request: Request,
     db: Session = Depends(get_db),
     portal: Optional[str] = None,
     region: Optional[str] = None,
     status: Optional[str] = None,
     level: Optional[str] = None,
     q: Optional[str] = None,
+    profile: Optional[int] = None,
     limit: int = Query(200, le=2000),
 ):
-    query = _filtered_query(db, portal=portal, region=region, status=status, level=level, q=q)
+    if is_restricted(request):
+        query = _filtered_query(db, status=status, include_expired=False)
+        query, _, _ = _enforce_restricted(db, request, query, selected_profile_id=profile)
+    else:
+        query = _filtered_query(db, portal=portal, region=region, status=status, level=level, q=q)
     tenders = query.order_by(Tender.relevance_score.desc()).limit(limit).all()
     return [t.to_dict() for t in tenders]
 

@@ -22,7 +22,7 @@
       Speichere häufig genutzte Filter-Kombinationen und wende sie mit einem Klick an.
     </p>
   </div>
-  <a href="/profiles/new" class="btn-primary">+ Neues Profil</a>
+  <a href="/admin/profiles/new" class="btn-primary">+ Neues Profil</a>
 </div>
 
 {% if not profiles %}
@@ -31,7 +31,7 @@
   <p class="text-sm text-zinc-500 mb-4">
     Lege ein Profil an für deine wichtigsten Filter — z.B. „Sachsen Tiefbau", „Hochrelevant Flüssigboden", „Frist diese Woche".
   </p>
-  <a href="/profiles/new" class="btn-primary">+ Erstes Profil erstellen</a>
+  <a href="/admin/profiles/new" class="btn-primary">+ Erstes Profil erstellen</a>
 </div>
 {% else %}
 <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -59,8 +59,8 @@
 
     <div class="flex gap-2 pt-3 border-t border-zinc-100">
       <a href="/profiles/{{ p.id }}/apply" class="btn-primary flex-1 justify-center">Anwenden</a>
-      <a href="/profiles/{{ p.id }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
-      <form method="post" action="/profiles/{{ p.id }}/delete"
+      <a href="/admin/profiles/{{ p.id }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+      <form method="post" action="/admin/profiles/{{ p.id }}/delete"
             onsubmit="return confirm('Profil &quot;{{ p.name }}&quot; löschen?');">
         <button class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Löschen">🗑</button>
       </form>

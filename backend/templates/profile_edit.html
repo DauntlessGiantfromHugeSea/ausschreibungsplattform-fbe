@@ -5,7 +5,7 @@
 <nav class="text-sm text-zinc-500 mb-4">
   <a href="/" class="hover:text-zinc-900">Dashboard</a>
   <span class="mx-1.5">›</span>
-  <a href="/profiles" class="hover:text-zinc-900">Suchprofile</a>
+  <a href="/admin/profiles" class="hover:text-zinc-900">Suchprofile</a>
   <span class="mx-1.5">›</span>
   <span class="text-zinc-700">{{ 'Neu' if is_new else profile.name }}</span>
 </nav>
@@ -14,7 +14,7 @@
   {{ 'Neues Suchprofil anlegen' if is_new else 'Profil bearbeiten' }}
 </h1>
 
-<form method="post" action="/profiles/save" class="space-y-6 max-w-3xl">
+<form method="post" action="/admin/profiles/save" class="space-y-6 max-w-3xl">
   {% if not is_new %}
     <input type="hidden" name="profile_id" value="{{ profile.id }}">
   {% endif %}
@@ -37,11 +37,22 @@
     <h3 class="text-base font-semibold">Filter</h3>
 
     <div>
-      <label class="block text-xs font-medium text-zinc-600 mb-1">Volltextsuche</label>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Keywords (OR-Match)</label>
+      <textarea class="input min-h-[100px] font-mono text-sm" name="keywords"
+                placeholder="Ein Begriff pro Zeile - z.B.&#10;Fernwärme&#10;Nahwärme&#10;Wärmenetz">{{ keywords_text }}</textarea>
+      <div class="text-xs text-zinc-400 mt-1">
+        Ein Begriff pro Zeile (oder Komma-getrennt). Ein Tender matched, wenn IRGENDEINER der Begriffe
+        in Titel, Beschreibung, Auftraggeber oder Trefferbegriffen vorkommt.
+        <strong>Restricted-User sehen diese Liste nicht</strong> – nur Profil-Name + Beschreibung.
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Zusätzliche Volltextsuche (optional)</label>
       <input class="input" type="text" name="query" maxlength="500"
              value="{{ profile.query if profile else '' }}"
-             placeholder="z.B. Verfüllung, Flüssigboden, Tiefbau">
-      <div class="text-xs text-zinc-400 mt-1">Sucht in Titel, Beschreibung, Auftraggeber, Treffer-Begriffe.</div>
+             placeholder="Wird AND-kombiniert mit den Keywords">
+      <div class="text-xs text-zinc-400 mt-1">Wenn Keywords leer sind, gilt dieses Feld als einziger Begriff.</div>
     </div>
 
     <div class="grid grid-cols-2 gap-4">
@@ -141,8 +152,42 @@
 
   <div class="flex gap-2">
     <button type="submit" class="btn-primary">Speichern</button>
-    <a href="/profiles" class="btn-ghost">Abbrechen</a>
+    <a href="/admin/profiles" class="btn-ghost">Abbrechen</a>
   </div>
 </form>
+
+{% if not is_new %}
+<div class="card p-6 max-w-3xl mt-6">
+  <h3 class="text-base font-semibold mb-3">Zugewiesene User</h3>
+  <p class="text-xs text-zinc-500 mb-4">
+    Diese User sehen ausschliesslich Ausschreibungen, die zu diesem Profil (oder ihren anderen zugewiesenen Profilen) passen.
+    Admins sind hier irrelevant – sie sehen ohnehin alles.
+  </p>
+  <form method="post" action="/admin/profiles/{{ profile.id }}/assign-users" id="assign-users-form">
+    <input type="hidden" name="user_ids" id="assign-users-csv" value="">
+    <div class="grid grid-cols-2 gap-2 mb-4 max-h-64 overflow-auto border border-zinc-200 rounded-lg p-3">
+      {% for u in all_users %}
+        {% if u.role != 'admin' %}
+          <label class="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" class="assign-user-cb" value="{{ u.id }}"
+                   {% if u.id in assigned_user_ids %}checked{% endif %}
+                   class="h-4 w-4 rounded border-zinc-300 text-brand-700">
+            <span>{{ u.username }} <span class="text-xs text-zinc-400">{{ u.email or '' }}</span></span>
+          </label>
+        {% endif %}
+      {% else %}
+        <div class="col-span-2 text-sm text-zinc-500">Keine Non-Admin-User vorhanden.</div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn-primary">Zuweisung speichern</button>
+  </form>
+</div>
+<script>
+  document.getElementById('assign-users-form')?.addEventListener('submit', (e) => {
+    const ids = [...document.querySelectorAll('.assign-user-cb:checked')].map(cb => cb.value);
+    document.getElementById('assign-users-csv').value = ids.join(',');
+  });
+</script>
+{% endif %}
 
 {% endblock %}

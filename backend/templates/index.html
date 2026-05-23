@@ -79,7 +79,31 @@
   </div>
   <span class="text-xs text-brand-700">Details ansehen →</span>
 </a>
-<!-- Quick-Filter Chips -->
+{% if restricted %}
+<!-- Profil-Tabs fuer eingeschraenkte User: nur Name + Beschreibung, keine Keywords -->
+<div class="mb-6">
+  {% if not profiles %}
+    <div class="card p-6 text-center">
+      <div class="text-zinc-700 font-medium mb-1">Noch kein Suchprofil zugewiesen</div>
+      <div class="text-sm text-zinc-500">Ein Administrator muss dir mindestens ein Profil zuweisen, damit du Ausschreibungen siehst.</div>
+    </div>
+  {% else %}
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="/" class="chip {% if not selected_profile %}chip-active{% endif %}">Alle meine Profile</a>
+      {% for p in profiles %}
+        <a href="/?profile={{ p.id }}" class="chip {% if selected_profile and selected_profile.id == p.id %}chip-active{% endif %}"
+           {% if p.description %}title="{{ p.description }}"{% endif %}>
+          {{ p.name }}
+        </a>
+      {% endfor %}
+    </div>
+    {% if selected_profile and selected_profile.description %}
+      <p class="text-sm text-zinc-500 mt-2">{{ selected_profile.description }}</p>
+    {% endif %}
+  {% endif %}
+</div>
+{% else %}
+<!-- Quick-Filter Chips (Admin) -->
 <div class="flex flex-wrap items-center gap-2 mb-4">
   {% set q = filters.quick %}
   {% set ie = filters.include_expired %}
@@ -117,12 +141,12 @@
           </a>
         {% endfor %}
         <div class="border-t border-zinc-100 mt-1 pt-1">
-          <a href="/profiles" class="block px-3 py-2 text-xs text-zinc-500 hover:bg-zinc-50">Alle Profile verwalten</a>
+          <a href="/admin/profiles" class="block px-3 py-2 text-xs text-zinc-500 hover:bg-zinc-50">Alle Profile verwalten</a>
         </div>
       {% else %}
         <div class="px-3 py-3 text-sm text-zinc-500">Keine Profile angelegt.</div>
       {% endif %}
-      <a href="/profiles/new" class="block px-3 py-2 text-sm text-brand-700 hover:bg-zinc-50 border-t border-zinc-100">+ Neues Profil</a>
+      <a href="/admin/profiles/new" class="block px-3 py-2 text-sm text-brand-700 hover:bg-zinc-50 border-t border-zinc-100">+ Neues Profil</a>
     </div>
   </div>
 </div>
@@ -224,9 +248,10 @@
     </div>
   </form>
 </details>
+{% endif %}
 
 
-{% if filters.score_min and filters.score_min|string != '0' %}
+{% if not restricted and filters.score_min and filters.score_min|string != '0' %}
 <div class="mb-4 flex items-center gap-3">
   <a href="/?score_min=0" class="text-sm text-zinc-500 hover:text-zinc-800 dark:text-zinc-400">↻ Alle Treffer (auch niedrige Scores) anzeigen</a>
 </div>

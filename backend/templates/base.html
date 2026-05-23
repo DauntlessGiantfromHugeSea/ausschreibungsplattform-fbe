@@ -174,6 +174,8 @@
 <body class="h-full text-zinc-900 dark:text-zinc-100">
 
 {% set _path = request.url.path if request else '' %}
+{% set _role = (request.session.get('role') if request else 'user') or 'user' %}
+{% set _is_admin = _role == 'admin' %}
 {% set _is_status = _path in ['/admin/status', '/admin/probe', '/admin/probe-all'] %}
 {% set _is_settings = _path.startswith('/admin/settings') or _path.startswith('/admin/portals') or _path.startswith('/admin/search-terms') or _path.startswith('/admin/users') %}
 {% set _is_help = _path.startswith('/hilfe') %}
@@ -191,10 +193,13 @@
       </a>
       <nav class="hidden md:flex items-center gap-1 text-sm">
         <a href="/" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path == '/' %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Dashboard</a>
-        <a href="/profiles" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path.startswith('/profiles') %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Profile</a>
+        {% if _is_admin %}
+        <a href="/admin/profiles" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path.startswith('/admin/profiles') %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Profile</a>
+        {% endif %}
       </nav>
     </div>
     <div class="flex items-center gap-2">
+      {% if _is_admin %}
       <form action="/run-search" method="post" id="run-search-form">
         <button type="submit" class="btn-primary" id="run-search-btn">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
@@ -203,8 +208,10 @@
           <span id="run-search-label">Suche starten</span>
         </button>
       </form>
+      {% endif %}
 
-      {# Ampel: Status / Probe #}
+      {% if _is_admin %}
+      {# Ampel: Status / Probe (nur Admin) #}
       <div class="relative" id="status-menu">
         <button type="button"
                 onclick="document.getElementById('status-dropdown').classList.toggle('hidden')"
@@ -233,7 +240,10 @@
         </div>
       </div>
 
-      {# Zahnrad: Einstellungen #}
+      {% endif %}
+
+      {% if _is_admin %}
+      {# Zahnrad: Einstellungen (nur Admin) #}
       <a href="/admin/settings"
          title="Einstellungen"
          class="btn-icon h-9 w-9 {% if _is_settings %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
@@ -243,7 +253,10 @@
         </svg>
       </a>
 
-      {# Sparkles: KI-Assistent #}
+      {% endif %}
+
+      {% if _is_admin %}
+      {# Sparkles: KI-Assistent (nur Admin) #}
       <a href="/assistant"
          title="KI-Assistent"
          class="btn-icon h-9 w-9 {% if _path.startswith('/assistant') %}!bg-brand-50 !text-brand-700 !border-brand-200{% endif %}">
@@ -252,6 +265,8 @@
           <path d="M18 14l.9 2.4L21.3 17l-2.4.9L18 20l-.9-2.1L14.7 17l2.4-.6z"/>
         </svg>
       </a>
+
+      {% endif %}
 
       {# Fragezeichen: Hilfe / Dokumentation #}
       <a href="/hilfe"

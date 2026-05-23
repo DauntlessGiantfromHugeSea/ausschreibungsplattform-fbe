@@ -8,8 +8,10 @@ Strategie:
      sollte das Env-Passwort weggenommen oder geaendert werden.
 
 Rollen:
-  admin   - alles (Portale, Suchbegriffe, User-Verwaltung)
-  viewer  - nur Lesen (kein /admin/* erlaubt)
+  admin   - alles (Portale, Suchbegriffe, User-Verwaltung, freie Suche)
+  user    - sieht ausschliesslich Tender, die zu einem der ihm
+            zugewiesenen SearchProfiles passen. Keine freie Suche,
+            keine Keywords sichtbar.
 """
 from __future__ import annotations
 
@@ -91,11 +93,16 @@ def is_authenticated(request: Request) -> bool:
 
 
 def current_role(request: Request) -> str:
-    return request.session.get("role") or "viewer"
+    return request.session.get("role") or "user"
 
 
 def require_admin(request: Request) -> bool:
     return current_role(request) == "admin"
+
+
+def is_restricted(request: Request) -> bool:
+    """True fuer eingeloggte Non-Admins (Rolle 'user')."""
+    return is_authenticated(request) and current_role(request) != "admin"
 
 
 # ---------------------------------------------------------------------------

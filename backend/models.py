@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
     Float,
     Index,
@@ -20,6 +21,16 @@ from sqlalchemy.orm import DeclarativeBase, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+profile_users = Table(
+    "profile_users",
+    Base.metadata,
+    Column("profile_id", Integer, ForeignKey("search_profiles.id", ondelete="CASCADE"),
+           primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"),
+           primary_key=True),
+)
 
 
 class TenderStatus(str, Enum):
@@ -116,11 +127,23 @@ class User(Base):
     notify_min_score = Column(Integer, default=60, nullable=False)
     notify_last_sent_at = Column(DateTime, nullable=True)
 
+    assigned_profiles = relationship(
+        "SearchProfile",
+        secondary=profile_users,
+        back_populates="assigned_users",
+        lazy="selectin",
+    )
+
 
 class SearchProfile(Base):
     """Gespeicherter Filter, der per Klick aufs Dashboard angewendet wird.
 
     Felder mappen 1:1 auf die Filter-Parameter der Index-Route.
+
+    keywords (JSON-encoded list) liefert die OR-Match-Begriffe fuer
+    restricted-User: ein Tender matched, wenn IRGENDEINER der Begriffe
+    in Titel oder Beschreibung vorkommt. Wird AND-kombiniert mit den
+    uebrigen Filter-Feldern (portal, region, score_min ...).
     """
     __tablename__ = "search_profiles"
 
@@ -129,7 +152,8 @@ class SearchProfile(Base):
     description = Column(String(500), nullable=True)
 
     # Filterwerte (alle optional)
-    query = Column(String(500), nullable=True)        # Volltextsuche
+    keywords = Column(Text, nullable=True)            # JSON-Liste von OR-Begriffen
+    query = Column(String(500), nullable=True)        # Volltextsuche (Legacy/Admin)
     portal = Column(String(200), nullable=True)
     region = Column(String(100), nullable=True)
     status = Column(String(30), nullable=True)
@@ -165,6 +189,28 @@ class SearchProfile(Base):
             params["deadline_to"] = (today + _td(days=self.deadline_days)).isoformat()
         if self.sort: params["sort"] = self.sort
         return urlencode(params)
+
+    def keyword_list(self) -> list[str]:
+        """Parst das JSON-Feld 'keywords' als Liste. Toleriert leere/alte Werte."""
+        import json
+        raw = (self.keywords or "").strip()
+        if not raw:
+            return []
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                return [str(x).strip() for x in data if str(x).strip()]
+        except (ValueError, TypeError):
+            pass
+        # Fallback: Komma/Newline-getrennte Strings akzeptieren
+        return [t.strip() for t in raw.replace("\n", ",").split(",") if t.strip()]
+
+    assigned_users = relationship(
+        "User",
+        secondary="profile_users",
+        back_populates="assigned_profiles",
+        lazy="selectin",
+    )
 
 
 class Comment(Base):

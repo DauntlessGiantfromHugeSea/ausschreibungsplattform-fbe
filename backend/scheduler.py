@@ -129,6 +129,8 @@ def send_due_user_digests() -> dict:
                 username=u.username,
                 days=days,
                 min_score=u.notify_min_score or 60,
+                user_id=u.id,
+                role=u.role,
             )
             if not ok:
                 stats["failed"] += 1

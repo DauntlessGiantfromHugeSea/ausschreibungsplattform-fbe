@@ -555,10 +555,14 @@ def send_user_digest(
     username: str,
     days: int,
     min_score: int,
+    user_id: int | None = None,
+    role: str | None = None,
 ) -> tuple[bool, str | None, int]:
     """Persoenliche Zusammenfassung: Treffer der letzten N Tage ueber Score-
     Schwelle des Users. Liefert (ok, error_message, anzahl).
 
+    Fuer role='user' (Restricted): zusaetzlich auf die zugewiesenen Profile
+    des Users einschraenken. Ohne zugewiesene Profile -> nichts versenden.
     Wenn keine Treffer da sind, wird nichts versendet (ok=True, count=0).
     """
     if not to_email:
@@ -571,11 +575,22 @@ def send_user_digest(
 
     db = SessionLocal()
     try:
-        items = (
+        base = (
             db.query(Tender)
             .filter(Tender.created_at >= since)
             .filter(Tender.relevance_score >= min_score)
             .filter(or_(Tender.deadline.is_(None), Tender.deadline >= now))
+        )
+        if role and role != "admin" and user_id:
+            from .models import User
+            from .api import _profile_filter_expr  # lokal, um Zyklus zu vermeiden
+            u = db.get(User, user_id)
+            profs = list(u.assigned_profiles) if u else []
+            if not profs:
+                return True, None, 0
+            base = base.filter(or_(*[_profile_filter_expr(p) for p in profs]))
+        items = (
+            base
             .order_by(Tender.relevance_score.desc(), Tender.created_at.desc())
             .limit(100)
             .all()

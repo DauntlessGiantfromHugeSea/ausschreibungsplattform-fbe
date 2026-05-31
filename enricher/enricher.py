@@ -114,20 +114,18 @@ def run_pending_login_tests() -> int:
                 page = ctx.new_page()
                 page.set_default_timeout(PAGE_TIMEOUT_MS)
                 try:
-                    ok = _perform_login(page, conf, timeout_ms=PAGE_TIMEOUT_MS)
+                    ok, reason = _perform_login(page, conf, timeout_ms=PAGE_TIMEOUT_MS)
                 except Exception as exc:
                     log.warning("Login-Test %s Exception: %s", host, exc)
                     report_login_result(lid, False, f"exception: {exc}")
                     continue
                 if ok:
-                    log.info("Login-Test %s OK", host)
-                    report_login_result(lid, True)
-                    # Domain als 'eingeloggt' fuer diese Container-Lifetime markieren,
-                    # auch wenn der Test in einem separaten Browser lief.
+                    log.info("Login-Test %s OK (%s)", host, reason)
+                    report_login_result(lid, True, reason)
                     _LOGGED_IN.add(host)
                 else:
-                    log.warning("Login-Test %s FAIL", host)
-                    report_login_result(lid, False, "Selektoren stimmen nicht oder Login abgelehnt")
+                    log.warning("Login-Test %s FAIL: %s", host, reason)
+                    report_login_result(lid, False, reason)
             finally:
                 browser.close()
     return len(items)
@@ -431,14 +429,14 @@ def deep_crawl(pw, url: str) -> list[tuple[str, str, str]]:
         login_key, login_conf = _find_login_cfg(url, portal_logins)
         if login_conf and login_key not in _LOGGED_IN:
             log.info("Login-Versuch fuer Domain %s", login_key)
-            ok = _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS)
+            ok, reason = _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS)
             if ok:
                 _LOGGED_IN.add(login_key)
-                log.info("Login erfolgreich fuer %s", login_key)
-                report_login_result(login_conf.get("id"), True)
+                log.info("Login erfolgreich fuer %s (%s)", login_key, reason)
+                report_login_result(login_conf.get("id"), True, reason)
             else:
-                log.warning("Login fehlgeschlagen fuer %s - fahre ohne Session fort.", login_key)
-                report_login_result(login_conf.get("id"), False, "selector or credentials")
+                log.warning("Login fehlgeschlagen fuer %s: %s", login_key, reason)
+                report_login_result(login_conf.get("id"), False, reason)
 
         # 1) Hauptseite
         page.goto(url, wait_until="networkidle")

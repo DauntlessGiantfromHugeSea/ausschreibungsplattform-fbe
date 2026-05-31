@@ -75,26 +75,23 @@ def find_config_for(url: str, cfg: dict[str, dict]) -> tuple[str | None, dict | 
     return None, None
 
 
-def perform_login(page, conf: dict, timeout_ms: int = 20000) -> bool:
-    """Fuehrt den Login-Flow aus. Liefert True bei (vermutlichem) Erfolg.
+def perform_login(page, conf: dict, timeout_ms: int = 20000) -> tuple[bool, str]:
+    """Fuehrt den Login-Flow aus. Liefert (ok, reason).
 
-    Erwartet im conf:
-      - login_url (required)
-      - username_selector, password_selector, submit_selector (required)
-      - username, password (required)
-      - success_selector (optional - wird nach Submit erwartet)
+    reason ist ein Klartext-Fehlergrund bei Misserfolg, oder bei Erfolg
+    eine kurze Info (z.B. die Zielseite nach Login).
     """
     req = ("login_url", "username_selector", "password_selector",
            "submit_selector", "username", "password")
     for k in req:
         if not conf.get(k):
-            log.warning("Login-Config unvollstaendig - %s fehlt.", k)
-            return False
+            return False, f"Config unvollstaendig: '{k}' fehlt"
+
     try:
         page.goto(conf["login_url"], wait_until="networkidle", timeout=timeout_ms)
     except Exception as exc:
-        log.warning("Login-Page konnte nicht geladen werden: %s", exc)
-        return False
+        return False, f"login_url '{conf['login_url']}' nicht ladbar: {exc}"
+
     # Cookie-Banner best-effort wegklicken
     try:
         page.evaluate("""
@@ -103,23 +100,51 @@ def perform_login(page, conf: dict, timeout_ms: int = 20000) -> bool:
         """)
     except Exception:
         pass
+
+    # Username eintippen
     try:
         page.fill(conf["username_selector"], conf["username"], timeout=5000)
-        page.fill(conf["password_selector"], conf["password"], timeout=5000)
-        page.click(conf["submit_selector"], timeout=5000)
-        try:
-            page.wait_for_load_state("networkidle", timeout=timeout_ms)
-        except Exception:
-            pass
     except Exception as exc:
-        log.warning("Login-Eingabe fehlgeschlagen: %s", exc)
-        return False
+        return False, f"username_selector '{conf['username_selector']}' nicht gefunden ({type(exc).__name__})"
+    # Passwort eintippen
+    try:
+        page.fill(conf["password_selector"], conf["password"], timeout=5000)
+    except Exception as exc:
+        return False, f"password_selector '{conf['password_selector']}' nicht gefunden ({type(exc).__name__})"
+    # Submit
+    try:
+        page.click(conf["submit_selector"], timeout=5000)
+    except Exception as exc:
+        return False, f"submit_selector '{conf['submit_selector']}' nicht klickbar ({type(exc).__name__})"
+
+    try:
+        page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    except Exception:
+        pass
+
+    final_url = ""
+    try:
+        final_url = page.url
+    except Exception:
+        pass
+
+    # Heuristik: wenn die finale URL noch immer die login_url ist, ist der Login
+    # vermutlich abgelehnt (falsche Credentials, weil Keycloak/etc. zurueck zum
+    # Formular leitet).
+    if final_url and conf["login_url"] in final_url:
+        # Vorsicht: bei Keycloak ist die login_url eine SSO-URL, Erfolg
+        # bedeutet Weiterleitung WEG von dort. Wenn wir noch dort sind -> Fehler.
+        return False, f"Nach Submit noch auf Login-Seite ({final_url[:120]}) - Credentials/CSRF/Captcha?"
+
     succ = conf.get("success_selector")
     if succ:
         try:
             page.wait_for_selector(succ, timeout=5000)
-            return True
+            return True, f"ok (success_selector gefunden auf {final_url[:80]})"
         except Exception:
-            log.warning("Login-Erfolgs-Selektor '%s' nicht gefunden - Login-Flow gescheitert?", succ)
-            return False
-    return True
+            return False, (
+                f"success_selector '{succ}' nicht gefunden auf {final_url[:120]} "
+                "- Login ggf. erfolgreich, aber Selektor stimmt nicht. "
+                "Tipp: success_selector leer lassen."
+            )
+    return True, f"ok (kein success_selector, finale URL: {final_url[:80]})"

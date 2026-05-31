@@ -479,6 +479,32 @@ portals:
     - https://www.bi-medien.de/feeds/ausschreibungen.xml
     filter_by_terms: true
     max_items_per_feed: 200
+- name: bund.de RSS-Feed (Ausschreibungen)
+  enabled: true
+  scraper: rss_generic
+  base_url: https://www.service.bund.de
+  strategy: rss
+  notes: 'Offizieller RSS-Feed des Bundesverwaltungsamts mit allen
+    aktuellen Ausschreibungen.
+
+    Liefert pro Eintrag Titel + Link + Beschreibung + pubDate. Der
+    Feed ist nicht vorgefiltert auf Bauleistungen - wir filtern
+    client-seitig auf die FBE-Cluster-Begriffe. Detailseiten werden
+    NICHT vom Scraper geladen - der KI-Enricher uebernimmt das
+    automatisch (Chromium-Render + LLM-Extraktion) sobald die Tender
+    in der DB sind.
+
+    Laeuft parallel zum vorhandenen ''bund.de Service-Portal''-Scraper
+    (HTML-Suchseite). Doppelte URLs werden ueber den fingerprint-Index
+    in der DB nicht zweimal angelegt.
+
+    '
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    feed_urls:
+    - https://www.service.bund.de/Content/Globals/Functions/RSSFeed/RSSGenerator_Ausschreibungen.xml
+    filter_by_terms: true
+    max_items_per_feed: 300
 - name: TED RSS-Feed (DE)
   enabled: false
   scraper: rss_generic

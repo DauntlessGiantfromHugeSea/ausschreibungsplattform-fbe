@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}KI-Anreicherung – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">KI-Anreicherung</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="mb-6">
+  <h1 class="text-2xl font-semibold tracking-tight">KI-Anreicherungen</h1>
+  <p class="text-sm text-zinc-500 mt-1">
+    Markdown-Dateien aus dem Enricher-Container (<code>{{ enrich_dir }}</code>).
+    Du kannst sie ansehen, bearbeiten, loeschen oder neu generieren lassen.
+  </p>
+</div>
+
+{% if not items %}
+<div class="card p-10 text-center">
+  <div class="text-zinc-700 font-medium mb-1">Noch keine Anreicherungen vorhanden</div>
+  <p class="text-sm text-zinc-500 mb-4">
+    Der Enricher-Container schreibt hier .md-Dateien rein, sobald er
+    laeuft. Setup-Anleitung: <code>enricher/README.md</code>.
+  </p>
+</div>
+{% else %}
+<div class="card overflow-hidden">
+  <table class="dashboard">
+    <thead>
+      <tr>
+        <th>Tender</th>
+        <th>Portal</th>
+        <th>Groesse</th>
+        <th>Zuletzt geaendert</th>
+        <th class="text-right pr-4">Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>
+          <a href="/tender/{{ it.tender_id }}" target="_blank" class="font-medium text-brand-700 hover:underline">
+            #{{ it.tender_id }} {{ it.title|truncate(80) }}
+          </a>
+        </td>
+        <td class="text-xs text-zinc-500">{{ it.portal or '—' }}</td>
+        <td class="text-xs text-zinc-500">{{ it.size_kb }} KB</td>
+        <td class="text-xs text-zinc-500">{{ it.modified.strftime('%d.%m.%Y %H:%M') }}</td>
+        <td class="text-right whitespace-nowrap">
+          <a href="/admin/enrichment/{{ it.tender_id }}" class="btn-icon" title="Ansehen/Bearbeiten">✎</a>
+          <form method="post" action="/admin/enrichment/{{ it.tender_id }}/regenerate" class="inline"
+                onsubmit="return confirm('Neue KI-Anreicherung beim naechsten Enricher-Poll fuer Tender {{ it.tender_id }}?');">
+            <button class="btn-icon" title="Neu generieren">↻</button>
+          </form>
+          <form method="post" action="/admin/enrichment/{{ it.tender_id }}/delete" class="inline"
+                onsubmit="return confirm('Datei tender-{{ it.tender_id }}.md loeschen?');">
+            <button class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Loeschen">🗑</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card p-5 mt-6 text-sm">
+  <h3 class="font-semibold mb-2">Was passiert hier?</h3>
+  <ul class="list-disc pl-5 text-zinc-600 space-y-1">
+    <li>Der <strong>fbe-enricher</strong>-Docker pollt alle 10 min, holt nicht-angereicherte Tender, rendert deren Detail-URL mit Chromium und schickt das Ergebnis durch OpenAI.</li>
+    <li>Pro Tender entsteht eine <strong>.md-Datei</strong> mit strukturierten Feldern (Auftraggeber, Frist, Leistungsbeschreibung, FBE-Bewertung).</li>
+    <li>Wenn du die Datei <strong>bearbeitest</strong>, wird auch die Vorschau-Spalte <code>tender.ai_analysis</code> in der DB aktualisiert.</li>
+    <li><strong>Plattform-User</strong> haben keinen Zugriff auf die KI selbst — sie sehen nur die fertigen Anreicherungen in der Detail-Ansicht.</li>
+  </ul>
+</div>
+
+{% endblock %}

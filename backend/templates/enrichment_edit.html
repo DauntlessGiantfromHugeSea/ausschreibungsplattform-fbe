@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Anreicherung Tender #{{ tender_id }} bearbeiten{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/admin/enrichment" class="hover:text-zinc-900">KI-Anreicherung</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Tender #{{ tender_id }}</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="mb-6 flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">
+      KI-Anreicherung Tender #{{ tender_id }}
+    </h1>
+    {% if tender %}
+      <p class="text-sm text-zinc-500 mt-1">
+        <a href="/tender/{{ tender_id }}" target="_blank" class="text-brand-700 hover:underline">{{ tender.title }}</a>
+        {% if tender.portal %} · {{ tender.portal }}{% endif %}
+      </p>
+    {% endif %}
+    <p class="text-xs text-zinc-400 mt-1"><code>{{ path }}</code></p>
+  </div>
+  <div class="flex gap-2">
+    <form method="post" action="/admin/enrichment/{{ tender_id }}/regenerate"
+          onsubmit="return confirm('Neue KI-Anreicherung beim naechsten Enricher-Poll?');">
+      <button class="btn-ghost">↻ Neu generieren</button>
+    </form>
+    <form method="post" action="/admin/enrichment/{{ tender_id }}/delete"
+          onsubmit="return confirm('Datei loeschen?');">
+      <button class="btn-ghost hover:!text-rose-600">🗑 Loeschen</button>
+    </form>
+  </div>
+</div>
+
+<form method="post" action="/admin/enrichment/{{ tender_id }}/save" class="space-y-4">
+  <div class="card p-4">
+    <label class="block text-xs font-medium text-zinc-600 mb-2">Markdown-Inhalt</label>
+    <textarea name="content" class="input font-mono text-sm min-h-[60vh]" spellcheck="false">{{ content }}</textarea>
+    <div class="text-xs text-zinc-400 mt-2">
+      Diese Datei wird in der Tender-Detail-Ansicht eingeblendet. Wenn du sie aenderst,
+      wird auch die Vorschau-Spalte <code>tender.ai_analysis</code> in der DB synchronisiert.
+    </div>
+  </div>
+  <div class="flex gap-2">
+    <button type="submit" class="btn-primary">Speichern</button>
+    <a href="/admin/enrichment" class="btn-ghost">Abbrechen</a>
+  </div>
+</form>
+
+{% endblock %}

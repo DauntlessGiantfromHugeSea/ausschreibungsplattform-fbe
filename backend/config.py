@@ -88,6 +88,15 @@ class Settings(BaseSettings):
     # Aufruf kostet nichts.
     ai_auto_analyze: bool = True
 
+    # ---- Enricher (separater Docker-Container) -----------------------
+    # Shared-Secret fuer /api/internal/* - der Enricher schickt diesen
+    # Token im Header X-Internal-Token. Wenn leer, sind die Endpoints
+    # deaktiviert (= kein Enricher angebunden).
+    enricher_token: str = ""
+    # Verzeichnis fuer Markdown-Anreicherungen. Wird vom Enricher
+    # geschrieben und von fbe-tender beim Detail-View gelesen.
+    enrich_dir: str = "/srv/fbe-enrich"
+
     @property
     def regions_list(self) -> List[str]:
         return [r.strip() for r in self.target_regions.split(",") if r.strip()]

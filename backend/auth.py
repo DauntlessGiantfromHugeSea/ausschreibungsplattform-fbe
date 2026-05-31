@@ -36,6 +36,8 @@ log = logging.getLogger(__name__)
 PUBLIC_PATHS = {"/login", "/forgot-password", "/set-password", "/reset-password", "/logout", "/api/health"}
 PUBLIC_PREFIXES = ("/static", "/.well-known")
 ADMIN_PREFIXES = ("/admin/",)
+# Internal-API: nicht via Session, sondern via Shared-Token authentifiziert.
+INTERNAL_PREFIX = "/api/internal/"
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +121,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
     ):
         path = request.url.path
         is_public = path in PUBLIC_PATHS or any(path.startswith(p) for p in PUBLIC_PREFIXES)
+
+        # Internal-API: Token-Header statt Session. Token muss konfiguriert
+        # UND korrekt mitgeschickt sein - sonst 401.
+        if path.startswith(INTERNAL_PREFIX):
+            token = request.headers.get("X-Internal-Token", "")
+            expected = settings.enricher_token
+            if expected and secrets.compare_digest(token, expected):
+                return await call_next(request)
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
 
         if not is_public and not is_authenticated(request):
             if path.startswith("/api/"):

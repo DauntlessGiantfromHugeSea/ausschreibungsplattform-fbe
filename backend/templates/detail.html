@@ -191,6 +191,17 @@
       {% endif %}
     </div>
 
+    {% if enrich_markdown %}
+    <!-- KI-Anreicherung (aus dem Enricher-Container) -->
+    <div class="card p-6" id="enrichment">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-semibold">KI-Anreicherung</h3>
+        <span class="text-xs text-zinc-500" title="{{ enrich_path }}">Quelle: Enricher-Bot</span>
+      </div>
+      <pre class="text-sm text-zinc-700 bg-zinc-50 border border-zinc-200 rounded p-4 whitespace-pre-wrap font-sans leading-relaxed">{{ enrich_markdown }}</pre>
+    </div>
+    {% endif %}
+
     <!-- Kommentare -->
     <div class="card p-6" id="comments">
       <div class="flex items-center justify-between mb-4">

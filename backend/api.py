@@ -724,6 +724,20 @@ def detail(
     )
     mail_ready = bool(settings.smtp_host and settings.smtp_from)
     from . import ai as ai_mod
+
+    # Anreicherungs-Markdown aus dem Shared-Volume des Enricher-Containers.
+    # Wenn die Datei existiert -> in der Detail-Seite anzeigen.
+    enrich_markdown = None
+    enrich_path = None
+    try:
+        from pathlib import Path as _Path
+        p = _Path(settings.enrich_dir) / f"tender-{tender_id}.md"
+        if p.is_file():
+            enrich_markdown = p.read_text(encoding="utf-8", errors="replace")
+            enrich_path = str(p)
+    except Exception:  # pragma: no cover
+        pass
+
     return templates.TemplateResponse(
         request,
         "detail.html",
@@ -737,6 +751,8 @@ def detail(
             "mail_ready": mail_ready,
             "ai_configured": ai_mod.is_configured(),
             "ai_auto": settings.ai_auto_analyze,
+            "enrich_markdown": enrich_markdown,
+            "enrich_path": enrich_path,
             "flash": flash,
             "error": error,
         },
@@ -2461,3 +2477,213 @@ def me_notifications_test(
 def hilfe(request: Request):
     return templates.TemplateResponse(request, "hilfe.html", {"user": _session_user(request)})
 
+
+
+# --- Internal-API fuer den Enricher-Container -------------------------
+# Auth: X-Internal-Token via Middleware. Kein Session-Login noetig.
+
+@app.get("/api/internal/tenders-to-enrich")
+def internal_tenders_to_enrich(
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Liefert eine Liste von Tendern, die noch nicht angereichert wurden.
+
+    Kriterium: tender.ai_analysis ist NULL/leer. Sortiert nach Score
+    absteigend, damit der Enricher zuerst die relevanten Treffer angeht.
+    """
+    from sqlalchemy import or_ as _or, func as _func
+    items = (
+        db.query(Tender)
+        .filter(_or(Tender.ai_analysis.is_(None), _func.length(Tender.ai_analysis) == 0))
+        .filter(Tender.url.isnot(None))
+        .order_by(Tender.relevance_score.desc(), Tender.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"id": t.id, "url": t.url, "title": t.title,
+         "portal": t.portal, "score": t.relevance_score}
+        for t in items
+    ]
+
+
+@app.post("/api/internal/tenders/{tender_id}/enriched")
+def internal_tender_enriched(
+    tender_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Speichert das Anreicherungs-Ergebnis des Enrichers.
+
+    Erwartet JSON-Body:
+      { "markdown": "<voller Markdown-Text>",
+        "summary":  "<optional, Kurztext fuer ai_analysis-Spalte>",
+        "ok": true | false,
+        "error": "<optional Fehlertext>" }
+
+    Wenn ok=false, wird nur ai_analysis = 'enrich-error: <error>' gesetzt,
+    damit das gleiche Tender nicht endlos im Poll-Backlog auftaucht.
+    """
+    t = db.get(Tender, tender_id)
+    if not t:
+        return JSONResponse({"error": "tender not found"}, status_code=404)
+
+    ok = bool(payload.get("ok", True))
+    markdown = (payload.get("markdown") or "").strip()
+    summary = (payload.get("summary") or "").strip()
+    error = (payload.get("error") or "").strip()
+
+    if not ok:
+        t.ai_analysis = f"enrich-error: {error[:300] or 'unknown'}"
+        t.ai_analyzed_at = datetime.utcnow()
+        db.commit()
+        return {"ok": False, "stored": "error-marker"}
+
+    if summary:
+        t.ai_analysis = summary[:8000]
+    elif markdown:
+        # Wenn kein dezidierter summary mitkommt, nimm die ersten 8000 Zeichen
+        # des Markdown - so dass das alte AI-Analysis-Feld eine Vorschau hat.
+        t.ai_analysis = markdown[:8000]
+    t.ai_analyzed_at = datetime.utcnow()
+
+    # Markdown ins Shared-Volume schreiben (Datei pro Tender).
+    written_path = None
+    if markdown:
+        try:
+            from pathlib import Path as _Path
+            d = _Path(settings.enrich_dir)
+            d.mkdir(parents=True, exist_ok=True)
+            f = d / f"tender-{tender_id}.md"
+            f.write_text(markdown, encoding="utf-8")
+            written_path = str(f)
+        except Exception as exc:  # pragma: no cover
+            log.warning("Konnte Enrich-Markdown nicht schreiben: %s", exc)
+
+    db.commit()
+    return {"ok": True, "stored": "db+file" if written_path else "db", "path": written_path}
+
+
+# --- Admin: KI-Anreicherungs-Dateien browsen + bearbeiten -------------
+def _enrich_path_for(tender_id: int):
+    """Liefert (Path, exists). Verhindert Path-Traversal durch int-only ID."""
+    from pathlib import Path as _Path
+    return _Path(settings.enrich_dir) / f"tender-{int(tender_id)}.md"
+
+
+@app.get("/admin/enrichment", response_class=HTMLResponse)
+def admin_enrichment_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Listet alle .md-Dateien im Enrich-Verzeichnis + verknuepft sie mit
+    dem Tender. Admin-only (Middleware)."""
+    from pathlib import Path as _Path
+    base = _Path(settings.enrich_dir)
+    items = []
+    if base.is_dir():
+        for f in sorted(base.glob("tender-*.md")):
+            try:
+                tid = int(f.stem.split("-", 1)[1])
+            except (ValueError, IndexError):
+                continue
+            t = db.get(Tender, tid)
+            st = f.stat()
+            items.append({
+                "tender_id": tid,
+                "title": t.title if t else "(geloescht)",
+                "url": t.url if t else None,
+                "portal": t.portal if t else None,
+                "size_kb": round(st.st_size / 1024, 1),
+                "modified": datetime.utcfromtimestamp(st.st_mtime),
+            })
+    # Sortierung: zuletzt geschrieben zuerst
+    items.sort(key=lambda x: x["modified"], reverse=True)
+    return templates.TemplateResponse(
+        request, "enrichment_list.html",
+        {
+            "items": items,
+            "enrich_dir": settings.enrich_dir,
+            "user": request.session.get("user"),
+            "flash": flash, "error": error,
+        },
+    )
+
+
+@app.get("/admin/enrichment/{tender_id}", response_class=HTMLResponse)
+def admin_enrichment_edit(
+    tender_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    p = _enrich_path_for(tender_id)
+    if not p.is_file():
+        return RedirectResponse(
+            url="/admin/enrichment?error=Datei nicht gefunden", status_code=303)
+    t = db.get(Tender, tender_id)
+    return templates.TemplateResponse(
+        request, "enrichment_edit.html",
+        {
+            "tender_id": tender_id,
+            "tender": t,
+            "content": p.read_text(encoding="utf-8", errors="replace"),
+            "path": str(p),
+            "user": request.session.get("user"),
+            "flash": flash, "error": error,
+        },
+    )
+
+
+@app.post("/admin/enrichment/{tender_id}/save")
+def admin_enrichment_save(
+    tender_id: int,
+    content: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    p = _enrich_path_for(tender_id)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        # Plus: die ai_analysis-Spalte in der DB synchron halten (Vorschau).
+        t = db.get(Tender, tender_id)
+        if t:
+            t.ai_analysis = content[:8000]
+            t.ai_analyzed_at = datetime.utcnow()
+            db.commit()
+    except Exception as exc:  # pragma: no cover
+        return RedirectResponse(
+            url=f"/admin/enrichment/{tender_id}?error=Speichern fehlgeschlagen: {exc}",
+            status_code=303)
+    return RedirectResponse(
+        url=f"/admin/enrichment/{tender_id}?flash=Gespeichert.", status_code=303)
+
+
+@app.post("/admin/enrichment/{tender_id}/delete")
+def admin_enrichment_delete(tender_id: int):
+    p = _enrich_path_for(tender_id)
+    if p.is_file():
+        try:
+            p.unlink()
+        except Exception:  # pragma: no cover
+            pass
+    return RedirectResponse(url="/admin/enrichment?flash=Geloescht.", status_code=303)
+
+
+@app.post("/admin/enrichment/{tender_id}/regenerate")
+def admin_enrichment_regenerate(tender_id: int, db: Session = Depends(get_db)):
+    """Markiert das Tender so, dass der Enricher es beim naechsten Poll neu
+    bearbeitet. Setzt einfach ai_analysis zurueck."""
+    t = db.get(Tender, tender_id)
+    if not t:
+        return RedirectResponse(url="/admin/enrichment?error=Tender nicht gefunden", status_code=303)
+    t.ai_analysis = None
+    t.ai_analyzed_at = None
+    db.commit()
+    return RedirectResponse(
+        url="/admin/enrichment?flash=Tender %s wird beim naechsten Enricher-Poll neu bearbeitet." % tender_id,
+        status_code=303)

@@ -64,6 +64,36 @@ docker build -t fbe-enricher .
 docker restart fbe-enricher
 ```
 
+## Wissensbasis (KI-Kontext)
+
+Alle Markdown-Dateien aus `/srv/fbe-knowledge/` (vom Admin gepflegt unter
+`/admin/notes`) werden bei jedem Anreicherungs-Lauf als System-Kontext
+an das LLM gegeben. So kann man dem Bot mitgeben, was fuer FBE wichtig
+ist (z.B. „Fluessigboden ist ZFSV", „nur Bauleistungen, keine
+Planungsleistungen", typische Wettbewerber, etc.).
+
+Der Container muss dazu nichts mounten — der Plattform-Endpoint
+`/api/internal/knowledge` liefert die Dateien direkt aus.
+
+## Portal-Logins (Optional)
+
+Wenn ein Portal Login-pflichtig ist, kann der Enricher sich
+einmalig pro Container-Lifetime einloggen. Cookies bleiben im
+Browser-Context.
+
+Konfiguration via ENV `PORTAL_LOGINS_JSON` (JSON-String in der .env)
+oder `PORTAL_LOGINS_FILE` (Pfad zu einer JSON-Datei).
+
+Siehe `enricher/.env.example` fuer das Format.
+
+Praktisches Vorgehen pro Portal:
+1. Browser-DevTools auf der Login-Seite oeffnen, Username/Password-Feld
+   inspizieren, deren CSS-Selektor notieren
+2. Submit-Button-Selektor notieren
+3. Einen Selektor finden, der NUR im eingeloggten Zustand existiert
+   (z.B. `a[href*='logout']`) — das wird der `success_selector`
+4. Konfig in die .env eintragen, Container neustarten
+
 ## Backfill
 
 Wenn du alle bestehenden Tender neu anreichern willst (z.B. nach Prompt-

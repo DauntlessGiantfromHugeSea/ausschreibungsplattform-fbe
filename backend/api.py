@@ -2687,3 +2687,128 @@ def admin_enrichment_regenerate(tender_id: int, db: Session = Depends(get_db)):
     return RedirectResponse(
         url="/admin/enrichment?flash=Tender %s wird beim naechsten Enricher-Poll neu bearbeitet." % tender_id,
         status_code=303)
+
+
+# --- Notes-Editor (Obsidian-artige MD-Verwaltung) -------------------
+from . import notes as _notes
+
+
+@app.get("/admin/notes", response_class=HTMLResponse)
+def admin_notes(
+    request: Request,
+    root: Optional[str] = None,
+    file: Optional[str] = None,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    roots = _notes.get_roots()
+    root_key = root if root in roots else "knowledge"
+    files_per_root = {k: _notes.list_files(k) for k in roots}
+    current_content = ""
+    current_name = ""
+    current_html = ""
+    if file:
+        content = _notes.read_file(root_key, file)
+        if content is not None:
+            current_content = content
+            current_name = file
+            current_html = _notes.render_markdown(content)
+    return templates.TemplateResponse(
+        request, "notes.html",
+        {
+            "roots": roots,
+            "root_key": root_key,
+            "files_per_root": files_per_root,
+            "current_name": current_name,
+            "current_content": current_content,
+            "current_html": current_html,
+            "user": request.session.get("user"),
+            "flash": flash, "error": error,
+        },
+    )
+
+
+@app.post("/admin/notes/save")
+def admin_notes_save(
+    root: str = Form(...),
+    name: str = Form(...),
+    content: str = Form(...),
+):
+    name = name.strip()
+    if not name.endswith(".md"):
+        name = name + ".md"
+    ok = _notes.write_file(root, name, content)
+    if not ok:
+        return RedirectResponse(
+            url=f"/admin/notes?root={root}&error=Speichern fehlgeschlagen (ungueltiger Dateiname/Pfad?)",
+            status_code=303)
+    return RedirectResponse(
+        url=f"/admin/notes?root={root}&file={name}&flash=Gespeichert.",
+        status_code=303)
+
+
+@app.post("/admin/notes/new")
+def admin_notes_new(
+    root: str = Form(...),
+    name: str = Form(...),
+):
+    name = name.strip()
+    if not name:
+        return RedirectResponse(url=f"/admin/notes?root={root}&error=Name fehlt", status_code=303)
+    if not name.endswith(".md"):
+        name = name + ".md"
+    # Default-Inhalt mit Frontmatter-Stub
+    default = f"---\ntitle: {name[:-3]}\ntags: []\n---\n\n# {name[:-3]}\n\n"
+    if _notes.read_file(root, name) is not None:
+        return RedirectResponse(
+            url=f"/admin/notes?root={root}&file={name}&error=Existiert bereits",
+            status_code=303)
+    if not _notes.write_file(root, name, default):
+        return RedirectResponse(
+            url=f"/admin/notes?root={root}&error=Anlegen fehlgeschlagen", status_code=303)
+    return RedirectResponse(
+        url=f"/admin/notes?root={root}&file={name}&flash=Angelegt.", status_code=303)
+
+
+@app.post("/admin/notes/delete")
+def admin_notes_delete(root: str = Form(...), name: str = Form(...)):
+    _notes.delete_file(root, name)
+    return RedirectResponse(url=f"/admin/notes?root={root}&flash=Geloescht.", status_code=303)
+
+
+@app.get("/admin/notes/search")
+def admin_notes_search(q: str = Query("", max_length=200)):
+    return _notes.search(q)
+
+
+# --- Reset Error-Marker (kein sqlite3-CLI noetig) ---------------------
+@app.post("/admin/enrichment/reset-errors")
+def admin_enrichment_reset_errors(db: Session = Depends(get_db)):
+    from sqlalchemy import text as _text
+    n = db.execute(
+        _text("UPDATE tenders SET ai_analysis = NULL, ai_analyzed_at = NULL "
+              "WHERE ai_analysis LIKE 'enrich-error:%'")
+    ).rowcount or 0
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/enrichment?flash={n} Error-Marker zurueckgesetzt - werden beim naechsten Poll neu probiert.",
+        status_code=303)
+
+
+# --- Wissensbasis fuer den Enricher (vom enricher abgerufen) ---------
+@app.get("/api/internal/knowledge")
+def internal_knowledge():
+    """Liefert alle Markdown-Dateien aus knowledge_dir als JSON-Liste.
+
+    Vom Enricher genutzt, um den LLM-System-Prompt mit Kontext anzureichern.
+    """
+    out = []
+    from pathlib import Path as _Path
+    d = _Path(settings.knowledge_dir)
+    if d.is_dir():
+        for f in sorted(d.glob("*.md")):
+            try:
+                out.append({"name": f.name, "content": f.read_text(encoding="utf-8", errors="replace")})
+            except OSError:
+                continue
+    return out

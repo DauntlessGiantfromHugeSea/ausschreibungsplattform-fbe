@@ -39,6 +39,15 @@ try:
 except ImportError:  # pragma: no cover
     pdf_extract_text = None
 
+from portal_logins import load_config as _load_login_cfg, find_config_for as _find_login_cfg, perform_login as _perform_login
+
+PORTAL_LOGINS = _load_login_cfg()
+if PORTAL_LOGINS:
+    log = logging.getLogger("enricher")
+    log.info("Portal-Logins konfiguriert fuer: %s", ", ".join(PORTAL_LOGINS.keys()))
+# In-Memory-Set: pro Container-Lifetime, fuer welche Domains schon eingeloggt wurde.
+_LOGGED_IN: set[str] = set()
+
 
 load_dotenv()
 
@@ -149,6 +158,30 @@ def fetch_tenders_to_enrich() -> list[dict]:
     except Exception as exc:
         log.warning("Konnte Tender-Liste nicht holen: %s", exc)
         return []
+
+
+def fetch_knowledge() -> str:
+    """Holt alle Knowledge-MD-Dateien von fbe-tender und kombiniert sie."""
+    try:
+        r = http.get("/api/internal/knowledge")
+        r.raise_for_status()
+        files = r.json()
+    except Exception as exc:
+        log.info("Knowledge-Endpoint nicht erreichbar: %s", exc)
+        return ""
+    if not files:
+        return ""
+    parts = []
+    for f in files:
+        name = f.get("name", "")
+        content = (f.get("content") or "").strip()
+        if not content:
+            continue
+        parts.append(f"### Notiz: {name}\n{content}")
+    if not parts:
+        return ""
+    return ("\n\n--- WISSENSBASIS (vom Admin gepflegte Notizen, beachte diese bei der Bewertung) ---\n\n"
+            + "\n\n".join(parts))
 
 
 def _kill_overlays(page) -> None:
@@ -307,6 +340,18 @@ def deep_crawl(pw, url: str) -> list[tuple[str, str, str]]:
         page = ctx.new_page()
         page.set_default_timeout(PAGE_TIMEOUT_MS)
 
+        # 0) Falls fuer diesen Host ein Login konfiguriert ist und wir hier
+        #    noch nicht eingeloggt sind: einmal einloggen, Cookies bleiben
+        #    im ctx fuer alle folgenden Seiten dieser Domain.
+        login_key, login_conf = _find_login_cfg(url, PORTAL_LOGINS)
+        if login_conf and login_key not in _LOGGED_IN:
+            log.info("Login-Versuch fuer Domain %s", login_key)
+            if _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS):
+                _LOGGED_IN.add(login_key)
+                log.info("Login erfolgreich fuer %s", login_key)
+            else:
+                log.warning("Login fehlgeschlagen fuer %s - fahre ohne Session fort.", login_key)
+
         # 1) Hauptseite
         page.goto(url, wait_until="networkidle")
         _kill_overlays(page)
@@ -362,11 +407,14 @@ def combine_sources(sources: list[tuple[str, str, str]]) -> str:
     return "".join(chunks).strip()
 
 
-def llm_extract(tender: dict, text: str) -> tuple[str, str]:
+def llm_extract(tender: dict, text: str, knowledge: str = "") -> tuple[str, str]:
     """Liefert (markdown, summary).
 
     summary = die ersten ~300 Zeichen der Markdown-Antwort fuer das
     ai_analysis-Feld in der DB.
+
+    `knowledge` ist optionaler vom Admin gepflegter Zusatzkontext aus
+    /admin/notes (Wissensbasis), der dem System-Prompt vorangestellt wird.
     """
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     user_msg = (
@@ -379,6 +427,8 @@ def llm_extract(tender: dict, text: str) -> tuple[str, str]:
     system_msg = PROMPT.replace("{title}", tender.get("title", "(ohne Titel)")) \
                        .replace("{url}", tender.get("url", "")) \
                        .replace("{now}", now)
+    if knowledge:
+        system_msg = system_msg + "\n\n" + knowledge
     resp = oa.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
@@ -405,7 +455,7 @@ def post_result(tender_id: int, markdown: str, summary: str, ok: bool, error: st
         log.warning("Result-POST fuer %s gescheitert: %s", tender_id, exc)
 
 
-def process_one(pw, tender: dict) -> None:
+def process_one(pw, tender: dict, knowledge: str = "") -> None:
     tid = tender["id"]
     url = tender.get("url")
     if not url:
@@ -431,7 +481,7 @@ def process_one(pw, tender: dict) -> None:
         return
 
     try:
-        markdown, summary = llm_extract(tender, text)
+        markdown, summary = llm_extract(tender, text, knowledge=knowledge)
     except Exception as exc:
         log.warning("[%s] LLM-Fehler: %s", tid, exc)
         post_result(tid, "", "", ok=False, error=f"llm: {exc}")
@@ -456,10 +506,13 @@ def run_once() -> int:
         log.info("Keine offenen Tender zum Anreichern.")
         return 0
     log.info("%d Tender zum Anreichern.", len(items))
+    knowledge = fetch_knowledge()
+    if knowledge:
+        log.info("Wissensbasis geladen: %d Zeichen Kontext.", len(knowledge))
     with sync_playwright() as pw:
         for t in items:
             try:
-                process_one(pw, t)
+                process_one(pw, t, knowledge=knowledge)
             except Exception as exc:
                 log.exception("Unerwarteter Fehler bei tender %s: %s", t.get("id"), exc)
     return len(items)

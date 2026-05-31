@@ -16,12 +16,18 @@
   <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
 {% endif %}
 
-<div class="mb-6">
-  <h1 class="text-2xl font-semibold tracking-tight">KI-Anreicherungen</h1>
-  <p class="text-sm text-zinc-500 mt-1">
-    Markdown-Dateien aus dem Enricher-Container (<code>{{ enrich_dir }}</code>).
-    Du kannst sie ansehen, bearbeiten, loeschen oder neu generieren lassen.
-  </p>
+<div class="mb-6 flex flex-wrap items-start justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">KI-Anreicherungen</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      Markdown-Dateien aus dem Enricher-Container (<code>{{ enrich_dir }}</code>).
+      Du kannst sie ansehen, bearbeiten, loeschen oder neu generieren lassen.
+    </p>
+  </div>
+  <form method="post" action="/admin/enrichment/reset-errors"
+        onsubmit="return confirm('Alle Tender mit Enrich-Fehler-Markierung zuruecksetzen, damit sie neu probiert werden?');">
+    <button class="btn-ghost text-sm">↻ Error-Marker zuruecksetzen</button>
+  </form>
 </div>
 
 {% if not items %}

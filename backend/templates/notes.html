@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Notizen & Wissen – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Notizen & Wissen</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="mb-4">
+  <h1 class="text-2xl font-semibold tracking-tight">Notizen & KI-Wissen</h1>
+  <p class="text-sm text-zinc-500 mt-1">
+    Markdown-Editor fuer eigene Notizen und die KI-Wissensbasis. Alles im Ordner
+    <strong>Wissensbasis</strong> wird beim naechsten Anreicherungs-Lauf automatisch in den LLM-Kontext eingespielt.
+  </p>
+</div>
+
+<div class="grid grid-cols-12 gap-4">
+  <!-- Sidebar -->
+  <aside class="col-span-12 md:col-span-4 lg:col-span-3">
+    <div class="card p-3 mb-3">
+      <input id="note-search" type="search" placeholder="In Notizen suchen…" class="input text-sm" autocomplete="off">
+      <div id="search-results" class="mt-2 text-sm hidden max-h-64 overflow-auto border border-zinc-200 rounded-lg"></div>
+    </div>
+
+    {% for slug, info in roots.items() %}
+    {% set label, path, writable = info %}
+    <div class="card mb-3 overflow-hidden">
+      <div class="px-3 py-2 bg-zinc-50 border-b border-zinc-200 flex items-center justify-between">
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-zinc-600">{{ label }}</div>
+          <div class="text-[10px] text-zinc-400 font-mono">{{ path }}</div>
+        </div>
+        {% if writable %}
+        <details class="relative">
+          <summary class="cursor-pointer text-xs text-brand-700 hover:underline list-none">+ Neu</summary>
+          <div class="absolute right-0 mt-1 w-56 bg-white border border-zinc-200 rounded-lg shadow-lg p-2 z-10">
+            <form method="post" action="/admin/notes/new" class="flex gap-1">
+              <input type="hidden" name="root" value="{{ slug }}">
+              <input name="name" placeholder="dateiname" class="input text-xs flex-1" required>
+              <button class="btn-primary text-xs">+</button>
+            </form>
+          </div>
+        </details>
+        {% endif %}
+      </div>
+      <ul class="divide-y divide-zinc-100">
+        {% if files_per_root[slug] %}
+          {% for f in files_per_root[slug] %}
+            <li class="{% if slug == root_key and f.name == current_name %}bg-brand-50{% endif %}">
+              <a href="/admin/notes?root={{ slug }}&file={{ f.name }}"
+                 class="block px-3 py-2 hover:bg-zinc-50">
+                <div class="text-sm font-medium text-zinc-900 truncate">{{ f.name }}</div>
+                {% if f.preview %}
+                <div class="text-xs text-zinc-500 truncate">{{ f.preview }}</div>
+                {% endif %}
+                <div class="text-[10px] text-zinc-400 mt-0.5">{{ f.size_kb }} KB · {{ f.modified_iso[:16].replace('T',' ') }}</div>
+              </a>
+            </li>
+          {% endfor %}
+        {% else %}
+          <li class="px-3 py-3 text-xs text-zinc-500">Noch keine Dateien.</li>
+        {% endif %}
+      </ul>
+    </div>
+    {% endfor %}
+  </aside>
+
+  <!-- Editor + Preview -->
+  <main class="col-span-12 md:col-span-8 lg:col-span-9">
+    {% if not current_name %}
+    <div class="card p-10 text-center">
+      <div class="text-zinc-700 font-medium mb-1">Keine Datei ausgewaehlt</div>
+      <p class="text-sm text-zinc-500">
+        Waehle links eine Datei oder lege ueber „+ Neu" eine neue an.
+        Tipp: Notizen in <strong>Wissensbasis</strong> fliessen in jeden Enricher-Lauf ein.
+      </p>
+    </div>
+    {% else %}
+    <div class="card overflow-hidden">
+      <div class="px-4 py-2 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between gap-2 flex-wrap">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-semibold text-zinc-800">{{ current_name }}</span>
+          <span class="text-xs text-zinc-400">in {{ roots[root_key][0] }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="inline-flex rounded-md border border-zinc-200 overflow-hidden text-xs">
+            <button type="button" data-mode="edit" class="mode-btn px-3 py-1 bg-white">✎ Bearbeiten</button>
+            <button type="button" data-mode="split" class="mode-btn px-3 py-1 bg-white border-l">⇆ Split</button>
+            <button type="button" data-mode="preview" class="mode-btn px-3 py-1 bg-white border-l">👁 Vorschau</button>
+          </div>
+          <form method="post" action="/admin/notes/delete" class="inline"
+                onsubmit="return confirm('{{ current_name }} loeschen?');">
+            <input type="hidden" name="root" value="{{ root_key }}">
+            <input type="hidden" name="name" value="{{ current_name }}">
+            <button class="btn-icon hover:!text-rose-600 hover:!border-rose-300 text-xs" title="Loeschen">🗑</button>
+          </form>
+        </div>
+      </div>
+
+      <form method="post" action="/admin/notes/save" id="note-form">
+        <input type="hidden" name="root" value="{{ root_key }}">
+        <input type="hidden" name="name" value="{{ current_name }}">
+        <div id="editor-grid" class="grid grid-cols-2 gap-0">
+          <div id="pane-edit" class="border-r border-zinc-200">
+            <textarea name="content" id="content-area"
+                      class="w-full p-4 font-mono text-sm focus:outline-none resize-none"
+                      style="min-height: 70vh;"
+                      spellcheck="false">{{ current_content }}</textarea>
+          </div>
+          <div id="pane-preview" class="p-6 prose prose-sm max-w-none bg-zinc-50 overflow-auto"
+               style="max-height: 80vh;">
+            {{ current_html|safe }}
+          </div>
+        </div>
+        <div class="px-4 py-3 border-t border-zinc-200 bg-zinc-50 flex items-center gap-2">
+          <button type="submit" class="btn-primary">Speichern</button>
+          <span class="text-xs text-zinc-500 ml-auto">Tipp: Strg+S speichert</span>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<script>
+  (function(){
+    const grid = document.getElementById('editor-grid');
+    const paneEdit = document.getElementById('pane-edit');
+    const panePreview = document.getElementById('pane-preview');
+    const form = document.getElementById('note-form');
+
+    function setMode(mode) {
+      if (!grid) return;
+      if (mode === 'edit') {
+        paneEdit.style.display = '';
+        panePreview.style.display = 'none';
+        grid.style.gridTemplateColumns = '1fr';
+      } else if (mode === 'preview') {
+        paneEdit.style.display = 'none';
+        panePreview.style.display = '';
+        grid.style.gridTemplateColumns = '1fr';
+      } else {
+        paneEdit.style.display = '';
+        panePreview.style.display = '';
+        grid.style.gridTemplateColumns = '1fr 1fr';
+      }
+      document.querySelectorAll('.mode-btn').forEach(b => {
+        b.classList.toggle('!bg-brand-100', b.dataset.mode === mode);
+        b.classList.toggle('!text-brand-800', b.dataset.mode === mode);
+      });
+      localStorage.setItem('notes-mode', mode);
+    }
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.addEventListener('click', () => setMode(b.dataset.mode));
+    });
+    setMode(localStorage.getItem('notes-mode') || 'split');
+
+    // Strg+S = speichern
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && form) {
+        e.preventDefault();
+        form.submit();
+      }
+    });
+
+    // Suche
+    const search = document.getElementById('note-search');
+    const results = document.getElementById('search-results');
+    let searchTimer = null;
+    search?.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = search.value.trim();
+      if (!q) { results.classList.add('hidden'); results.innerHTML = ''; return; }
+      searchTimer = setTimeout(async () => {
+        const r = await fetch('/admin/notes/search?q=' + encodeURIComponent(q));
+        const j = await r.json();
+        if (!j.length) { results.innerHTML = '<div class="px-3 py-2 text-zinc-500">Keine Treffer</div>'; }
+        else {
+          results.innerHTML = j.map(h =>
+            '<a href="/admin/notes?root=' + h.root_key + '&file=' + encodeURIComponent(h.name) +
+            '" class="block px-3 py-2 hover:bg-zinc-50 border-b border-zinc-100">' +
+            '<div class="text-xs text-zinc-400">' + h.root_label + '</div>' +
+            '<div class="text-sm font-medium">' + h.name + '</div>' +
+            '<div class="text-xs text-zinc-500 truncate">' + h.snippet + '</div>' +
+            '</a>').join('');
+        }
+        results.classList.remove('hidden');
+      }, 200);
+    });
+  })();
+</script>
+
+{% endblock %}

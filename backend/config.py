@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     # Verzeichnis fuer Markdown-Anreicherungen. Wird vom Enricher
     # geschrieben und von fbe-tender beim Detail-View gelesen.
     enrich_dir: str = "/srv/fbe-enrich"
+    # Verzeichnis fuer redaktionelle Notizen + KI-Wissensbasis.
+    # Alles aus diesem Ordner kann der Admin im Notes-Editor bearbeiten,
+    # und alle Dateien werden dem Enricher als zusaetzlicher Kontext
+    # an das LLM uebergeben.
+    knowledge_dir: str = "/srv/fbe-knowledge"
 
     @property
     def regions_list(self) -> List[str]:

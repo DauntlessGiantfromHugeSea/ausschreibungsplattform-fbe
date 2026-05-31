@@ -9,6 +9,7 @@ Strategie:
 
 Rollen:
   admin   - alles (Portale, Suchbegriffe, User-Verwaltung, freie Suche)
+  viewer  - sieht alle Tender + freie Suche, aber kein /admin/*
   user    - sieht ausschliesslich Tender, die zu einem der ihm
             zugewiesenen SearchProfiles passen. Keine freie Suche,
             keine Keywords sichtbar.
@@ -101,8 +102,12 @@ def require_admin(request: Request) -> bool:
 
 
 def is_restricted(request: Request) -> bool:
-    """True fuer eingeloggte Non-Admins (Rolle 'user')."""
-    return is_authenticated(request) and current_role(request) != "admin"
+    """True NUR fuer Rolle 'user' (profilgebunden).
+
+    'viewer' und 'admin' sind nicht restricted - viewer darf alle Tender
+    sehen und frei suchen, hat nur keinen Admin-Bereich.
+    """
+    return is_authenticated(request) and current_role(request) == "user"
 
 
 # ---------------------------------------------------------------------------

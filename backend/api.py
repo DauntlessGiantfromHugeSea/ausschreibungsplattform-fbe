@@ -1817,7 +1817,7 @@ def export_xlsx(
 
 
 # --- Admin: User-Verwaltung ------------------------------------------
-ROLES = ["admin", "user"]
+ROLES = ["admin", "viewer", "user"]
 
 
 @app.get("/admin/users", response_class=HTMLResponse)

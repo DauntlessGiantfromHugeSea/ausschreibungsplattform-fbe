@@ -581,7 +581,9 @@ def send_user_digest(
             .filter(Tender.relevance_score >= min_score)
             .filter(or_(Tender.deadline.is_(None), Tender.deadline >= now))
         )
-        if role and role != "admin" and user_id:
+        # Nur Rolle 'user' (restricted) wird profil-gefiltert.
+        # 'viewer' und 'admin' bekommen den Digest ueber alle Tender.
+        if role == "user" and user_id:
             from .models import User
             from .api import _profile_filter_expr  # lokal, um Zyklus zu vermeiden
             u = db.get(User, user_id)

@@ -20,7 +20,7 @@
   <div>
     <h1 class="text-2xl font-semibold tracking-tight">Benutzer verwalten</h1>
     <p class="text-sm text-zinc-500 mt-1">
-      {{ users|length }} Konten · Rollen: <strong>admin</strong> (volle Rechte) · <strong>viewer</strong> (nur Lesen).
+      {{ users|length }} Konten · Rollen: <strong>admin</strong> (alles) · <strong>user</strong> (nur zugewiesene Suchprofile sichtbar).
     </p>
   </div>
   <a href="/admin/users/new" class="btn-primary">+ Neuer Benutzer</a>
@@ -43,7 +43,7 @@
         <th>Status</th>
         <th>Username</th>
         <th>Rolle</th>
-        <th>Erstellt</th>
+        <th>Zugewiesene Profile</th>
         <th>Letzter Login</th>
         <th class="text-right pr-4">Aktion</th>
       </tr>
@@ -68,10 +68,20 @@
           {% if u.role == 'admin' %}
             <span class="pill bg-rose-100 text-rose-800">admin</span>
           {% else %}
-            <span class="pill bg-zinc-100 text-zinc-700">viewer</span>
+            <span class="pill bg-zinc-100 text-zinc-700">{{ u.role }}</span>
           {% endif %}
         </td>
-        <td class="text-xs text-zinc-500">{{ u.created_at.strftime('%d.%m.%Y') if u.created_at else '—' }}</td>
+        <td class="text-xs">
+          {% if u.role == 'admin' %}
+            <span class="text-zinc-400">— sieht alles —</span>
+          {% elif u.assigned_profiles %}
+            {% for p in u.assigned_profiles %}
+              <a href="/admin/profiles/{{ p.id }}/edit" class="pill bg-emerald-50 text-emerald-800 mr-1">{{ p.name }}</a>
+            {% endfor %}
+          {% else %}
+            <span class="pill bg-amber-100 text-amber-800">⚠ keine</span>
+          {% endif %}
+        </td>
         <td class="text-xs text-zinc-500">
           {% if u.last_login_at %}{{ u.last_login_at.strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}
         </td>

@@ -25,7 +25,7 @@
   <a href="/admin/profiles/new" class="btn-primary">+ Neues Profil</a>
 </div>
 
-{% if not profiles %}
+{% if not profile_info %}
 <div class="card p-10 text-center">
   <div class="text-zinc-700 font-medium mb-1">Noch keine Suchprofile</div>
   <p class="text-sm text-zinc-500 mb-4">
@@ -35,7 +35,8 @@
 </div>
 {% else %}
 <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-  {% for p in profiles %}
+  {% for pi in profile_info %}
+  {% set p = pi.profile %}
   <div class="card p-5 flex flex-col">
     <div class="flex items-start justify-between mb-2">
       <h3 class="font-semibold text-zinc-900">{{ p.name }}</h3>
@@ -45,8 +46,29 @@
       <p class="text-sm text-zinc-500 mb-3 line-clamp-2">{{ p.description }}</p>
     {% endif %}
 
+    {# Status-Indikatoren auf einen Blick #}
+    <div class="flex flex-wrap gap-2 mb-3">
+      <span class="pill {% if pi.keywords|length %}bg-emerald-100 text-emerald-800{% else %}bg-rose-100 text-rose-800{% endif %}">
+        {{ pi.keywords|length }} Keyword{{ '' if pi.keywords|length == 1 else 's' }}
+      </span>
+      <span class="pill {% if pi.match_count > 0 %}bg-emerald-100 text-emerald-800{% elif pi.match_count == 0 %}bg-rose-100 text-rose-800{% else %}bg-zinc-100 text-zinc-700{% endif %}">
+        {{ pi.match_count if pi.match_count >= 0 else '?' }} Treffer
+      </span>
+      <span class="pill {% if pi.user_count %}bg-emerald-100 text-emerald-800{% else %}bg-amber-100 text-amber-800{% endif %}"
+            title="{{ pi.user_names|join(', ') if pi.user_names else 'Niemandem zugewiesen' }}">
+        {{ pi.user_count }} User
+      </span>
+    </div>
+
+    {% if pi.keywords %}
+      <div class="text-xs text-zinc-500 mb-3">
+        <span class="text-zinc-400">Keywords:</span>
+        {% for k in pi.keywords %}<code class="bg-zinc-100 border border-zinc-200 rounded px-1 mr-1">{{ k }}</code>{% endfor %}
+      </div>
+    {% endif %}
+
     <ul class="text-xs text-zinc-600 space-y-1 mb-4 flex-1">
-      {% if p.query %}<li><span class="text-zinc-400">Suche:</span> <code>{{ p.query }}</code></li>{% endif %}
+      {% if p.query %}<li><span class="text-zinc-400">Zusatz-Query:</span> <code>{{ p.query }}</code></li>{% endif %}
       {% if p.portal %}<li><span class="text-zinc-400">Portal:</span> {{ p.portal }}</li>{% endif %}
       {% if p.region %}<li><span class="text-zinc-400">Region:</span> {{ p.region }}</li>{% endif %}
       {% if p.level %}<li><span class="text-zinc-400">Relevanz:</span> {{ p.level }}</li>{% endif %}
@@ -56,6 +78,17 @@
       {% endif %}
       {% if p.deadline_days %}<li><span class="text-zinc-400">Frist ≤</span> {{ p.deadline_days }} Tage</li>{% endif %}
     </ul>
+
+    {% if pi.match_count == 0 %}
+      <div class="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1 mb-3">
+        ⚠ 0 Treffer in der DB — Keywords pruefen (Umlaute? Schreibweise?).
+      </div>
+    {% endif %}
+    {% if pi.user_count == 0 %}
+      <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-3">
+        ⚠ Niemandem zugewiesen — kein restricted-User sieht dieses Profil.
+      </div>
+    {% endif %}
 
     <div class="flex gap-2 pt-3 border-t border-zinc-100">
       <a href="/profiles/{{ p.id }}/apply" class="btn-primary flex-1 justify-center">Anwenden</a>

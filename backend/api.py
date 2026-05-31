@@ -1990,10 +1990,25 @@ def profiles_list(
     error: Optional[str] = None,
 ):
     items = db.query(SearchProfile).order_by(SearchProfile.name).all()
+    # Pro Profil: Treffer-Count und User-Count vorberechnen, damit der Admin
+    # auf einen Blick sieht, ob Keywords/Zuweisungen greifen.
+    profile_info = []
+    for p in items:
+        try:
+            match_count = db.query(Tender).filter(_profile_filter_expr(p)).count()
+        except Exception:  # pragma: no cover - defensiv
+            match_count = -1
+        profile_info.append({
+            "profile": p,
+            "keywords": p.keyword_list(),
+            "match_count": match_count,
+            "user_count": len(p.assigned_users),
+            "user_names": [u.username for u in p.assigned_users],
+        })
     return templates.TemplateResponse(
         request, "profiles.html",
         {
-            "profiles": items,
+            "profile_info": profile_info,
             "user": request.session.get("user"),
             "flash": flash,
             "error": error,

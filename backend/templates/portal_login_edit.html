@@ -22,10 +22,32 @@
 
   <div class="card p-6 space-y-4">
     <h3 class="text-base font-semibold">Portal</h3>
+
+    {% if is_new and available_portals %}
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Verbundene Plattform vorausfüllen</label>
+      <select id="portal-picker" class="input">
+        <option value="">— manuell eintragen —</option>
+        {% for p in available_portals %}
+          <option value="{{ loop.index0 }}"
+                  data-name="{{ p.name }}"
+                  data-host="{{ p.host }}"
+                  data-base="{{ p.base_url }}"
+                  data-login="{{ p.login_url_guess }}">
+            {{ p.name }} ({{ p.host }}){% if not p.enabled %} – deaktiviert{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="text-xs text-zinc-400 mt-1">
+        Übernimmt Host, Login-URL (Schätzung) und Anzeige-Name aus <code>config/portals.yaml</code>. Felder können danach noch angepasst werden.
+      </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block text-xs font-medium text-zinc-600 mb-1">Host (Domain) *</label>
-        <input class="input" type="text" name="host" required maxlength="200"
+        <input class="input" type="text" name="host" id="f-host" required maxlength="200"
                value="{{ item.host if item else '' }}"
                placeholder="evergabe.de"
                {% if not is_new %}readonly{% endif %}>
@@ -36,16 +58,19 @@
       </div>
       <div>
         <label class="block text-xs font-medium text-zinc-600 mb-1">Anzeige-Name (optional)</label>
-        <input class="input" type="text" name="label" maxlength="200"
+        <input class="input" type="text" name="label" id="f-label" maxlength="200"
                value="{{ item.label if item and item.label else '' }}"
                placeholder="evergabe.de (Cosinex)">
       </div>
     </div>
     <div>
       <label class="block text-xs font-medium text-zinc-600 mb-1">Login-URL *</label>
-      <input class="input" type="url" name="login_url" required maxlength="500"
+      <input class="input" type="url" name="login_url" id="f-login-url" required maxlength="500"
              value="{{ item.login_url if item else '' }}"
              placeholder="https://www.evergabe.de/login">
+      <div class="text-xs text-zinc-400 mt-1">
+        Falls aus der Vorausfüllung übernommen: bitte einmal prüfen — wir raten standardmäßig <code>&lt;base&gt;/login</code>.
+      </div>
     </div>
   </div>
 
@@ -152,6 +177,21 @@
     const btn = document.getElementById('pw-toggle');
     if (f.type === 'password') { f.type = 'text'; btn.textContent = 'verbergen'; }
     else { f.type = 'password'; btn.textContent = 'anzeigen'; }
+  });
+
+  // Auto-Fill aus dem Plattform-Dropdown.
+  document.getElementById('portal-picker')?.addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (!opt || !opt.value) return;
+    const host = opt.dataset.host || '';
+    const login = opt.dataset.login || '';
+    const name = opt.dataset.name || '';
+    const fHost = document.getElementById('f-host');
+    const fLogin = document.getElementById('f-login-url');
+    const fLabel = document.getElementById('f-label');
+    if (fHost && !fHost.value) fHost.value = host;
+    if (fLogin && !fLogin.value) fLogin.value = login;
+    if (fLabel && !fLabel.value) fLabel.value = name;
   });
 </script>
 

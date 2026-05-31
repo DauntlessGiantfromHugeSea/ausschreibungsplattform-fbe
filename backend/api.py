@@ -2838,7 +2838,11 @@ def admin_portal_logins(
 def admin_portal_login_new(request: Request):
     return templates.TemplateResponse(
         request, "portal_login_edit.html",
-        {"item": None, "is_new": True, "user": request.session.get("user")},
+        {
+            "item": None, "is_new": True,
+            "available_portals": _available_portals_for_dropdown(),
+            "user": request.session.get("user"),
+        },
     )
 
 
@@ -2849,8 +2853,41 @@ def admin_portal_login_edit(lid: int, request: Request, db: Session = Depends(ge
         return RedirectResponse(url="/admin/portal-logins?error=Nicht gefunden", status_code=303)
     return templates.TemplateResponse(
         request, "portal_login_edit.html",
-        {"item": item, "is_new": False, "user": request.session.get("user")},
+        {
+            "item": item, "is_new": False,
+            "available_portals": _available_portals_for_dropdown(),
+            "user": request.session.get("user"),
+        },
     )
+
+
+def _available_portals_for_dropdown() -> list[dict]:
+    """Liefert die in portals.yaml konfigurierten Portale, aus denen der
+    Admin im Login-Formular vorausfuellen lassen kann."""
+    from urllib.parse import urlparse
+    out = []
+    for p in load_portals():
+        base_url = (p.base_url or "").rstrip("/")
+        if not base_url:
+            continue
+        host = urlparse(base_url).hostname or ""
+        if not host:
+            continue
+        # API-Hosts (z.B. TED-API) raus - die brauchen keinen UI-Login.
+        if host.startswith("api."):
+            continue
+        # Saubere Host-Form fuer das Form-Feld: www.foo.de -> foo.de.
+        clean_host = host[4:] if host.startswith("www.") else host
+        # Login-URL-Vorschlag: best-guess. Admin korrigiert ggf.
+        login_url_guess = base_url + "/login"
+        out.append({
+            "name": p.name,
+            "host": clean_host,
+            "base_url": base_url,
+            "login_url_guess": login_url_guess,
+            "enabled": p.enabled,
+        })
+    return out
 
 
 @app.post("/admin/portal-logins/save")

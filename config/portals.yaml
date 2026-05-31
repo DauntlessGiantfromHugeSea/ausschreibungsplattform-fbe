@@ -581,7 +581,7 @@ portals:
   scraper: generic_html
   base_url: https://www.greenprofi.de
   strategy: scrape
-  notes: "greenprofi (Bauinformationsdienst, GaLaBau/Tiefbau-Spezialist).\nOeffentliche Kategorie-Listings unter /auftraege-tiefbau/*\nzeigen Karten mit Titel, Ort, Frist und Auftraggeber - die\nVolldatenbank ist kostenpflichtig, das Karten-Listing reicht\naber als Erstkontakt.\n\nBreite Auswahl an FBE-relevanten Tiefbau-Pfaden, client-seitig\nauf Cluster-Begriffe gefiltert. Wenn 0 Treffer bei 200er\nResponse: tools/dump_portal_html.py auf eine der listing_paths\nlaufen lassen und result_selector anpassen (greenprofi schiebt\ngelegentlich auf article.auftrag oder .listing-item-card um).\n"
+  notes: "greenprofi (Bauinformationsdienst, GaLaBau/Tiefbau-Spezialist).\nOeffentliche Kategorie-Listings unter /auftraege-tiefbau/*\nlisten Tender als <div id='tenders-NNNNNN'>-Karten.\nclient-seitig auf Cluster-Begriffe gefiltert.\n\nDeep-Listing: /auftraege-tiefbau/ aggregiert alle Sub-Kategorien.\nDie spezifischeren Pfade sind als Backup falls die Hauptseite\npaginiert.\n"
   config:
     user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
     timeout: 45
@@ -595,14 +595,13 @@ portals:
     - /auftraege-tiefbau/kampfmittelraeumung/
     - /auftraege-tiefbau/garten-landschaftsbau/
     - /auftraege-tiefbau/baustelleneinrichtung/
-    - /klassifizierungen-oeffentliche-ausschreibungen
-    result_selector: 'article.auftrag, article.ausschreibung, article.listing-item, .auftrag-item, .ausschreibung-item, .listing-item-card, .tender-card, li:has(a[href*=''/auftrag/'']), li:has(a[href*=''/ausschreibung/''])'
-    title_selector: 'a.auftrag-title, a.ausschreibung-title, h2 a, h3 a, .title a, a[href*=''/auftrag/''], a[href*=''/ausschreibung/'']'
-    link_selector: 'a[href*=''/auftrag/''], a[href*=''/ausschreibung/''], h2 a, h3 a, a.title'
-    authority_selector: .auftraggeber, .vergabestelle, .auftrag-auftraggeber
-    location_selector: .ort, .erfuellungsort, .leistungsort, .auftrag-ort
-    deadline_selector: .frist, .angebotsfrist, .auftrag-frist, .submission-deadline
-    publication_selector: .veroeffentlicht, .pub-date, .auftrag-datum
-    description_selector: .description, .beschreibung, .teaser, .auftrag-beschreibung, p
+    result_selector: '[id^="tenders-"]'
+    title_selector: 'h2 a, h3 a, h4 a, a.title, a[href]'
+    link_selector: 'h2 a[href], h3 a[href], h4 a[href], a.title[href], a[href]'
+    authority_selector: .auftraggeber, .vergabestelle, .buyer
+    location_selector: .ort, .erfuellungsort, .leistungsort, .location
+    deadline_selector: .frist, .angebotsfrist, .deadline, .submission-deadline
+    publication_selector: .veroeffentlicht, .pub-date, .datum
+    description_selector: .description, .beschreibung, .teaser, p
     filter_by_terms: true
-    auto_discover: true
+    auto_discover: false

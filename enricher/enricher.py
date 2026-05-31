@@ -82,6 +82,57 @@ def report_login_result(login_id: int | None, ok: bool, error: str = "") -> None
         pass
 
 
+def run_pending_login_tests() -> int:
+    """Holt explizit angeforderte Login-Tests und fuehrt sie aus.
+
+    Pro Test: Playwright-Browser starten, perform_login() ausfuehren,
+    Ergebnis an die Plattform melden. Cookies/Context werden NICHT
+    zwischen Tests behalten - jeder Test bekommt frischen Browser,
+    damit das Resultat ehrlich ist.
+    """
+    try:
+        r = http.get("/api/internal/portal-logins-pending-test", timeout=10)
+        r.raise_for_status()
+        items = r.json()
+    except Exception as exc:
+        log.debug("pending-login-test fetch fehlgeschlagen: %s", exc)
+        return 0
+    if not items:
+        return 0
+    log.info("%d Login-Test(s) angefordert.", len(items))
+    with sync_playwright() as pw:
+        for conf in items:
+            lid = conf.get("id")
+            host = conf.get("host", "?")
+            log.info("Login-Test fuer %s ...", host)
+            browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
+            try:
+                ctx = browser.new_context(
+                    user_agent="Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
+                    locale="de-DE",
+                )
+                page = ctx.new_page()
+                page.set_default_timeout(PAGE_TIMEOUT_MS)
+                try:
+                    ok = _perform_login(page, conf, timeout_ms=PAGE_TIMEOUT_MS)
+                except Exception as exc:
+                    log.warning("Login-Test %s Exception: %s", host, exc)
+                    report_login_result(lid, False, f"exception: {exc}")
+                    continue
+                if ok:
+                    log.info("Login-Test %s OK", host)
+                    report_login_result(lid, True)
+                    # Domain als 'eingeloggt' fuer diese Container-Lifetime markieren,
+                    # auch wenn der Test in einem separaten Browser lief.
+                    _LOGGED_IN.add(host)
+                else:
+                    log.warning("Login-Test %s FAIL", host)
+                    report_login_result(lid, False, "Selektoren stimmen nicht oder Login abgelehnt")
+            finally:
+                browser.close()
+    return len(items)
+
+
 load_dotenv()
 
 logging.basicConfig(
@@ -555,15 +606,32 @@ def run_once() -> int:
     return len(items)
 
 
+LOGIN_TEST_POLL_S = int(os.environ.get("LOGIN_TEST_POLL_S", "15"))
+
+
 def main() -> None:
-    log.info("Enricher gestartet. FBE=%s, Modell=%s, Intervall=%ds, Batch=%d",
-             FBE_URL, OPENAI_MODEL, POLL_INTERVAL_S, BATCH_LIMIT)
+    log.info(
+        "Enricher gestartet. FBE=%s, Modell=%s, Tender-Intervall=%ds, Login-Test-Intervall=%ds, Batch=%d",
+        FBE_URL, OPENAI_MODEL, POLL_INTERVAL_S, LOGIN_TEST_POLL_S, BATCH_LIMIT,
+    )
+    last_batch = 0.0
     while True:
+        # Login-Tests jede Iteration pruefen - schnelle Reaktion auf
+        # Admin-Klick "Jetzt testen".
         try:
-            run_once()
+            run_pending_login_tests()
         except Exception:
-            log.exception("Poll-Run fehlgeschlagen.")
-        time.sleep(POLL_INTERVAL_S)
+            log.exception("Login-Test-Lauf fehlgeschlagen.")
+
+        # Tender-Batch nur alle POLL_INTERVAL_S Sekunden.
+        if time.time() - last_batch >= POLL_INTERVAL_S:
+            try:
+                run_once()
+            except Exception:
+                log.exception("Poll-Run fehlgeschlagen.")
+            last_batch = time.time()
+
+        time.sleep(LOGIN_TEST_POLL_S)
 
 
 if __name__ == "__main__":

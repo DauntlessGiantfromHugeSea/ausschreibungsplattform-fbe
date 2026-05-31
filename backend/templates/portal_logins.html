@@ -54,6 +54,8 @@
         <td>
           {% if not it.enabled %}
             <span class="pill bg-zinc-100 text-zinc-600">deaktiviert</span>
+          {% elif it.test_requested_at %}
+            <span class="pill bg-blue-100 text-blue-800 animate-pulse">⏳ Test läuft …</span>
           {% elif it.last_status == 'ok' %}
             <span class="pill bg-emerald-100 text-emerald-800">✓ ok</span>
           {% elif it.last_status == 'fail' %}
@@ -71,6 +73,9 @@
           {% if it.last_attempt_at %}{{ it.last_attempt_at.strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}
         </td>
         <td class="text-right whitespace-nowrap">
+          <form method="post" action="/admin/portal-logins/{{ it.id }}/test" class="inline">
+            <button class="btn-icon" title="Login jetzt testen (Ergebnis nach ~30s)">▶</button>
+          </form>
           <a href="/admin/portal-logins/{{ it.id }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
           <form method="post" action="/admin/portal-logins/{{ it.id }}/delete" class="inline"
                 onsubmit="return confirm('Login fuer {{ it.host }} loeschen?');">
@@ -93,5 +98,12 @@
     <li><strong>Success-Selektor:</strong> nach Login einen Selektor finden, der NUR im eingeloggten Zustand existiert (z.B. <code>a[href*='logout']</code>). Ohne wird der Login als erfolgreich angenommen.</li>
   </ol>
 </div>
+
+<script>
+  // Wenn irgendein Login gerade getestet wird, alle 10s neu laden, bis das Ergebnis da ist.
+  if (document.querySelector('.animate-pulse')) {
+    setTimeout(() => location.reload(), 10000);
+  }
+</script>
 
 {% endblock %}

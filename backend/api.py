@@ -2944,6 +2944,27 @@ def admin_portal_login_save(
         status_code=303)
 
 
+@app.post("/admin/portal-logins/{lid}/test")
+def admin_portal_login_test(lid: int, db: Session = Depends(get_db)):
+    """Setzt den Test-Flag. Der Enricher pickt das beim naechsten Poll
+    (~15s) auf und fuehrt den Login-Flow ohne Tender-Crawl aus."""
+    it = db.get(PortalLogin, lid)
+    if not it:
+        return RedirectResponse(url="/admin/portal-logins?error=Nicht gefunden", status_code=303)
+    if not it.enabled:
+        return RedirectResponse(
+            url="/admin/portal-logins?error=Login ist deaktiviert - erst aktivieren.",
+            status_code=303)
+    it.test_requested_at = datetime.utcnow()
+    # Status zurueck auf 'wird getestet'
+    it.last_status = "pending"
+    it.last_error = None
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/portal-logins?flash=Test fuer {it.host} angefordert - Ergebnis in ~30 Sekunden, Seite dann aktualisieren.",
+        status_code=303)
+
+
 @app.post("/admin/portal-logins/{lid}/delete")
 def admin_portal_login_delete(lid: int, db: Session = Depends(get_db)):
     item = db.get(PortalLogin, lid)
@@ -2990,5 +3011,33 @@ def internal_portal_login_result(lid: int, payload: dict, db: Session = Depends(
     it.last_attempt_at = datetime.utcnow()
     it.last_status = "ok" if payload.get("ok") else "fail"
     it.last_error = (payload.get("error") or "")[:500] or None
+    it.test_requested_at = None  # Test als erledigt markieren
     db.commit()
     return {"ok": True}
+
+
+@app.get("/api/internal/portal-logins-pending-test")
+def internal_portal_logins_pending_test(db: Session = Depends(get_db)):
+    """Liefert nur die Logins, fuer die ein Test angefordert wurde."""
+    items = (
+        db.query(PortalLogin)
+        .filter(PortalLogin.enabled == True)  # noqa: E712
+        .filter(PortalLogin.test_requested_at.isnot(None))
+        .all()
+    )
+    out = []
+    for it in items:
+        if not it.username or not it.password:
+            continue
+        out.append({
+            "id": it.id,
+            "host": it.host,
+            "login_url": it.login_url,
+            "username_selector": it.username_selector,
+            "password_selector": it.password_selector,
+            "submit_selector": it.submit_selector,
+            "success_selector": it.success_selector,
+            "username": it.username,
+            "password": it.password,
+        })
+    return out

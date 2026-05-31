@@ -282,6 +282,10 @@ class PortalLogin(Base):
     username_env = Column(String(120), nullable=False, default="")
     password_env = Column(String(120), nullable=False, default="")
     enabled = Column(Boolean, default=True, nullable=False)
+    # Vom Admin gesetzt: wenn != NULL, fuehrt der Enricher beim naechsten
+    # Poll einen expliziten Login-Test aus und setzt das Feld wieder
+    # auf NULL.
+    test_requested_at = Column(DateTime, nullable=True)
     # Vom Enricher gesetzt bei Login-Versuchen.
     last_attempt_at = Column(DateTime, nullable=True)
     last_status = Column(String(50), nullable=True)  # 'ok' | 'fail' | None

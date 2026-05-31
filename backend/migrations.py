@@ -242,6 +242,23 @@ def add_portal_login_credential_columns() -> bool:
     return added
 
 
+def add_portal_login_test_requested_column() -> bool:
+    """portal_logins.test_requested_at - Flag fuer Admin-getriggerten Login-Test."""
+    if "portal_logins" not in {t for t in inspect(engine).get_table_names()}:
+        return False
+    cols = {c["name"] for c in inspect(engine).get_columns("portal_logins")}
+    if "test_requested_at" in cols:
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE portal_logins ADD COLUMN test_requested_at DATETIME"))
+        log.info("Migration: portal_logins.test_requested_at hinzugefuegt.")
+        return True
+    except Exception as exc:  # pragma: no cover
+        log.exception("Migration test_requested_at fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -254,4 +271,5 @@ def run_all() -> dict:
         "profile_users_table_created": create_profile_users_table(),
         "viewer_role_migrated": migrate_viewer_role_to_user(),
         "portal_login_credentials_added": add_portal_login_credential_columns(),
+        "portal_login_test_flag_added": add_portal_login_test_requested_column(),
     }

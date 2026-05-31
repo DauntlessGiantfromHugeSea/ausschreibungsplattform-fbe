@@ -272,10 +272,10 @@ class PortalLogin(Base):
     password_selector = Column(String(500), nullable=False)
     submit_selector = Column(String(500), nullable=False)
     success_selector = Column(String(500), nullable=True)
-    # Name der ENV-Variablen, NICHT der Wert. Plattform liest os.environ
-    # beim Internal-API-Abruf und schickt den resolvten Wert.
-    username_env = Column(String(120), nullable=False)
-    password_env = Column(String(120), nullable=False)
+    # Direkter Klartext - liegt in der lokalen SQLite-DB neben anderen
+    # Sensitiv-Feldern (Passwort-Hashes). Der UI maskiert das Eingabefeld.
+    username = Column(String(200), nullable=False, default="")
+    password = Column(String(500), nullable=False, default="")
     enabled = Column(Boolean, default=True, nullable=False)
     # Vom Enricher gesetzt bei Login-Versuchen.
     last_attempt_at = Column(DateTime, nullable=True)

@@ -50,26 +50,36 @@
   </div>
 
   <div class="card p-6 space-y-4">
-    <h3 class="text-base font-semibold">Zugangsdaten (aus .env)</h3>
+    <h3 class="text-base font-semibold">Zugangsdaten</h3>
     <p class="text-xs text-zinc-500">
-      Trag hier nur die <strong>Namen</strong> der ENV-Variablen ein. Die eigentlichen Werte
-      kommen aus <code>/root/ausschreibungsplattform-fbe/.env</code> auf dem Server — die Plattform
-      löst sie beim Abruf des Enrichers auf. Nichts Sensibles in der DB.
+      Direkt hier eintragen — kein Server-Zugang nötig. Wird in der lokalen
+      SQLite-DB gespeichert und nur vom Enricher-Container abgerufen.
     </p>
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-xs font-medium text-zinc-600 mb-1">ENV-Variable Benutzername *</label>
-        <input class="input font-mono text-sm" type="text" name="username_env" required maxlength="120"
-               value="{{ item.username_env if item else '' }}"
-               placeholder="EVERGABE_USER" autocomplete="off">
-        <div class="text-xs text-zinc-400 mt-1">In .env: <code>EVERGABE_USER=foo@example.com</code></div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Benutzername *</label>
+        <input class="input" type="text" name="username" required maxlength="200"
+               value="{{ item.username if item else '' }}"
+               placeholder="max@firma.de"
+               autocomplete="off">
       </div>
       <div>
-        <label class="block text-xs font-medium text-zinc-600 mb-1">ENV-Variable Passwort *</label>
-        <input class="input font-mono text-sm" type="text" name="password_env" required maxlength="120"
-               value="{{ item.password_env if item else '' }}"
-               placeholder="EVERGABE_PASS" autocomplete="off">
-        <div class="text-xs text-zinc-400 mt-1">In .env: <code>EVERGABE_PASS=geheim</code></div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">
+          Passwort {% if is_new %}*{% else %}(leer = unverändert){% endif %}
+        </label>
+        <div class="relative">
+          <input class="input pr-16" type="password" name="password"
+                 {% if is_new %}required{% endif %}
+                 id="pw-field" autocomplete="new-password"
+                 placeholder="{% if is_new %}Portal-Passwort{% else %}••••••• (unverändert){% endif %}">
+          <button type="button" id="pw-toggle"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-800 bg-white px-1">
+            anzeigen
+          </button>
+        </div>
+        {% if not is_new %}
+        <div class="text-xs text-zinc-400 mt-1">Leer lassen, wenn das Passwort nicht geändert werden soll.</div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -135,5 +145,14 @@
     <a href="/admin/portal-logins" class="btn-ghost">Abbrechen</a>
   </div>
 </form>
+
+<script>
+  document.getElementById('pw-toggle')?.addEventListener('click', () => {
+    const f = document.getElementById('pw-field');
+    const btn = document.getElementById('pw-toggle');
+    if (f.type === 'password') { f.type = 'text'; btn.textContent = 'verbergen'; }
+    else { f.type = 'password'; btn.textContent = 'anzeigen'; }
+  });
+</script>
 
 {% endblock %}

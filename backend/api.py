@@ -2863,8 +2863,8 @@ def admin_portal_login_save(
     password_selector: str = Form(...),
     submit_selector: str = Form(...),
     success_selector: str = Form(""),
-    username_env: str = Form(...),
-    password_env: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(""),
     enabled: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -2880,12 +2880,11 @@ def admin_portal_login_save(
     item = db.get(PortalLogin, pid) if pid else None
 
     if not item:
-        # Host-Eindeutigkeit pruefen
         if db.query(PortalLogin).filter(PortalLogin.host == host).first():
             return RedirectResponse(
                 url=f"/admin/portal-logins?error=Host '{host}' existiert bereits",
                 status_code=303)
-        item = PortalLogin(host=host, username_env="", password_env="")
+        item = PortalLogin(host=host, username="", password="")
         db.add(item)
 
     item.host = host
@@ -2895,8 +2894,11 @@ def admin_portal_login_save(
     item.password_selector = password_selector.strip()
     item.submit_selector = submit_selector.strip()
     item.success_selector = success_selector.strip() or None
-    item.username_env = username_env.strip()
-    item.password_env = password_env.strip()
+    item.username = username.strip()
+    # Passwort nur ueberschreiben, wenn neues gesetzt - sonst bestehendes
+    # behalten (Edit-Modus zeigt das Passwortfeld leer aus Sicherheitsgruenden).
+    if password.strip():
+        item.password = password
     item.enabled = enabled == "on"
 
     db.commit()
@@ -2920,20 +2922,13 @@ def admin_portal_login_delete(lid: int, db: Session = Depends(get_db)):
 def internal_portal_logins(db: Session = Depends(get_db)):
     """Liefert alle aktiven Login-Configs als JSON-Liste fuer den Enricher.
 
-    Resolved die ENV-Variablen-Namen (username_env / password_env) gegen
-    os.environ und schickt nur die fertigen Credentials. Configs ohne
-    gesetzte ENV-Variable werden uebersprungen (mit Log-Warnung).
+    Credentials kommen direkt aus der DB - was im Admin-UI gepflegt wurde.
+    Eintraege ohne Username/Passwort werden uebersprungen.
     """
     items = db.query(PortalLogin).filter(PortalLogin.enabled == True).all()  # noqa: E712
     out = []
     for it in items:
-        u = os.environ.get(it.username_env or "", "")
-        p = os.environ.get(it.password_env or "", "")
-        if not u or not p:
-            log.warning(
-                "Portal-Login %s: ENV-Variable nicht gesetzt (username_env=%s, password_env=%s) - skip",
-                it.host, it.username_env, it.password_env,
-            )
+        if not it.username or not it.password:
             continue
         out.append({
             "id": it.id,
@@ -2943,8 +2938,8 @@ def internal_portal_logins(db: Session = Depends(get_db)):
             "password_selector": it.password_selector,
             "submit_selector": it.submit_selector,
             "success_selector": it.success_selector,
-            "username": u,
-            "password": p,
+            "username": it.username,
+            "password": it.password,
         })
     return out
 

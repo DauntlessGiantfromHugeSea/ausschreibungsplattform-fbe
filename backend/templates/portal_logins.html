@@ -43,7 +43,7 @@
       <tr>
         <th>Status</th>
         <th>Host</th>
-        <th>ENV-Variablen</th>
+        <th>Benutzername</th>
         <th>Letzter Versuch</th>
         <th class="text-right pr-4">Aktion</th>
       </tr>
@@ -66,10 +66,7 @@
           <div class="font-medium">{{ it.host }}</div>
           {% if it.label %}<div class="text-xs text-zinc-500">{{ it.label }}</div>{% endif %}
         </td>
-        <td class="text-xs font-mono text-zinc-700">
-          {{ it.username_env }}<br>
-          <span class="text-zinc-400">{{ it.password_env }}</span>
-        </td>
+        <td class="text-sm text-zinc-700">{{ it.username }}</td>
         <td class="text-xs text-zinc-500">
           {% if it.last_attempt_at %}{{ it.last_attempt_at.strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}
         </td>

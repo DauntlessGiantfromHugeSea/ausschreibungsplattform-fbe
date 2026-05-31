@@ -209,6 +209,39 @@ def migrate_viewer_role_to_user() -> int:
         db.close()
 
 
+def add_portal_login_credential_columns() -> bool:
+    """Stellt sicher, dass portal_logins.username/password existieren.
+
+    Frueheres Schema hatte username_env/password_env. Neuer simpler Ansatz:
+    Klartext direkt in der DB. Spalten werden idempotent angelegt; die alten
+    *_env-Spalten bleiben unangetastet, werden aber nicht mehr genutzt.
+    """
+    insp = inspect(engine)
+    if "portal_logins" not in insp.get_table_names():
+        return False
+    cols = {c["name"] for c in insp.get_columns("portal_logins")}
+    added = False
+    statements = []
+    if "username" not in cols:
+        statements.append(
+            "ALTER TABLE portal_logins ADD COLUMN username VARCHAR(200) NOT NULL DEFAULT ''"
+        )
+    if "password" not in cols:
+        statements.append(
+            "ALTER TABLE portal_logins ADD COLUMN password VARCHAR(500) NOT NULL DEFAULT ''"
+        )
+    for ddl in statements:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            added = True
+        except Exception as exc:  # pragma: no cover
+            log.exception("Migration portal_logins credentials fehlgeschlagen: %s", exc)
+    if added:
+        log.info("Migration: portal_logins.username/password hinzugefuegt.")
+    return added
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -220,4 +253,5 @@ def run_all() -> dict:
         "search_profile_keywords_added": add_search_profile_keywords_column(),
         "profile_users_table_created": create_profile_users_table(),
         "viewer_role_migrated": migrate_viewer_role_to_user(),
+        "portal_login_credentials_added": add_portal_login_credential_columns(),
     }

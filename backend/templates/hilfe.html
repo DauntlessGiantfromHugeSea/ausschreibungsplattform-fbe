@@ -73,8 +73,71 @@
     <h2 class="text-xl font-semibold mb-3">Benutzer</h2>
     <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
       Unter Einstellungen → <em>Benutzer</em> lassen sich Konten anlegen, Rollen
-      vergeben (Admin / Viewer) und Passwörter zurücksetzen. Neue Benutzer
+      vergeben (Admin / Viewer / User) und Passwörter zurücksetzen. Neue Benutzer
       bekommen per E-Mail einen Link zum Vergeben des eigenen Passworts.
+    </p>
+    <ul class="list-disc pl-5 text-sm text-zinc-600 dark:text-zinc-400 space-y-1 mt-2">
+      <li><strong>admin</strong> — voller Zugriff auf alle Admin-Bereiche.</li>
+      <li><strong>viewer</strong> — sieht alle Ausschreibungen + Suche, aber kein Admin-Bereich.</li>
+      <li><strong>user</strong> — sieht ausschließlich Ausschreibungen aus zugewiesenen Suchprofilen, keine freie Suche.</li>
+    </ul>
+  </section>
+
+  <section id="portal-logins">
+    <h2 class="text-xl font-semibold mb-3">Portal-Logins (KI-Anreicherung)</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed mb-3">
+      Für Portale, deren Detailseiten nur nach Login sichtbar sind (z.B. evergabe.de, DTVP),
+      kann der KI-Bot sich automatisch einloggen. Die Zugangsdaten werden ausschließlich im
+      Admin-UI gepflegt — <strong>kein Server-Zugang nötig</strong>. Andere Admins können
+      die Zugänge nachträglich anpassen, ohne die <code>.env</code> auf dem Server zu kennen.
+    </p>
+    <ol class="list-decimal pl-5 text-sm text-zinc-700 dark:text-zinc-300 space-y-1 mb-3">
+      <li>Einstellungen → <em>Portal-Logins</em> → <strong>+ Neuer Login</strong></li>
+      <li><strong>Host</strong>: nur die Domain ohne <code>https://</code> — z.B. <code>evergabe.de</code></li>
+      <li><strong>Login-URL</strong>: die Adresse der Login-Seite — z.B. <code>https://www.evergabe.de/login</code></li>
+      <li><strong>Benutzername / Passwort</strong>: deine Login-Daten für dieses Portal. Wird in der lokalen DB gespeichert; im Edit-Modus zeigt das Passwortfeld nie das gespeicherte Passwort, leer lassen = unverändert.</li>
+      <li>
+        <strong>CSS-Selektoren</strong>: zeigen dem Bot, wo das Username-Feld, das Passwort-Feld und der Login-Button sind.
+        <ul class="list-disc pl-5 mt-1 text-xs">
+          <li>Login-Seite im Browser öffnen, F12 drücken (DevTools).</li>
+          <li>Rechtsklick auf das Benutzername-Feld → <em>Untersuchen</em>. Im HTML siehst du etwas wie <code>&lt;input name="user[email]"&gt;</code> → der Selektor ist <code>input[name='user[email]']</code>.</li>
+          <li>Gleiches für Passwort-Feld und Submit-Button.</li>
+        </ul>
+      </li>
+      <li><strong>Erfolgs-Selektor (optional)</strong>: ein Element, das nur eingeloggt vorhanden ist (z.B. <code>a[href*='logout']</code>) — der Bot weiß damit, ob der Login geklappt hat.</li>
+    </ol>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      In der Übersicht zeigt eine farbige Pille pro Portal den letzten Login-Status:
+      <span class="pill bg-emerald-100 text-emerald-800 text-xs">✓ ok</span>,
+      <span class="pill bg-rose-100 text-rose-800 text-xs">✕ fail</span> (Mouse-Over zeigt den Fehlergrund) oder
+      <span class="pill bg-amber-100 text-amber-800 text-xs">noch nicht versucht</span>.
+      Der Enricher-Bot pollt die Login-Liste alle 60 Sekunden und versucht beim nächsten Tender-Crawl automatisch den Login.
+    </p>
+  </section>
+
+  <section id="notes">
+    <h2 class="text-xl font-semibold mb-3">Notizen &amp; KI-Wissensbasis</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed mb-2">
+      Unter Einstellungen → <em>Notizen &amp; Wissen</em> kannst du Markdown-Dateien anlegen und bearbeiten:
+    </p>
+    <ul class="list-disc pl-5 text-sm text-zinc-600 dark:text-zinc-400 space-y-1 mb-2">
+      <li><strong>Wissensbasis</strong> — alles hier wird als zusätzlicher Kontext an den KI-Bot übergeben. Schreib hier rein, was das LLM über deine Firma / die relevanten Themen wissen soll.</li>
+      <li><strong>Tender-Anreicherungen</strong> — die fertigen KI-Auswertungen pro Tender. Direkt im UI editierbar.</li>
+    </ul>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      Tastenkürzel im Editor: <kbd class="text-xs bg-zinc-100 px-1 border border-zinc-200 rounded">Strg+S</kbd> speichert.
+      Oben rechts: Edit / Split / Vorschau-Modi.
+    </p>
+  </section>
+
+  <section id="enrichment">
+    <h2 class="text-xl font-semibold mb-3">KI-Anreicherungen</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      Der separate Enricher-Container öffnet alle 10 Minuten neue Tender, klickt sich durch ihre Detailseiten,
+      lädt verlinkte PDFs und erstellt mit OpenAI eine strukturierte Markdown-Zusammenfassung pro Tender.
+      Diese erscheint auf der Tender-Detail-Seite als Block <em>„KI-Anreicherung"</em> und kann unter
+      Einstellungen → <em>KI-Anreicherungen</em> verwaltet (bearbeiten / löschen / neu generieren) werden.
+      Wenn ein Login für ein Portal in <em>Portal-Logins</em> hinterlegt ist, sieht der Bot auch geschützte Inhalte.
     </p>
   </section>
 

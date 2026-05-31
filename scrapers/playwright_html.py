@@ -72,9 +72,15 @@ class PlaywrightHtmlScraper(BaseScraper):
             )
             return []
 
-        path = self.config.get("search_path")
-        if not path:
-            log.warning("[%s] search_path fehlt.", self.name)
+        # Drei Modi:
+        #  - search_path mit {term} oder hash_json -> Suchmodus, pro Term ein Goto
+        #  - search_path ohne {term} -> Listing-Modus, EIN Goto
+        #  - listing_paths: [...] -> Listing-Modus, je Pfad EIN Goto
+        #    (search_path und listing_paths koennen kombiniert sein)
+        search_path = self.config.get("search_path")
+        listing_paths = list(self.config.get("listing_paths") or [])
+        if not search_path and not listing_paths:
+            log.warning("[%s] search_path bzw. listing_paths fehlen.", self.name)
             return []
 
         ua = self._client.headers.get("User-Agent", "Mozilla/5.0")
@@ -83,18 +89,33 @@ class PlaywrightHtmlScraper(BaseScraper):
 
         items: dict[str, TenderItem] = {}
 
+        # Liste der (path, term)-Tupel, die wir laden sollen.
+        plan: list[tuple[str, str | None]] = []
+        if search_path:
+            if "{term}" in search_path or self.config.get("hash_json"):
+                for t in (self.config.get("url_terms") or terms):
+                    plan.append((search_path, t))
+            else:
+                plan.append((search_path, None))
+        for lp in listing_paths:
+            plan.append((lp, None))
+
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=bool(self.config.get("headless", True)), args=self.config.get("chromium_args") or ["--disable-blink-features=AutomationControlled"])
             context = browser.new_context(user_agent=ua, locale="de-DE")
             try:
-                # Pro query_term ein Page-Load. Bei Listing-Mode (kein {term})
-                # nur einmal.
-                term_loop = (self.config.get("url_terms") or terms) if "{term}" in path or self.config.get("hash_json") else [None]
-                for term in term_loop:
+                for path, term in plan:
                     url = self._build_url(path, term)
                     page = context.new_page()
                     try:
-                        page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+                        try:
+                            page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+                        except PWTimeout:
+                            log.info("[%s] Goto-Timeout %s", self.name, url[:120])
+                            continue
+                        except Exception as exc:
+                            log.info("[%s] Goto-Fehler %s: %s", self.name, url[:120], exc)
+                            continue
                         if wait_for:
                             try:
                                 page.wait_for_selector(wait_for, timeout=timeout)
@@ -117,7 +138,7 @@ class PlaywrightHtmlScraper(BaseScraper):
                     if self.config.get("filter_by_terms", True):
                         match_terms = self._match_terms(terms)
                         parsed = {u: it for u, it in parsed.items() if _matches_any(it, match_terms)}
-                    log.info("[%s] %d Treffer fuer term=%s", self.name, len(parsed), term)
+                    log.info("[%s] %d Treffer auf %s (term=%s)", self.name, len(parsed), path[:80], term)
                     items.update(parsed)
             finally:
                 context.close()

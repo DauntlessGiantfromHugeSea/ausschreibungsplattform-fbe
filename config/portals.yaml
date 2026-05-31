@@ -544,22 +544,27 @@ portals:
   config:
     user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
     timeout: 60
-    search_path: /evergabe.bieter/eva/supplierportal/portal
-    wait_for_selector: 'table.notice-list, table.results, table.searchResults, .project-list, .search-result, .notice-result, a[href*=''/notice''], a[href*=''/Verfahren''], a[href*=''/Bekanntmachung''], tr.notice, tr.publication, [class*=''notice-item''], [class*=''result-row'']
-
-      '
+    # Drei Einstiegspfade probieren - DB-Bieterportal hat oft die Liste
+    # weder auf der Landing-Page noch unter ".../notice", sondern unter
+    # einer welcome-/overview-/announcements-Sub-URL.
+    listing_paths:
+    - /evergabe.bieter/eva/supplierportal/portal
+    - /evergabe.bieter/eva/supplierportal/notice
+    - /evergabe.bieter/eva/supplierportal/welcome.do
+    - /evergabe.bieter/eva/supplierportal/notice/list
+    - /evergabe.bieter/eva/supplierportal/announcements
+    wait_for_selector: "a[href*='/notice/'], a[href*='/announcement'], a[href*='/Verfahren'], a[href*='/Bekanntmachung'], table tbody tr, .notice-item, .publication-item"
     wait_timeout_ms: 25000
     filter_by_terms: true
-    result_selector: 'tr.notice, tr.publication, tr.result-row, table.notice-list tbody tr, table.searchResults tbody tr, table.results tbody tr, .project-list-row, .search-result-row, .notice-result, [class*=''notice-item''], [class*=''publication-item''], article.notice, li.notice
-
-      '
-    title_selector: 'a.notice-title, a.publication-title, a.title, h2 a, h3 a, td a[href*=''/notice''], td a[href*=''/Verfahren''], td a[href*=''/Bekanntmachung''], td a
-
-      '
-    authority_selector: .buyer, .vergabestelle, .auftraggeber, .organisation
-    location_selector: .place, .ort, .erfuellungsort, .location
-    deadline_selector: .deadline, .frist, .angebotsfrist, .submissionDeadline
-    description_selector: .description, .excerpt, .summary, p
+    # Sehr breite Pattern fuer Tender-Container: alles was nach einer
+    # Tabellen-Zeile mit Tender-Link aussieht, plus typische Card-Layouts.
+    result_selector: "tr:has(a[href*='/notice/']), tr:has(a[href*='/announcement']), tr:has(a[href*='/Verfahren']), tr:has(a[href*='/Bekanntmachung']), tr.notice, tr.publication, .notice-item, .publication-item, .notice-card, article.notice, li.notice, [id^='notice-'], [id^='publication-']"
+    title_selector: "a.notice-title, a.publication-title, a.title, h2 a, h3 a, td a[href*='/notice/'], td a[href*='/announcement'], td a[href*='/Verfahren'], td a[href*='/Bekanntmachung'], a[href]"
+    link_selector: "a[href*='/notice/'], a[href*='/announcement'], a[href*='/Verfahren'], a[href*='/Bekanntmachung'], a[href]"
+    authority_selector: ".buyer, .vergabestelle, .auftraggeber, .organisation"
+    location_selector: ".place, .ort, .erfuellungsort, .location"
+    deadline_selector: ".deadline, .frist, .angebotsfrist, .submissionDeadline"
+    description_selector: ".description, .excerpt, .summary, p"
 - name: Vergabe24 (Cosinex)
   enabled: false
   scraper: cosinex

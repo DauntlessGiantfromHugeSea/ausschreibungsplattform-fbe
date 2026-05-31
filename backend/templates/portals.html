@@ -29,16 +29,16 @@
   </div>
 </div>
 
-<div class="card overflow-hidden">
-  <table class="dashboard">
+<div class="card overflow-x-auto">
+  <table class="dashboard min-w-full">
     <thead>
       <tr>
         <th>Aktiv</th>
         <th>Name</th>
-        <th>Scraper</th>
-        <th>Strategie</th>
-        <th>Base-URL</th>
-        <th class="text-right pr-4">Aktion</th>
+        <th class="hidden md:table-cell">Scraper</th>
+        <th class="hidden lg:table-cell">Strategie</th>
+        <th class="hidden md:table-cell">Base-URL</th>
+        <th class="text-right pr-4 sticky right-0 bg-white">Aktion</th>
       </tr>
     </thead>
     <tbody>
@@ -57,12 +57,12 @@
           <div class="font-medium">{{ p.name }}</div>
           {% if p.notes %}<div class="text-xs text-zinc-500 mt-0.5 truncate-2 max-w-md">{{ p.notes }}</div>{% endif %}
         </td>
-        <td><code class="text-xs">{{ p.scraper }}</code></td>
-        <td><span class="pill bg-zinc-100 text-zinc-700">{{ p.strategy }}</span></td>
-        <td class="text-zinc-700 text-xs">
+        <td class="hidden md:table-cell"><code class="text-xs">{{ p.scraper }}</code></td>
+        <td class="hidden lg:table-cell"><span class="pill bg-zinc-100 text-zinc-700">{{ p.strategy }}</span></td>
+        <td class="hidden md:table-cell text-zinc-700 text-xs max-w-[200px] truncate">
           {% if p.base_url %}<a href="{{ p.base_url }}" target="_blank" rel="noopener" class="hover:underline">{{ p.base_url }}</a>{% else %}—{% endif %}
         </td>
-        <td class="text-right whitespace-nowrap">
+        <td class="text-right whitespace-nowrap sticky right-0 bg-white">
           <a href="/admin/probe?portal={{ p.name|urlencode }}" class="btn-icon" title="Testen">🔍</a>
           <a href="/admin/portals/{{ p.name|urlencode }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
           <form method="post" action="/admin/portals/{{ p.name|urlencode }}/delete" class="inline"

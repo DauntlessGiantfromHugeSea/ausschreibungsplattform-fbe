@@ -5,7 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY enricher.py .
+# Alle Python-Module des Enrichers kopieren (enricher.py + portal_logins.py + ...)
+COPY *.py ./
 
 # Default-Volume fuer die MD-Dateien (host-seitig wird /srv/fbe-enrich gemountet).
 RUN mkdir -p /data/enrich

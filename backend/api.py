@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,7 +22,7 @@ from . import branding
 from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User
+from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User, PortalLogin
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -2812,3 +2813,150 @@ def internal_knowledge():
             except OSError:
                 continue
     return out
+
+
+# --- Admin: Portal-Logins ---------------------------------------------
+@app.get("/admin/portal-logins", response_class=HTMLResponse)
+def admin_portal_logins(
+    request: Request,
+    db: Session = Depends(get_db),
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    items = db.query(PortalLogin).order_by(PortalLogin.host).all()
+    return templates.TemplateResponse(
+        request, "portal_logins.html",
+        {
+            "items": items,
+            "user": request.session.get("user"),
+            "flash": flash, "error": error,
+        },
+    )
+
+
+@app.get("/admin/portal-logins/new", response_class=HTMLResponse)
+def admin_portal_login_new(request: Request):
+    return templates.TemplateResponse(
+        request, "portal_login_edit.html",
+        {"item": None, "is_new": True, "user": request.session.get("user")},
+    )
+
+
+@app.get("/admin/portal-logins/{lid}/edit", response_class=HTMLResponse)
+def admin_portal_login_edit(lid: int, request: Request, db: Session = Depends(get_db)):
+    item = db.get(PortalLogin, lid)
+    if not item:
+        return RedirectResponse(url="/admin/portal-logins?error=Nicht gefunden", status_code=303)
+    return templates.TemplateResponse(
+        request, "portal_login_edit.html",
+        {"item": item, "is_new": False, "user": request.session.get("user")},
+    )
+
+
+@app.post("/admin/portal-logins/save")
+def admin_portal_login_save(
+    portal_id: str = Form(""),
+    host: str = Form(...),
+    label: str = Form(""),
+    login_url: str = Form(...),
+    username_selector: str = Form(...),
+    password_selector: str = Form(...),
+    submit_selector: str = Form(...),
+    success_selector: str = Form(""),
+    username_env: str = Form(...),
+    password_env: str = Form(...),
+    enabled: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    host = host.strip().lower()
+    for p in ("https://", "http://"):
+        if host.startswith(p):
+            host = host[len(p):]
+    host = host.rstrip("/")
+    if not host:
+        return RedirectResponse(url="/admin/portal-logins?error=Host fehlt", status_code=303)
+
+    pid = int(portal_id) if portal_id and portal_id.isdigit() else None
+    item = db.get(PortalLogin, pid) if pid else None
+
+    if not item:
+        # Host-Eindeutigkeit pruefen
+        if db.query(PortalLogin).filter(PortalLogin.host == host).first():
+            return RedirectResponse(
+                url=f"/admin/portal-logins?error=Host '{host}' existiert bereits",
+                status_code=303)
+        item = PortalLogin(host=host, username_env="", password_env="")
+        db.add(item)
+
+    item.host = host
+    item.label = label.strip() or None
+    item.login_url = login_url.strip()
+    item.username_selector = username_selector.strip()
+    item.password_selector = password_selector.strip()
+    item.submit_selector = submit_selector.strip()
+    item.success_selector = success_selector.strip() or None
+    item.username_env = username_env.strip()
+    item.password_env = password_env.strip()
+    item.enabled = enabled == "on"
+
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/portal-logins?flash={host} gespeichert.",
+        status_code=303)
+
+
+@app.post("/admin/portal-logins/{lid}/delete")
+def admin_portal_login_delete(lid: int, db: Session = Depends(get_db)):
+    item = db.get(PortalLogin, lid)
+    if not item:
+        return RedirectResponse(url="/admin/portal-logins?error=Nicht gefunden", status_code=303)
+    host = item.host
+    db.delete(item); db.commit()
+    return RedirectResponse(url=f"/admin/portal-logins?flash={host} geloescht.", status_code=303)
+
+
+# --- Internal-API: Logins fuer den Enricher ---------------------------
+@app.get("/api/internal/portal-logins")
+def internal_portal_logins(db: Session = Depends(get_db)):
+    """Liefert alle aktiven Login-Configs als JSON-Liste fuer den Enricher.
+
+    Resolved die ENV-Variablen-Namen (username_env / password_env) gegen
+    os.environ und schickt nur die fertigen Credentials. Configs ohne
+    gesetzte ENV-Variable werden uebersprungen (mit Log-Warnung).
+    """
+    items = db.query(PortalLogin).filter(PortalLogin.enabled == True).all()  # noqa: E712
+    out = []
+    for it in items:
+        u = os.environ.get(it.username_env or "", "")
+        p = os.environ.get(it.password_env or "", "")
+        if not u or not p:
+            log.warning(
+                "Portal-Login %s: ENV-Variable nicht gesetzt (username_env=%s, password_env=%s) - skip",
+                it.host, it.username_env, it.password_env,
+            )
+            continue
+        out.append({
+            "id": it.id,
+            "host": it.host,
+            "login_url": it.login_url,
+            "username_selector": it.username_selector,
+            "password_selector": it.password_selector,
+            "submit_selector": it.submit_selector,
+            "success_selector": it.success_selector,
+            "username": u,
+            "password": p,
+        })
+    return out
+
+
+@app.post("/api/internal/portal-logins/{lid}/result")
+def internal_portal_login_result(lid: int, payload: dict, db: Session = Depends(get_db)):
+    """Enricher meldet zurueck, ob ein Login geklappt hat."""
+    it = db.get(PortalLogin, lid)
+    if not it:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    it.last_attempt_at = datetime.utcnow()
+    it.last_status = "ok" if payload.get("ok") else "fail"
+    it.last_error = (payload.get("error") or "")[:500] or None
+    db.commit()
+    return {"ok": True}

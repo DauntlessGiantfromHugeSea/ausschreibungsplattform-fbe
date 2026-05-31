@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Portal-Logins – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Portal-Logins</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Portal-Logins</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      Zugangsdaten pro Portal. Der Enricher-Container loggt sich damit automatisch ein,
+      bevor er Tender-Detailseiten auf der jeweiligen Domain crawlt.
+    </p>
+  </div>
+  <a href="/admin/portal-logins/new" class="btn-primary">+ Neuer Login</a>
+</div>
+
+{% if not items %}
+<div class="card p-10 text-center">
+  <div class="text-zinc-700 font-medium mb-1">Noch keine Portal-Logins hinterlegt</div>
+  <p class="text-sm text-zinc-500 mb-4">
+    Login-pflichtige Portale (z.B. evergabe.de, DTVP) sehen die Anreicherung
+    sonst nicht. Lege hier deine Zugangsdaten + CSS-Selektoren an.
+  </p>
+  <a href="/admin/portal-logins/new" class="btn-primary">+ Ersten Login hinterlegen</a>
+</div>
+{% else %}
+<div class="card overflow-hidden">
+  <table class="dashboard">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Host</th>
+        <th>ENV-Variablen</th>
+        <th>Letzter Versuch</th>
+        <th class="text-right pr-4">Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>
+          {% if not it.enabled %}
+            <span class="pill bg-zinc-100 text-zinc-600">deaktiviert</span>
+          {% elif it.last_status == 'ok' %}
+            <span class="pill bg-emerald-100 text-emerald-800">✓ ok</span>
+          {% elif it.last_status == 'fail' %}
+            <span class="pill bg-rose-100 text-rose-800" title="{{ it.last_error or '' }}">✕ fail</span>
+          {% else %}
+            <span class="pill bg-amber-100 text-amber-800">noch nicht versucht</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="font-medium">{{ it.host }}</div>
+          {% if it.label %}<div class="text-xs text-zinc-500">{{ it.label }}</div>{% endif %}
+        </td>
+        <td class="text-xs font-mono text-zinc-700">
+          {{ it.username_env }}<br>
+          <span class="text-zinc-400">{{ it.password_env }}</span>
+        </td>
+        <td class="text-xs text-zinc-500">
+          {% if it.last_attempt_at %}{{ it.last_attempt_at.strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}
+        </td>
+        <td class="text-right whitespace-nowrap">
+          <a href="/admin/portal-logins/{{ it.id }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+          <form method="post" action="/admin/portal-logins/{{ it.id }}/delete" class="inline"
+                onsubmit="return confirm('Login fuer {{ it.host }} loeschen?');">
+            <button class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Loeschen">🗑</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card p-5 mt-6 text-sm">
+  <h3 class="font-semibold mb-2">CSS-Selektoren finden</h3>
+  <ol class="list-decimal pl-5 text-zinc-600 space-y-1">
+    <li>Login-Seite des Portals im Browser oeffnen, DevTools (F12) starten.</li>
+    <li>Per <em>Rechtsklick → Untersuchen</em> auf das Benutzername-Feld - der dargestellte HTML-Tag liefert den Selektor (z.B. <code>input[name='user[email]']</code>).</li>
+    <li>Dasselbe fuer Passwort-Feld + Login-Button.</li>
+    <li><strong>Success-Selektor:</strong> nach Login einen Selektor finden, der NUR im eingeloggten Zustand existiert (z.B. <code>a[href*='logout']</code>). Ohne wird der Login als erfolgreich angenommen.</li>
+  </ol>
+</div>
+
+{% endblock %}

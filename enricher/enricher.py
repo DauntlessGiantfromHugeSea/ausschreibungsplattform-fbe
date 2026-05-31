@@ -41,12 +41,45 @@ except ImportError:  # pragma: no cover
 
 from portal_logins import load_config as _load_login_cfg, find_config_for as _find_login_cfg, perform_login as _perform_login
 
-PORTAL_LOGINS = _load_login_cfg()
-if PORTAL_LOGINS:
-    log = logging.getLogger("enricher")
-    log.info("Portal-Logins konfiguriert fuer: %s", ", ".join(PORTAL_LOGINS.keys()))
+# Fallback: ENV-basierte Logins (nur wenn die Plattform keine liefert).
+_ENV_LOGINS = _load_login_cfg()
 # In-Memory-Set: pro Container-Lifetime, fuer welche Domains schon eingeloggt wurde.
 _LOGGED_IN: set[str] = set()
+# Cache der Logins aus der Plattform-DB - alle 60s neu geholt.
+_REMOTE_LOGINS: dict = {}
+_REMOTE_LOGINS_LAST_FETCH: float = 0.0
+
+
+def get_portal_logins() -> dict:
+    """Liefert das aktuelle Login-Set: Plattform-DB hat Vorrang vor ENV."""
+    global _REMOTE_LOGINS, _REMOTE_LOGINS_LAST_FETCH
+    now = time.time()
+    if now - _REMOTE_LOGINS_LAST_FETCH > 60:
+        try:
+            r = http.get("/api/internal/portal-logins")
+            r.raise_for_status()
+            items = r.json()
+            _REMOTE_LOGINS = {it["host"]: it for it in items if it.get("host")}
+            _REMOTE_LOGINS_LAST_FETCH = now
+        except Exception as exc:
+            log.info("Konnte Portal-Logins-API nicht abrufen: %s (nutze ENV-Fallback)", exc)
+    if _REMOTE_LOGINS:
+        return _REMOTE_LOGINS
+    return _ENV_LOGINS
+
+
+def report_login_result(login_id: int | None, ok: bool, error: str = "") -> None:
+    """Meldet einen Login-Versuch an die Plattform zurueck (nur fuer DB-Logins)."""
+    if not login_id:
+        return
+    try:
+        http.post(
+            f"/api/internal/portal-logins/{login_id}/result",
+            json={"ok": ok, "error": error},
+            timeout=5,
+        )
+    except Exception:
+        pass
 
 
 load_dotenv()
@@ -343,14 +376,18 @@ def deep_crawl(pw, url: str) -> list[tuple[str, str, str]]:
         # 0) Falls fuer diesen Host ein Login konfiguriert ist und wir hier
         #    noch nicht eingeloggt sind: einmal einloggen, Cookies bleiben
         #    im ctx fuer alle folgenden Seiten dieser Domain.
-        login_key, login_conf = _find_login_cfg(url, PORTAL_LOGINS)
+        portal_logins = get_portal_logins()
+        login_key, login_conf = _find_login_cfg(url, portal_logins)
         if login_conf and login_key not in _LOGGED_IN:
             log.info("Login-Versuch fuer Domain %s", login_key)
-            if _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS):
+            ok = _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS)
+            if ok:
                 _LOGGED_IN.add(login_key)
                 log.info("Login erfolgreich fuer %s", login_key)
+                report_login_result(login_conf.get("id"), True)
             else:
                 log.warning("Login fehlgeschlagen fuer %s - fahre ohne Session fort.", login_key)
+                report_login_result(login_conf.get("id"), False, "selector or credentials")
 
         # 1) Hauptseite
         page.goto(url, wait_until="networkidle")

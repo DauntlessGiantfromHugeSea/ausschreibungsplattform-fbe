@@ -252,3 +252,36 @@ class TenderEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     tender = relationship("Tender", backref="events")
+
+
+class PortalLogin(Base):
+    """Admin-pflegbare Login-Konfiguration pro Portal.
+
+    Der Enricher-Container holt diese ueber /api/internal/portal-logins.
+    Passwoerter liegen im Klartext (gleicher Threat-Level wie .env auf
+    dem selben Server) - werden im UI maskiert dargestellt und niemals
+    geloggt.
+    """
+    __tablename__ = "portal_logins"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    host = Column(String(200), nullable=False, unique=True)
+    label = Column(String(200), nullable=True)
+    login_url = Column(String(500), nullable=False)
+    username_selector = Column(String(500), nullable=False)
+    password_selector = Column(String(500), nullable=False)
+    submit_selector = Column(String(500), nullable=False)
+    success_selector = Column(String(500), nullable=True)
+    # Name der ENV-Variablen, NICHT der Wert. Plattform liest os.environ
+    # beim Internal-API-Abruf und schickt den resolvten Wert.
+    username_env = Column(String(120), nullable=False)
+    password_env = Column(String(120), nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)
+    # Vom Enricher gesetzt bei Login-Versuchen.
+    last_attempt_at = Column(DateTime, nullable=True)
+    last_status = Column(String(50), nullable=True)  # 'ok' | 'fail' | None
+    last_error = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )

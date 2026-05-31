@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}{{ 'Neuer Login' if is_new else 'Login bearbeiten' }} – FBE Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <a href="/admin/portal-logins" class="hover:text-zinc-900">Portal-Logins</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">{{ 'Neu' if is_new else item.host }}</span>
+</nav>
+
+<h1 class="text-2xl font-semibold tracking-tight mb-6">
+  {{ 'Neuer Portal-Login' if is_new else 'Login bearbeiten' }}
+</h1>
+
+<form method="post" action="/admin/portal-logins/save" class="space-y-6 max-w-3xl">
+  {% if not is_new %}
+    <input type="hidden" name="portal_id" value="{{ item.id }}">
+  {% endif %}
+
+  <div class="card p-6 space-y-4">
+    <h3 class="text-base font-semibold">Portal</h3>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Host (Domain) *</label>
+        <input class="input" type="text" name="host" required maxlength="200"
+               value="{{ item.host if item else '' }}"
+               placeholder="evergabe.de"
+               {% if not is_new %}readonly{% endif %}>
+        <div class="text-xs text-zinc-400 mt-1">
+          Ohne Protokoll, nur Domain. Wird als Suffix gematcht
+          (z.B. <code>evergabe.de</code> trifft auch <code>www.evergabe.de</code>).
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Anzeige-Name (optional)</label>
+        <input class="input" type="text" name="label" maxlength="200"
+               value="{{ item.label if item and item.label else '' }}"
+               placeholder="evergabe.de (Cosinex)">
+      </div>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Login-URL *</label>
+      <input class="input" type="url" name="login_url" required maxlength="500"
+             value="{{ item.login_url if item else '' }}"
+             placeholder="https://www.evergabe.de/login">
+    </div>
+  </div>
+
+  <div class="card p-6 space-y-4">
+    <h3 class="text-base font-semibold">Zugangsdaten (aus .env)</h3>
+    <p class="text-xs text-zinc-500">
+      Trag hier nur die <strong>Namen</strong> der ENV-Variablen ein. Die eigentlichen Werte
+      kommen aus <code>/root/ausschreibungsplattform-fbe/.env</code> auf dem Server — die Plattform
+      löst sie beim Abruf des Enrichers auf. Nichts Sensibles in der DB.
+    </p>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">ENV-Variable Benutzername *</label>
+        <input class="input font-mono text-sm" type="text" name="username_env" required maxlength="120"
+               value="{{ item.username_env if item else '' }}"
+               placeholder="EVERGABE_USER" autocomplete="off">
+        <div class="text-xs text-zinc-400 mt-1">In .env: <code>EVERGABE_USER=foo@example.com</code></div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">ENV-Variable Passwort *</label>
+        <input class="input font-mono text-sm" type="text" name="password_env" required maxlength="120"
+               value="{{ item.password_env if item else '' }}"
+               placeholder="EVERGABE_PASS" autocomplete="off">
+        <div class="text-xs text-zinc-400 mt-1">In .env: <code>EVERGABE_PASS=geheim</code></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-6 space-y-4">
+    <h3 class="text-base font-semibold">CSS-Selektoren</h3>
+    <p class="text-xs text-zinc-500">
+      Mit DevTools (F12) am Login-Formular die Selektoren herausfinden.
+      Klassisch: <code>input[name='...']</code> oder <code>#id</code>.
+    </p>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Username-Feld-Selektor *</label>
+      <input class="input font-mono text-sm" type="text" name="username_selector" required maxlength="500"
+             value="{{ item.username_selector if item else '' }}"
+             placeholder="input[name='user[email]']">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Passwort-Feld-Selektor *</label>
+      <input class="input font-mono text-sm" type="text" name="password_selector" required maxlength="500"
+             value="{{ item.password_selector if item else '' }}"
+             placeholder="input[name='user[password]']">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Submit-Button-Selektor *</label>
+      <input class="input font-mono text-sm" type="text" name="submit_selector" required maxlength="500"
+             value="{{ item.submit_selector if item else '' }}"
+             placeholder="button[type='submit']">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Erfolgs-Selektor (optional, aber empfohlen)</label>
+      <input class="input font-mono text-sm" type="text" name="success_selector" maxlength="500"
+             value="{{ item.success_selector if item and item.success_selector else '' }}"
+             placeholder="a[href*='logout']">
+      <div class="text-xs text-zinc-400 mt-1">
+        Element, das nur nach erfolgreichem Login existiert. Wird vom Enricher zur Pruefung genutzt.
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-6">
+    <label class="inline-flex items-center gap-2">
+      <input type="checkbox" name="enabled" {% if not item or item.enabled %}checked{% endif %}
+             class="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-500">
+      <span class="text-sm">Login aktiv (sonst ignoriert der Enricher diesen Eintrag)</span>
+    </label>
+  </div>
+
+  {% if item and item.last_status %}
+  <div class="card p-4 text-sm">
+    <strong>Letzter Versuch:</strong>
+    {% if item.last_status == 'ok' %}
+      <span class="text-emerald-700">✓ ok</span>
+    {% else %}
+      <span class="text-rose-700">✕ fail</span>
+      {% if item.last_error %}<span class="text-zinc-500"> — {{ item.last_error }}</span>{% endif %}
+    {% endif %}
+    am {{ item.last_attempt_at.strftime('%d.%m.%Y %H:%M') if item.last_attempt_at }}
+  </div>
+  {% endif %}
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn-primary">Speichern</button>
+    <a href="/admin/portal-logins" class="btn-ghost">Abbrechen</a>
+  </div>
+</form>
+
+{% endblock %}

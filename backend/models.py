@@ -276,6 +276,11 @@ class PortalLogin(Base):
     # Sensitiv-Feldern (Passwort-Hashes). Der UI maskiert das Eingabefeld.
     username = Column(String(200), nullable=False, default="")
     password = Column(String(500), nullable=False, default="")
+    # Altlasten aus dem frueheren env-name-Schema. Werden nicht mehr genutzt,
+    # bleiben aber im Model damit der INSERT bestehende DBs mit
+    # NOT NULL-Constraint nicht bricht.
+    username_env = Column(String(120), nullable=False, default="")
+    password_env = Column(String(120), nullable=False, default="")
     enabled = Column(Boolean, default=True, nullable=False)
     # Vom Enricher gesetzt bei Login-Versuchen.
     last_attempt_at = Column(DateTime, nullable=True)

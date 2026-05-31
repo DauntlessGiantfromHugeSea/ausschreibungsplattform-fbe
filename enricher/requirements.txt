@@ -1,5 +1,7 @@
 httpx>=0.27
-playwright>=1.46
+# Playwright-Pip-Version muss zur Base-Image-Version passen, sonst sucht
+# der Client einen Chromium-Pfad, den das Image nicht hat.
+playwright==1.60.0
 openai>=1.50
 python-dotenv>=1.0
 beautifulsoup4>=4.12

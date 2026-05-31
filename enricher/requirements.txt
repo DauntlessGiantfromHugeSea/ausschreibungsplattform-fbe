@@ -3,3 +3,4 @@ playwright>=1.46
 openai>=1.50
 python-dotenv>=1.0
 beautifulsoup4>=4.12
+pdfminer.six>=20240706

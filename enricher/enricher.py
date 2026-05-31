@@ -18,18 +18,26 @@ Konfiguration via Environment / .env:
 """
 from __future__ import annotations
 
+import io
 import logging
 import os
+import re
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
 from playwright.sync_api import sync_playwright
+
+try:
+    from pdfminer.high_level import extract_text as pdf_extract_text
+except ImportError:  # pragma: no cover
+    pdf_extract_text = None
 
 
 load_dotenv()
@@ -48,6 +56,32 @@ ENRICH_DIR = Path(os.environ.get("ENRICH_DIR", "/data/enrich"))
 POLL_INTERVAL_S = int(os.environ.get("POLL_INTERVAL_S", "600"))
 BATCH_LIMIT = int(os.environ.get("BATCH_LIMIT", "5"))
 PAGE_TIMEOUT_MS = int(os.environ.get("PAGE_TIMEOUT_MS", "30000"))
+# Deep-Crawl-Tuning
+MAX_SUBPAGES = int(os.environ.get("MAX_SUBPAGES", "4"))
+MAX_PDFS = int(os.environ.get("MAX_PDFS", "3"))
+MAX_TEXT_PER_SOURCE = int(os.environ.get("MAX_TEXT_PER_SOURCE", "6000"))
+MAX_TOTAL_TEXT = int(os.environ.get("MAX_TOTAL_TEXT", "22000"))
+
+# Linktext-Pattern, die wir als 'mehr Details' interpretieren (case-insensitive).
+DETAIL_LINK_PATTERNS = [
+    r"mehr.*(anzeigen|info|details?)?",
+    r"details?",
+    r"vergabeunterlagen?",
+    r"leistungsverzeichnis",
+    r"leistungsbeschreibung",
+    r"bekanntmachung(stext)?",
+    r"ausschreibungsunterlagen",
+    r"kontakt",
+    r"auftraggeber",
+    r"objekt(beschreibung)?",
+    r"weiterlesen",
+    r"\bvollständig",
+    r"aufklappen",
+    r"einsehen",
+]
+DETAIL_LINK_RE = re.compile("|".join(DETAIL_LINK_PATTERNS), re.IGNORECASE)
+# Expander-Buttons: wir klicken alles, was diesen Pattern enthaelt.
+EXPAND_BUTTON_PATTERNS = ["mehr", "anzeigen", "aufklappen", "weiterlesen", "details", "akzeptieren"]
 
 if not TOKEN:
     log.error("ENRICHER_TOKEN ist nicht gesetzt - Abbruch.")
@@ -67,7 +101,8 @@ http = httpx.Client(
 
 
 PROMPT = """Du bist ein Spezialist fuer oeffentliche Bauausschreibungen (Tiefbau, Erdarbeiten, Leitungsbau).
-Aus dem unten gerenderten HTML-Inhalt einer Ausschreibungs-Detailseite extrahiere strukturiert die wichtigsten Informationen.
+Aus dem unten gesammelten Material (Hauptseite, Unterseiten, ggf. PDF-Anhaenge) extrahiere strukturiert die wichtigsten Informationen.
+Die Quellen sind durch [MAIN]/[SUB]/[PDF]-Tags getrennt. Nutze ALLE Quellen, nicht nur die erste.
 
 Ausgabe-Format: Markdown, exakt diese Abschnitte (auch wenn ein Feld leer bleibt):
 
@@ -83,20 +118,25 @@ Ausgabe-Format: Markdown, exakt diese Abschnitte (auch wenn ein Feld leer bleibt
 - **Geschaetzter Auftragswert:** ...
 - **Verfahrensart:** ... (oeffentlich, beschraenkt, freihaendig, etc.)
 - **CPV-Codes:** ...
+- **Kontakt (Vergabestelle):** Name / Telefon / Mail wenn im Material zu finden
 
 ## Leistungsbeschreibung
-3-6 Saetze, was ausgeschrieben ist - was, wo, in welchem Umfang.
+6-12 Saetze, was ausgeschrieben ist - was, wo, Umfang, technische Anforderungen.
+Konkrete Mengen / Stueckzahlen / Flaechen / Massnahmen explizit aufgreifen.
 
 ## Gewerke & Schluesselbegriffe
-Bullet-Liste aller fachlich relevanten Begriffe (Tiefbau, Verfuellung, Spundwand, ZFSV, Fluessigboden, Leitungsbau, etc.) - aber nur die, die im Text wirklich vorkommen.
+Bullet-Liste aller fachlich relevanten Begriffe (Tiefbau, Verfuellung, Spundwand, ZFSV, Fluessigboden, Leitungsbau, etc.) - aber nur die, die im Material wirklich vorkommen.
 
 ## Submission-Hinweise
 Wie wird abgegeben? Welche Unterlagen werden gefordert? Welche Plattform?
 
 ## Bewertung fuer FBE
-Kurze Einschaetzung (max. 3 Saetze): warum ist das fuer Fluessigboden Engineering relevant - oder warum nicht?
+Kurze Einschaetzung (max. 3 Saetze): warum ist das fuer Fluessigboden Engineering relevant - oder warum nicht? Welche Hebel sieht man (ZFSV, Verfuellung, Leitungsgraeben)?
 
-Wenn der HTML-Inhalt offensichtlich Login-/Cookie-Wall ist und nichts Inhaltliches enthaelt, schreibe stattdessen:
+## Verwendete Quellen
+Bullet-Liste der URLs/PDF-Pfade, die du tatsaechlich genutzt hast.
+
+Wenn das gesamte Material offensichtlich nur Login-/Cookie-Wall ist und nichts Inhaltliches enthaelt:
 "## Hinweis\nDie Detailseite ist nicht oeffentlich zugaenglich (Login erforderlich)."
 """
 
@@ -111,42 +151,215 @@ def fetch_tenders_to_enrich() -> list[dict]:
         return []
 
 
-def render_page(pw, url: str) -> str:
-    """Laedt die URL mit Chromium und liefert den extrahierten Text-Inhalt."""
+def _kill_overlays(page) -> None:
+    """Cookie-Banner / Consent-Overlays best-effort entfernen."""
+    try:
+        page.evaluate("""
+            const sel = '[id*=cookie i], [class*=cookie i], [id*=consent i], [class*=consent i], [id*=overlay i], [class*=overlay i]';
+            document.querySelectorAll(sel).forEach(e => e.remove());
+        """)
+    except Exception:
+        pass
+
+
+def _auto_expand(page) -> int:
+    """Klickt alle Buttons/Toggles, deren Beschriftung auf 'Mehr/Details' deutet.
+
+    Liefert die Anzahl der ausgefuehrten Klicks. Best-effort, ohne Exception.
+    """
+    clicked = 0
+    for pat in EXPAND_BUTTON_PATTERNS:
+        try:
+            # Buttons + Links + Summary-Elemente
+            locator = page.locator(
+                f"button:has-text('{pat}'), summary:has-text('{pat}'), a:has-text('{pat}')",
+                has_text=re.compile(pat, re.IGNORECASE),
+            )
+            n = min(locator.count(), 10)
+            for i in range(n):
+                try:
+                    locator.nth(i).click(timeout=2000, no_wait_after=True)
+                    clicked += 1
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    if clicked:
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+    return clicked
+
+
+def _page_text(page, limit: int = MAX_TEXT_PER_SOURCE) -> str:
+    """Liefert den sichtbaren Text der aktuellen Seite (HTML -> Text)."""
+    try:
+        html = page.content()
+    except Exception:
+        return ""
+    return _html_to_text(html, limit)
+
+
+def _html_to_text(html: str, limit: int) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript", "svg"]):
+        tag.decompose()
+    text = soup.get_text("\n", strip=True)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    text = "\n".join(lines)
+    if len(text) > limit:
+        text = text[:limit] + "\n[... gekuerzt ...]"
+    return text
+
+
+def _find_detail_subpages(page, base_url: str, max_n: int) -> list[str]:
+    """Sammelt Sub-URLs der gleichen Domain, deren Linktext auf 'Details'
+    hindeutet. Max max_n eindeutige URLs."""
+    base_host = urlparse(base_url).netloc
+    found, seen = [], set()
+    try:
+        html = page.content()
+    except Exception:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    for a in soup.find_all("a", href=True):
+        if len(found) >= max_n:
+            break
+        text = (a.get_text(" ", strip=True) or "")[:120]
+        href = a["href"].strip()
+        if not text or not href or href.startswith(("javascript:", "mailto:", "#")):
+            continue
+        full = urljoin(base_url, href)
+        if urlparse(full).netloc != base_host:
+            continue
+        if full == base_url or full in seen:
+            continue
+        if not DETAIL_LINK_RE.search(text):
+            continue
+        seen.add(full)
+        found.append(full)
+    return found
+
+
+def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
+    """Sammelt PDF-Links der gleichen Domain."""
+    base_host = urlparse(base_url).netloc
+    out, seen = [], set()
+    try:
+        html = page.content()
+    except Exception:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    for a in soup.find_all("a", href=True):
+        if len(out) >= max_n:
+            break
+        href = a["href"].strip()
+        if not href or "#" in href and not href.lower().endswith(".pdf"):
+            href = href.split("#", 1)[0]
+        if not href:
+            continue
+        full = urljoin(base_url, href)
+        if not full.lower().endswith(".pdf") and ".pdf?" not in full.lower():
+            continue
+        if urlparse(full).netloc != base_host:
+            continue
+        if full in seen:
+            continue
+        seen.add(full)
+        out.append(full)
+    return out
+
+
+def _download_and_extract_pdf(ctx, url: str) -> str:
+    """Laedt ein PDF ueber den Playwright-Kontext (= mit Session-Cookies)
+    und extrahiert Text. Liefert leer bei Fehler."""
+    if pdf_extract_text is None:
+        return ""
+    try:
+        req = ctx.request
+        resp = req.get(url, timeout=PAGE_TIMEOUT_MS)
+        if resp.status >= 400:
+            return ""
+        body = resp.body()
+        if not body or len(body) < 200:
+            return ""
+        text = pdf_extract_text(io.BytesIO(body)) or ""
+        return _html_to_text(text, MAX_TEXT_PER_SOURCE) if text else ""
+    except Exception as exc:
+        log.info("PDF-Fehler %s: %s", url[:80], exc)
+        return ""
+
+
+def deep_crawl(pw, url: str) -> list[tuple[str, str, str]]:
+    """Laedt url + bis zu MAX_SUBPAGES sinnvolle Unterseiten + bis zu MAX_PDFS PDFs.
+
+    Liefert Liste von (kind, source_url, text). kind in {'main','sub','pdf'}.
+    """
+    sources: list[tuple[str, str, str]] = []
     browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
     try:
         ctx = browser.new_context(
             user_agent="Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
             locale="de-DE",
+            accept_downloads=True,
         )
         page = ctx.new_page()
         page.set_default_timeout(PAGE_TIMEOUT_MS)
+
+        # 1) Hauptseite
         page.goto(url, wait_until="networkidle")
-        # Cookie-Banner einfach via JS killen (best-effort).
-        try:
-            page.evaluate(
-                "document.querySelectorAll('[id*=cookie i], [class*=cookie i], [class*=consent i]').forEach(e=>e.remove())"
-            )
-        except Exception:
-            pass
-        html = page.content()
-        return html
+        _kill_overlays(page)
+        _auto_expand(page)
+        sources.append(("main", page.url, _page_text(page)))
+
+        # 2) PDF-Links sammeln (auf der Main-Page, bevor wir wegnavigieren)
+        pdf_urls = _find_pdf_links(page, url, MAX_PDFS)
+        sub_urls = _find_detail_subpages(page, url, MAX_SUBPAGES)
+
+        # 3) Unterseiten besuchen
+        for sub in sub_urls:
+            try:
+                page.goto(sub, wait_until="networkidle")
+                _kill_overlays(page)
+                _auto_expand(page)
+                # Auch von Unterseiten PDFs sammeln (mit Restbudget)
+                rest = max(0, MAX_PDFS - len(pdf_urls))
+                if rest:
+                    for u in _find_pdf_links(page, sub, rest):
+                        if u not in pdf_urls:
+                            pdf_urls.append(u)
+                sources.append(("sub", sub, _page_text(page)))
+            except Exception as exc:
+                log.info("Sub-Page %s fehlgeschlagen: %s", sub[:80], exc)
+                continue
+
+        # 4) PDFs laden + extrahieren
+        for pu in pdf_urls[:MAX_PDFS]:
+            txt = _download_and_extract_pdf(ctx, pu)
+            if txt:
+                sources.append(("pdf", pu, txt))
+
+        return sources
     finally:
         browser.close()
 
 
-def html_to_text(html: str, limit_chars: int = 18000) -> str:
-    """Reduziert HTML auf lesbaren Text - LLM-Eingabe-Budget."""
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript", "svg", "footer", "nav", "header"]):
-        tag.decompose()
-    text = soup.get_text("\n", strip=True)
-    # Mehrfach-Leerzeilen reduzieren
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    text = "\n".join(lines)
-    if len(text) > limit_chars:
-        text = text[:limit_chars] + "\n[... gekuerzt ...]"
-    return text
+def combine_sources(sources: list[tuple[str, str, str]]) -> str:
+    """Setzt die gesammelten Texte zu einer LLM-Eingabe zusammen, mit
+    Quellen-Tags. Respektiert MAX_TOTAL_TEXT."""
+    chunks, used = [], 0
+    for kind, src, text in sources:
+        if not text:
+            continue
+        header = f"\n\n--- [{kind.upper()}] {src} ---\n"
+        budget = MAX_TOTAL_TEXT - used - len(header)
+        if budget <= 200:
+            break
+        piece = text if len(text) <= budget else text[:budget] + "\n[... gekuerzt ...]"
+        chunks.append(header + piece)
+        used += len(header) + len(piece)
+    return "".join(chunks).strip()
 
 
 def llm_extract(tender: dict, text: str) -> tuple[str, str]:
@@ -198,15 +411,20 @@ def process_one(pw, tender: dict) -> None:
     if not url:
         post_result(tid, "", "", ok=False, error="leere URL")
         return
-    log.info("[%s] rendere %s", tid, url[:120])
+    log.info("[%s] Deep-Crawl Start: %s", tid, url[:120])
     try:
-        html = render_page(pw, url)
+        sources = deep_crawl(pw, url)
     except Exception as exc:
-        log.warning("[%s] Render-Fehler: %s", tid, exc)
-        post_result(tid, "", "", ok=False, error=f"render: {exc}")
+        log.warning("[%s] Crawl-Fehler: %s", tid, exc)
+        post_result(tid, "", "", ok=False, error=f"crawl: {exc}")
         return
 
-    text = html_to_text(html)
+    n_main = sum(1 for k, _, _ in sources if k == "main")
+    n_sub = sum(1 for k, _, _ in sources if k == "sub")
+    n_pdf = sum(1 for k, _, _ in sources if k == "pdf")
+    log.info("[%s] gesammelt: %d main, %d sub, %d pdf", tid, n_main, n_sub, n_pdf)
+
+    text = combine_sources(sources)
     if len(text) < 200:
         log.info("[%s] zu wenig Inhalt (%d Zeichen) - markiere als Login-Wall", tid, len(text))
         post_result(tid, "", "", ok=False, error=f"thin content ({len(text)}b)")

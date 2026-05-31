@@ -145,32 +145,20 @@ portals:
     - baugrube
 - name: Vergabe Baden-Württemberg
   enabled: true
-  scraper: crawl_html
-  base_url: https://vergabe.service-bw.de
+  scraper: cosinex
+  base_url: https://www.vergabeportal-bw.de
   strategy: scrape
-  notes: 'DEAKTIVIERT: Domain liefert DNS-Fehler (Name or service not known).
-
-    Weder vergabe.bwl.de noch vergabe.service-bw.de existieren noch.
-
-    Aktuelle BW-Vergabeplattform muss recherchiert und neue base_url
-
-    gesetzt werden, dann auf enabled: true umstellen.
-
-    '
+  notes: "Cosinex VMP Satellite BW. Die alten Domains vergabe.bwl.de /\nvergabe.service-bw.de existieren nicht mehr - das aktive Portal\nlaeuft unter vergabeportal-bw.de.\n\nListing-Tabelle (Cosinex welcome.do-Pattern):\n  /Satellite/company/welcome.do?method=showTable&fromSearch=1&...\n\nDetail-URL-Schemas (zur Info):\n  /Satellite/public/company/project/<ID>/de/overview\n  /Satellite/notice/<ID>\n  /Satellite/notice/<ID>/documents\n"
   config:
     user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    variant: satellite
     listing_paths:
-    - /Ausschreibungen.aspx
-    - /Vergabesuche.aspx
-    - /
-    link_selector: a[href]
-    link_pattern: (ausschreibung|bekanntmachung|notice|tender|vergabe|auftrag)
-    max_details: 30
-    request_delay_s: 0.5
-    detail_title_selector: h1, .title
-    detail_authority_selector: .vergabestelle, .buyer, .auftraggeber
-    detail_location_selector: .ort, .place, .erfuellungsort
-    detail_deadline_selector: .frist, .deadline, .angebotsfrist
+    - /Satellite/company/welcome.do?method=showTable&fromSearch=1&tableSortPROJECT_RESULT=1&tableSortAttributePROJECT_RESULT=publicationDate
+    - /Satellite/company/welcome.do
+    - /Satellite/notice
+    - /Satellite/
+    max_pages: 3
+    filter_by_terms: true
 - name: Auftragsbörse Bayern
   enabled: true
   scraper: bayern

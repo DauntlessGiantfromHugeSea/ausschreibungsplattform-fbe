@@ -386,27 +386,63 @@ def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
     return out
 
 
-def _download_and_extract_pdf(ctx, url: str) -> str:
+def _download_and_extract_pdf(ctx, url: str) -> tuple[str, bytes, str]:
     """Laedt ein PDF ueber den Playwright-Kontext (= mit Session-Cookies)
-    und extrahiert Text. Liefert leer bei Fehler."""
-    if pdf_extract_text is None:
-        return ""
+    und extrahiert Text. Liefert (extracted_text, body, content_type).
+    body/content_type leer bei Fehler."""
     try:
         req = ctx.request
         resp = req.get(url, timeout=PAGE_TIMEOUT_MS)
         if resp.status >= 400:
-            return ""
+            return "", b"", ""
         body = resp.body()
         if not body or len(body) < 200:
-            return ""
-        text = pdf_extract_text(io.BytesIO(body)) or ""
-        return _html_to_text(text, MAX_TEXT_PER_SOURCE) if text else ""
+            return "", b"", ""
+        ct = ""
+        try:
+            ct = resp.headers.get("content-type", "")
+        except Exception:
+            pass
+        text = ""
+        if pdf_extract_text:
+            try:
+                text = pdf_extract_text(io.BytesIO(body)) or ""
+                text = _html_to_text(text, MAX_TEXT_PER_SOURCE) if text else ""
+            except Exception:
+                text = ""
+        return text, body, ct
     except Exception as exc:
         log.info("PDF-Fehler %s: %s", url[:80], exc)
-        return ""
+        return "", b"", ""
 
 
-def deep_crawl(pw, url: str) -> list[tuple[str, str, str]]:
+def _upload_attachment(tender_id: int, url: str, body: bytes, content_type: str, extracted_text: str) -> None:
+    """Speichert Anhang via Internal-API auf der Plattform. Failed silently."""
+    import base64
+    from urllib.parse import urlparse, unquote
+    if not body:
+        return
+    # Filename aus URL
+    path = urlparse(url).path
+    filename = unquote(path.rsplit("/", 1)[-1]) or "anhang.pdf"
+    try:
+        http.post(
+            f"/api/internal/tenders/{tender_id}/attachments",
+            json={
+                "filename": filename,
+                "source_url": url,
+                "content_type": content_type or "application/pdf",
+                "size_bytes": len(body),
+                "content_b64": base64.b64encode(body).decode("ascii"),
+                "extracted_text": extracted_text[:2000] if extracted_text else "",
+            },
+            timeout=30,
+        )
+    except Exception as exc:
+        log.info("Attachment-Upload fehlgeschlagen (%s): %s", filename, exc)
+
+
+def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, str, str]]:
     """Laedt url + bis zu MAX_SUBPAGES sinnvolle Unterseiten + bis zu MAX_PDFS PDFs.
 
     Liefert Liste von (kind, source_url, text). kind in {'main','sub','pdf'}.
@@ -465,9 +501,11 @@ def deep_crawl(pw, url: str) -> list[tuple[str, str, str]]:
                 log.info("Sub-Page %s fehlgeschlagen: %s", sub[:80], exc)
                 continue
 
-        # 4) PDFs laden + extrahieren
+        # 4) PDFs laden + extrahieren + via Internal-API als Anhang speichern
         for pu in pdf_urls[:MAX_PDFS]:
-            txt = _download_and_extract_pdf(ctx, pu)
+            txt, body, ct = _download_and_extract_pdf(ctx, pu)
+            if body and tender_id:
+                _upload_attachment(tender_id, pu, body, ct, txt)
             if txt:
                 sources.append(("pdf", pu, txt))
 
@@ -549,7 +587,7 @@ def process_one(pw, tender: dict, knowledge: str = "") -> None:
         return
     log.info("[%s] Deep-Crawl Start: %s", tid, url[:120])
     try:
-        sources = deep_crawl(pw, url)
+        sources = deep_crawl(pw, url, tender_id=tid)
     except Exception as exc:
         log.warning("[%s] Crawl-Fehler: %s", tid, exc)
         post_result(tid, "", "", ok=False, error=f"crawl: {exc}")

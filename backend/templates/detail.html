@@ -202,6 +202,34 @@
     </div>
     {% endif %}
 
+    {% if tender.attachments %}
+    <!-- Vom Enricher heruntergeladene Vergabeunterlagen -->
+    <div class="card p-6" id="attachments">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-semibold">📎 Anhänge ({{ tender.attachments|length }})</h3>
+        <span class="text-xs text-zinc-500">vom Enricher heruntergeladen</span>
+      </div>
+      <ul class="divide-y divide-zinc-200">
+        {% for a in tender.attachments %}
+        <li class="py-2 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <a href="/tender/{{ tender.id }}/attachment/{{ a.id }}" target="_blank"
+               class="text-sm font-medium text-brand-700 hover:underline truncate block">
+              {{ a.filename }}
+            </a>
+            <div class="text-xs text-zinc-500">
+              {{ '%.1f KB'|format((a.size_bytes or 0) / 1024) }} ·
+              <a href="{{ a.source_url }}" target="_blank" rel="noopener" class="hover:underline">Original</a>
+            </div>
+          </div>
+          <a href="/tender/{{ tender.id }}/attachment/{{ a.id }}" target="_blank"
+             class="btn-ghost text-xs shrink-0">↓ Download</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
     <!-- Tiefe Claude-Analyse (FBE-Bewertung) -->
     <div class="card p-6" id="claude-analysis">
       <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">

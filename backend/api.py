@@ -1405,14 +1405,14 @@ def admin_broadcast_post(
         '<img src="{}" alt="{}" style="height:36px;display:block;">'.format(
             _html.escape(logo_url), company_name)
         if logo_url else
-        '<div style="font-weight:700;color:#3f5a30;font-size:18px;">{}</div>'.format(company_name)
+        '<div style="font-weight:700;color:#00191a;font-size:18px;">{}</div>'.format(company_name)
     )
 
     footer_links = []
     if web:
-        footer_links.append('<a href="{0}" style="color:#7eb064;text-decoration:none;">{0}</a>'.format(_html.escape(web)))
+        footer_links.append('<a href="{0}" style="color:#006566;text-decoration:none;">{0}</a>'.format(_html.escape(web)))
     if contact_email:
-        footer_links.append('<a href="mailto:{0}" style="color:#7eb064;text-decoration:none;">{0}</a>'.format(_html.escape(contact_email)))
+        footer_links.append('<a href="mailto:{0}" style="color:#006566;text-decoration:none;">{0}</a>'.format(_html.escape(contact_email)))
     footer_sep = " &nbsp;·&nbsp; ".join(footer_links)
 
     body_html = (
@@ -1434,7 +1434,7 @@ def admin_broadcast_post(
             '</td></tr>'
             # Badge
             '<tr><td style="padding:24px 28px 0 28px;">'
-              '<span style="display:inline-block;padding:4px 10px;background:#eaf3df;color:#3f5a30;'
+              '<span style="display:inline-block;padding:4px 10px;background:#e6f2f2;color:#00191a;'
               'border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;">'
               'Plattform-Update</span>'
             '</td></tr>'

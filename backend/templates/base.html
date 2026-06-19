@@ -26,19 +26,23 @@
       darkMode: 'class',
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          fontFamily: {
+            sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Inter', 'sans-serif'],
+          },
           colors: {
+            // Brand-Palette uebernommen aus Teilnahmemanagement (Teal/Tuerkis).
+            // Primaerton 500 = rgb(0, 126, 128).
             brand: {
-              50:  '#f4f9ef',
-              100: '#e6f2da',
-              200: '#cce5b6',
-              300: '#b3d894',
-              400: '#a3cf85',
-              500: '#92c57a',
-              600: '#7eb064',
-              700: '#6c9954',
-              800: '#587f44',
-              900: '#3f5a30',
+              50:  '#e6f2f2',
+              100: '#cce5e6',
+              200: '#99cbcd',
+              300: '#66b1b3',
+              400: '#339798',
+              500: '#007e80',
+              600: '#006566',
+              700: '#004c4d',
+              800: '#003233',
+              900: '#00191a',
             },
             accent: { 500: '#e0a83a', 600: '#c8902a' },
           },
@@ -48,7 +52,7 @@
   </script>
   <style type="text/tailwindcss">
     @layer base {
-      body { font-family: 'Inter', system-ui, sans-serif; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Inter', sans-serif; }
     }
     @layer components {
       .card { @apply bg-white dark:bg-zinc-800 rounded-[23px] border border-zinc-200/70 dark:border-zinc-700 shadow-sm dark:shadow-none; }
@@ -126,10 +130,11 @@
     .dark .text-sky-700, .dark .text-sky-800 { color: rgb(186 230 253) !important; }
     .dark .border-sky-200 { border-color: rgb(7 89 133) !important; }
 
-    .dark .bg-brand-50    { background-color: rgb(63 90 48 / 0.40) !important; }
-    .dark .bg-brand-100   { background-color: rgb(63 90 48 / 0.55) !important; }
-    .dark .text-brand-700, .dark .text-brand-800 { color: rgb(179 216 148) !important; }
-    .dark .border-brand-200 { border-color: rgb(88 127 68) !important; }
+    /* Dark-Mode-Overrides fuer die Teal-Brand-Reihe (rgb 0,126,128). */
+    .dark .bg-brand-50    { background-color: rgb(0 50 51 / 0.40) !important; }
+    .dark .bg-brand-100   { background-color: rgb(0 50 51 / 0.55) !important; }
+    .dark .text-brand-700, .dark .text-brand-800 { color: rgb(153 203 205) !important; }
+    .dark .border-brand-200 { border-color: rgb(0 76 77) !important; }
 
     /* Form-Inputs in den Templates verwenden .input - sicherstellen, dass sie
        im Dark Mode genau passen. */

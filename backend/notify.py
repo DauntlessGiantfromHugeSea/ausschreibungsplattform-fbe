@@ -541,10 +541,10 @@ def send_invite_mail(to_email: str, username: str, link: str) -> tuple[bool, str
         f"Setze dein Passwort hier (Link 24 Stunden gültig):\n{link}\n\n"
     )
     html = f"""<html><body style="font-family:Inter,system-ui,sans-serif;line-height:1.55;color:#222;max-width:600px;margin:24px auto;">
-<h2 style="color:#92c57a;">Willkommen bei FBE Ausschreibungen</h2>
+<h2 style="color:#007e80;">Willkommen bei FBE Ausschreibungen</h2>
 <p>Hallo <strong>{username}</strong>,</p>
 <p>du wurdest zur FBE-Ausschreibungsplattform eingeladen. Bitte setze dein Passwort über den folgenden Button. Der Link ist <strong>24 Stunden</strong> gültig.</p>
-<p style="margin:24px 0;"><a href="{link}" style="background:#92c57a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Passwort jetzt setzen</a></p>
+<p style="margin:24px 0;"><a href="{link}" style="background:#007e80;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Passwort jetzt setzen</a></p>
 <p style="font-size:12px;color:#666;">Falls der Button nicht geht: <a href="{link}">{link}</a></p>
 </body></html>"""
     return _send_to([to_email], "Einladung zur FBE-Ausschreibungsplattform", plain, html)
@@ -626,10 +626,10 @@ def send_password_reset_mail(to_email: str, username: str, link: str) -> tuple[b
         f"Falls nicht von dir angefordert: ignorieren — Passwort bleibt unverändert.\n"
     )
     html = f"""<html><body style="font-family:Inter,system-ui,sans-serif;line-height:1.55;color:#222;max-width:600px;margin:24px auto;">
-<h2 style="color:#92c57a;">Passwort zurücksetzen</h2>
+<h2 style="color:#007e80;">Passwort zurücksetzen</h2>
 <p>Hallo <strong>{username}</strong>,</p>
 <p>jemand hat einen Passwort-Reset angefordert. Falls du das warst, klicke auf den Button. Der Link ist <strong>1 Stunde</strong> gültig.</p>
-<p style="margin:24px 0;"><a href="{link}" style="background:#92c57a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Neues Passwort setzen</a></p>
+<p style="margin:24px 0;"><a href="{link}" style="background:#007e80;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Neues Passwort setzen</a></p>
 <p style="font-size:12px;color:#666;">Falls nicht von dir: einfach ignorieren.<br>Falls Button nicht geht: <a href="{link}">{link}</a></p>
 </body></html>"""
     return _send_to([to_email], "Passwort zurücksetzen – FBE Ausschreibungen", plain, html)

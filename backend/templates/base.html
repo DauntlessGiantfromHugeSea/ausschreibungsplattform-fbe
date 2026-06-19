@@ -140,40 +140,58 @@
       box-shadow: var(--shadow-card), inset 0 1px 0 var(--glass-border);
     }
 
-    /* Buttons */
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-      border-radius: 9999px;
+    /* Buttons - Base wird auf ALLE Varianten gelegt (nicht via Cascade),
+       damit auch class="btn-primary" allein (ohne 'btn') pill-shaped wird. */
+    .btn,
+    .btn-primary,
+    .btn-ghost,
+    .btn-secondary,
+    .btn-danger {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      border-radius: 9999px !important;
       padding: 0.6rem 1.2rem;
       font-size: 0.875rem;
       font-weight: 600;
       letter-spacing: -0.005em;
       transition: transform 0.15s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
+      cursor: pointer;
     }
-    .btn:active { transform: translateY(0.5px); }
+    .btn:active,
+    .btn-primary:active,
+    .btn-ghost:active,
+    .btn-secondary:active,
+    .btn-danger:active { transform: translateY(0.5px); }
+
     .btn-primary {
-      color: rgb(0, 50, 51);
-      background: var(--accent);
-      border: 1px solid transparent;
+      color: rgb(0, 50, 51) !important;
+      background: var(--accent) !important;
+      border: 1px solid transparent !important;
     }
-    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:hover { background: var(--accent-hover) !important; }
     .btn-primary:active { filter: brightness(0.97); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-ghost, .btn-secondary {
-      color: rgb(15, 23, 42);
-      background: #ffffff;
-      border: 1.5px solid rgba(0, 50, 51, 0.18);
+
+    .btn-ghost,
+    .btn-secondary {
+      color: rgb(15, 23, 42) !important;
+      background: #ffffff !important;
+      border: 1.5px solid rgba(0, 50, 51, 0.18) !important;
     }
-    .btn-ghost:hover, .btn-secondary:hover {
-      background: #f5f7f8;
-      border-color: rgba(0, 50, 51, 0.4);
+    .btn-ghost:hover,
+    .btn-secondary:hover {
+      background: #f5f7f8 !important;
+      border-color: rgba(0, 50, 51, 0.4) !important;
     }
+
     .btn-danger {
-      color: #fff;
-      background: #dc2626;
-      border: 1px solid transparent;
+      color: #fff !important;
+      background: #dc2626 !important;
+      border: 1px solid transparent !important;
     }
-    .btn-danger:hover { background: #b91c1c; }
+    .btn-danger:hover { background: #b91c1c !important; }
     .btn-icon {
       display: inline-flex; align-items: center; justify-content: center;
       height: 2.25rem; width: 2.25rem; border-radius: 9999px;
@@ -239,6 +257,16 @@
       color: #ffffff;
       border-color: rgba(255, 255, 255, 0.35);
     }
+    /* Solide Dropdown-Menues (Status, User, Profil) - kein Glass damit
+       Text gut lesbar bleibt und nichts durchscheint. */
+    .menu-panel-solid {
+      background: #ffffff;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 0.75rem;
+      box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.18),
+                  0 2px 6px rgba(15, 23, 42, 0.06);
+    }
+
     /* Header-Active-Highlight (Status-/Settings-/Hilfe-Icons) auf Lime */
     header.topbar .btn-icon[class*='!bg-brand-50'] {
       background: var(--accent) !important;
@@ -391,7 +419,7 @@
             <path d="M5 5h2M17 5h2M5 12h2M17 12h2M5 19h2M17 19h2"/>
           </svg>
         </button>
-        <div id="status-dropdown" class="hidden absolute right-0 mt-2 w-52 card py-1 z-50">
+        <div id="status-dropdown" class="hidden absolute right-0 mt-2 w-52 menu-panel-solid py-1 z-50">
           <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">System & Tests</div>
           <a href="/admin/status" class="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 {% if _path == '/admin/status' %}bg-zinc-50 font-medium{% endif %}">
             <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span> Status
@@ -453,10 +481,10 @@
           </span>
           <span class="hidden sm:inline">{{ _uname }}</span>
         </button>
-        <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-44 card py-1 z-50">
-          <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">Angemeldet als <strong class="text-zinc-700">{{ _uname }}</strong></div>
-          <a href="/me/notifications" class="block px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50">Meine Benachrichtigungen</a>
-          <a href="/logout" class="block px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 border-t border-zinc-100">Abmelden</a>
+        <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 py-1 z-50 menu-panel-solid">
+          <div class="px-3 py-2 text-xs text-zinc-500 border-b border-zinc-100">Angemeldet als <strong class="text-zinc-900">{{ _uname }}</strong></div>
+          <a href="/me/notifications" class="block px-3 py-2 text-sm text-zinc-800 hover:bg-zinc-100 transition">Meine Benachrichtigungen</a>
+          <a href="/logout" class="block px-3 py-2 text-sm text-rose-700 hover:bg-rose-50 border-t border-zinc-100 transition">Abmelden</a>
         </div>
       </div>
       {% endif %}

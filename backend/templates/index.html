@@ -93,19 +93,19 @@
     color: rgb(15, 23, 42);
     letter-spacing: -0.02em;
   }
-  .kpi-dot {
+  .kpi-dot,
+  .kpi-dot-rose,
+  .kpi-dot-amber,
+  .kpi-dot-emerald {
     position: absolute;
     right: -12px;
     bottom: -12px;
     width: 60px;
     height: 60px;
     border-radius: 9999px;
-    background: rgba(212, 245, 97, 0.55);
+    background: rgba(212, 245, 97, 0.55); /* Lime, fuer alle KPI-Karten gleich */
     pointer-events: none;
   }
-  .kpi-dot-rose    { background: rgba(244, 114, 182, 0.30); }
-  .kpi-dot-amber   { background: rgba(251, 191, 36, 0.30); }
-  .kpi-dot-emerald { background: rgba(52, 211, 153, 0.30); }
 </style>
 
 <!-- Portal-Status: schmale Zusammenfassung mit Link zur Status-Seite -->
@@ -179,7 +179,7 @@
         <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
       </svg>
     </button>
-    <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-72 card py-1 z-50 max-h-96 overflow-auto">
+    <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-72 menu-panel-solid py-1 z-50 max-h-96 overflow-auto">
       {% if profiles %}
         {% for p in profiles %}
           <a href="/profiles/{{ p.id }}/apply" class="block px-3 py-2 text-sm hover:bg-zinc-50">

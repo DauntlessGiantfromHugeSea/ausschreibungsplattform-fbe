@@ -39,12 +39,16 @@ class Settings(BaseSettings):
     # Werden im HTML-Mail-Footer und im Detail-Compose-Vorschau-Header
     # verwendet. Alle Felder optional - bleiben sie leer, faellt der
     # Mail-Footer auf einen generischen Hinweis zurueck.
-    company_name: str = "Flüssigboden Engineering"
+    company_name: str = "Flüssigboden Akademie"
     company_address: str = ""
     company_phone: str = ""
     company_email: str = ""
-    company_web: str = "https://fb-eng.de"
-    company_logo_url: str = "https://fb-eng.de/wp-content/uploads/2024/10/FBE_green.png"
+    company_web: str = "https://fb-akademie.de"
+    # Logo-URL fuer Mail-Templates (HTML-img). Muss oeffentlich erreichbar sein.
+    company_logo_url: str = "https://fb-akademie.de/wp-content/uploads/2024/12/fba-logo.png"
+    # Rechtliche Footer-Links (in jedem Page-Footer + Mail-Footer).
+    legal_impressum_url: str = "https://fb-akademie.de/impressum"
+    legal_datenschutz_url: str = "https://fb-akademie.de/datenschutz"
 
     # Default: leer = bundesweit, kein Region-Bonus/Strafe im Scoring.
     # Per .env auf Bundeslaender-Liste setzen, wenn man Region-Praeferenz
@@ -109,6 +113,9 @@ class Settings(BaseSettings):
     # und alle Dateien werden dem Enricher als zusaetzlicher Kontext
     # an das LLM uebergeben.
     knowledge_dir: str = "/srv/fbe-knowledge"
+    # Vom Enricher heruntergeladene Vergabeunterlagen (PDF/DOCX/XLSX/ZIP).
+    # Unterordner pro Tender-ID.
+    attachment_dir: str = "/srv/fbe-attachments"
 
     @property
     def regions_list(self) -> List[str]:

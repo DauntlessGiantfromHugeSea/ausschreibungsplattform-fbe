@@ -23,6 +23,11 @@ LOGO_URL = "https://fb-eng.de/wp-content/uploads/2024/10/FBE_green.png"
 STATIC_DIR = PROJECT_ROOT / "backend" / "static"
 LOGO_FILE = STATIC_DIR / "fbe-logo.png"
 LOGO_SVG = STATIC_DIR / "fbe-logo.svg"
+# Neue FBA-Logos: 'dark' = Wortmarke fuer dunkle Topbar (weisse Schrift),
+# 'light' = Wortmarke fuer helle Hintergruende.
+FBA_WORDMARK_DARK = STATIC_DIR / "fba-wordmark-white.svg"
+FBA_WORDMARK_LIGHT = STATIC_DIR / "fba-wordmark.svg"
+FBA_MARK = STATIC_DIR / "fba-mark.svg"
 # Wir nutzen das gleiche PNG als Favicon. Browser akzeptieren PNG seit
 # Jahren - eine separate ico-Datei ist nicht mehr noetig.
 FAVICON_FILE = STATIC_DIR / "favicon.png"
@@ -59,13 +64,25 @@ def ensure_logo() -> bool:
 
 
 def has_logo() -> bool:
-    if LOGO_SVG.exists() and LOGO_SVG.stat().st_size > 50:
-        return True
+    for p in (FBA_WORDMARK_DARK, FBA_WORDMARK_LIGHT, LOGO_SVG):
+        if p.exists() and p.stat().st_size > 50:
+            return True
     return LOGO_FILE.exists() and LOGO_FILE.stat().st_size > 100
 
 
-def logo_url() -> str:
-    """Liefert die bevorzugte Logo-URL fuer das Template. SVG vor PNG."""
+def logo_url(variant: str = "light") -> str:
+    """Logo-URL je nach Hintergrund.
+
+    variant='dark'  -> Wortmarke fuer dunkle Topbar (weisse Schrift)
+    variant='light' -> Wortmarke fuer helle Hintergruende (default)
+    variant='mark'  -> Quadratische Mark (Avatar/Icon)
+    """
+    if variant == "dark" and FBA_WORDMARK_DARK.exists() and FBA_WORDMARK_DARK.stat().st_size > 50:
+        return "/static/fba-wordmark-white.svg"
+    if variant == "mark" and FBA_MARK.exists() and FBA_MARK.stat().st_size > 50:
+        return "/static/fba-mark.svg"
+    if FBA_WORDMARK_LIGHT.exists() and FBA_WORDMARK_LIGHT.stat().st_size > 50:
+        return "/static/fba-wordmark.svg"
     if LOGO_SVG.exists() and LOGO_SVG.stat().st_size > 50:
         return "/static/fbe-logo.svg"
     return "/static/fbe-logo.png"

@@ -148,7 +148,7 @@ def send_high_relevance_email(tenders: Iterable[Tender]) -> bool:
     if not items:
         return False
 
-    subj = "[FBE Ausschreibungen] {} neue hochrelevante Treffer".format(len(items))
+    subj = "[FBA Ausschreibungen] {} neue hochrelevante Treffer".format(len(items))
     plain = _format_plain(items, header="Neue hochrelevante Ausschreibungen:")
     html = _format_html(items, header="Neue hochrelevante Ausschreibungen")
     return _send(subj, plain, html)
@@ -187,7 +187,7 @@ def send_daily_summary(days: int = 1, min_score: int | None = None) -> bool:
         return False
 
     period = "heute" if days <= 1 else "letzten {} Tagen".format(days)
-    subj = "[FBE Ausschreibungen] Tagesübersicht: {} neue Treffer ({})".format(
+    subj = "[FBA Ausschreibungen] Tagesübersicht: {} neue Treffer ({})".format(
         len(items), period)
     plain = _format_plain(items, header="Neue Treffer aus {}:".format(period))
     html = _format_html(items, header="Neue Treffer aus {}".format(period))
@@ -200,7 +200,7 @@ def send_test_mail() -> tuple[bool, str | None]:
     if not is_configured():
         return False, "SMTP nicht konfiguriert (NOTIFY_EMAIL / SMTP_HOST leer)"
     plain = (
-        "Das ist eine Test-Mail von der FBE-Ausschreibungsplattform.\n\n"
+        "Das ist eine Test-Mail von der Flüssigboden Akademie · Ausschreibungen.\n\n"
         "Wenn du das liest, ist der SMTP-Versand funktional. Tagesszusammen-\n"
         "fassungen werden im Continuous-Mode automatisch versendet, sofern\n"
         "im Scheduler aktiviert.\n\n"
@@ -208,7 +208,7 @@ def send_test_mail() -> tuple[bool, str | None]:
     )
     ok, err = _send_to(
         to=[settings.notify_email] if settings.notify_email else [],
-        subject="[FBE] Test-Mail · SMTP funktioniert",
+        subject="[FBA] Test-Mail · SMTP funktioniert",
         plain_body=plain,
     )
     return ok, err
@@ -286,7 +286,7 @@ def _format_html(items: List[Tender], header: str) -> str:
           <table style="width:100%;border-collapse:collapse;">{rows}</table>
         </td></tr>
         <tr><td style="padding:16px 24px;background:#fafafa;color:#71717a;font-size:12px;text-align:center;">
-          FBE Ausschreibungsplattform · {count} Treffer
+          Flüssigboden Akademie · Ausschreibungen · {count} Treffer
         </td></tr>
       </table>
     </body></html>
@@ -487,10 +487,18 @@ def _format_tender_html(
             'style="height:42px;display:block;margin:0 auto;">'
         ).format(_esc(settings.company_logo_url), _esc(settings.company_name or "Logo"))
 
+    legal_links = (
+        '<div style="margin-top:8px;">'
+        '<a href="https://fb-akademie.de/impressum" style="color:#71717a;text-decoration:none;">Impressum</a>'
+        ' &nbsp;·&nbsp; '
+        '<a href="https://fb-akademie.de/datenschutz" style="color:#71717a;text-decoration:none;">Datenschutz</a>'
+        '</div>'
+    )
+
     return """\
 <html><body style="margin:0;padding:24px;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#27272a;">
   <table style="max-width:680px;margin:0 auto;background:white;border-collapse:collapse;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08);">
-    <tr><td style="padding:20px 24px;background:white;border-bottom:1px solid #e4e4e7;text-align:center;">
+    <tr><td style="padding:20px 24px;background:#003233;border-bottom:1px solid #e4e4e7;text-align:center;">
       {logo}
     </td></tr>
     {custom_block}
@@ -526,7 +534,7 @@ def _format_tender_html(
             "<tr><td>{}</td></tr>".format(description_html) if description_html else ""),
         url=_esc(tender.url or "#"),
         signature_block=("<tr><td>{}</td></tr>".format(signature_html) if signature_html else ""),
-        footer=footer_html or "Versendet via FBE-Ausschreibungsplattform.",
+        footer=(footer_html or "Versendet via Flüssigboden Akademie · Ausschreibungen") + legal_links,
     )
 
 
@@ -537,17 +545,17 @@ def _format_tender_html(
 def send_invite_mail(to_email: str, username: str, link: str) -> tuple[bool, str | None]:
     plain = (
         f"Hallo {username},\n\n"
-        f"du wurdest zur FBE-Ausschreibungsplattform eingeladen.\n\n"
+        f"du wurdest zur Flüssigboden Akademie · Ausschreibungen eingeladen.\n\n"
         f"Setze dein Passwort hier (Link 24 Stunden gültig):\n{link}\n\n"
     )
     html = f"""<html><body style="font-family:Inter,system-ui,sans-serif;line-height:1.55;color:#222;max-width:600px;margin:24px auto;">
-<h2 style="color:#007e80;">Willkommen bei FBE Ausschreibungen</h2>
+<h2 style="color:#007e80;">Willkommen bei der Flüssigboden Akademie</h2>
 <p>Hallo <strong>{username}</strong>,</p>
-<p>du wurdest zur FBE-Ausschreibungsplattform eingeladen. Bitte setze dein Passwort über den folgenden Button. Der Link ist <strong>24 Stunden</strong> gültig.</p>
+<p>du wurdest zur Flüssigboden Akademie · Ausschreibungen eingeladen. Bitte setze dein Passwort über den folgenden Button. Der Link ist <strong>24 Stunden</strong> gültig.</p>
 <p style="margin:24px 0;"><a href="{link}" style="background:#007e80;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Passwort jetzt setzen</a></p>
 <p style="font-size:12px;color:#666;">Falls der Button nicht geht: <a href="{link}">{link}</a></p>
 </body></html>"""
-    return _send_to([to_email], "Einladung zur FBE-Ausschreibungsplattform", plain, html)
+    return _send_to([to_email], "Einladung zur Flüssigboden Akademie · Ausschreibungen", plain, html)
 
 
 def send_user_digest(
@@ -605,7 +613,7 @@ def send_user_digest(
 
     period = "den letzten 24 Stunden" if days <= 1 else f"den letzten {days} Tagen"
     period_label = "Tagesuebersicht" if days <= 1 else "Wochenuebersicht"
-    subj = "[FBE] {}: {} relevante Treffer (Score >= {})".format(
+    subj = "[FBA] {}: {} relevante Treffer (Score >= {})".format(
         period_label, len(items), min_score)
     plain = _format_plain(items, header=f"Treffer aus {period} (Score >= {min_score}):")
     plain = (
@@ -632,4 +640,4 @@ def send_password_reset_mail(to_email: str, username: str, link: str) -> tuple[b
 <p style="margin:24px 0;"><a href="{link}" style="background:#007e80;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Neues Passwort setzen</a></p>
 <p style="font-size:12px;color:#666;">Falls nicht von dir: einfach ignorieren.<br>Falls Button nicht geht: <a href="{link}">{link}</a></p>
 </body></html>"""
-    return _send_to([to_email], "Passwort zurücksetzen – FBE Ausschreibungen", plain, html)
+    return _send_to([to_email], "Passwort zurücksetzen – Flüssigboden Akademie", plain, html)

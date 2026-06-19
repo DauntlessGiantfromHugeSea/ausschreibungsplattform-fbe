@@ -2,7 +2,7 @@
 <html lang="de" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <title>Anmelden – FBE Ausschreibungen</title>
+  <title>Anmelden – Flüssigboden Akademie · Ausschreibungen</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% if has_logo() %}
   <link rel="icon" type="image/png" href="/static/favicon.png">
@@ -71,22 +71,24 @@
     <!-- Linke Seite: Brand-Panel -->
     <aside class="brand-panel text-white flex items-center justify-center px-10 py-16">
       <div class="max-w-md">
-        <div class="flex items-center gap-3 mb-10">
+        <div class="mb-10">
           {% if has_logo() %}
-          <img src="{{ logo_url() }}" alt="FBE" class="h-14 w-auto">
+          <img src="{{ logo_url('dark') }}" alt="Flüssigboden Akademie" class="h-16 w-auto">
           {% else %}
-          <div class="h-14 w-14 rounded-xl bg-accent-300 flex items-center justify-center text-brand-800 font-bold">
-            FBE
+          <div class="flex items-center gap-3">
+            <div class="h-14 w-14 rounded-xl bg-accent-300 flex items-center justify-center text-brand-800 font-bold text-xl">
+              FBA
+            </div>
+            <div class="leading-tight">
+              <div class="text-xl font-bold">Flüssigboden Akademie</div>
+              <div class="text-sm opacity-80">Ausschreibungen</div>
+            </div>
           </div>
           {% endif %}
-          <div class="leading-tight">
-            <div class="text-2xl font-bold">FBE</div>
-            <div class="text-sm opacity-80">Flüssigboden Engineering</div>
-          </div>
         </div>
 
         <span class="lime-pill inline-block px-4 py-1.5 rounded-full text-xs font-bold tracking-wider mb-8">
-          AUSSCHREIBUNGSPLATTFORM
+          AUSSCHREIBUNGEN
         </span>
 
         <h1 class="text-4xl md:text-5xl font-bold leading-tight mb-6">
@@ -95,9 +97,15 @@
           Flüssigboden.
         </h1>
         <p class="text-base text-white/80 leading-relaxed">
-          Die zentrale Plattform der Flüssigboden Engineering für
+          Die zentrale Plattform der Flüssigboden Akademie für
           Ausschreibungs-Recherche, KI-gestützte Bewertung und Lead-Tracking.
         </p>
+
+        <div class="mt-12 flex gap-5 text-xs text-white/60">
+          <a href="https://fb-akademie.de" target="_blank" rel="noopener" class="hover:text-white">fb-akademie.de</a>
+          <a href="https://fb-akademie.de/impressum" target="_blank" rel="noopener" class="hover:text-white">Impressum</a>
+          <a href="https://fb-akademie.de/datenschutz" target="_blank" rel="noopener" class="hover:text-white">Datenschutz</a>
+        </div>
       </div>
     </aside>
 

@@ -22,7 +22,7 @@ from . import branding
 from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User, PortalLogin
+from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User, PortalLogin, TenderAttachment
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -37,7 +37,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["has_logo"] = branding.has_logo
 templates.env.globals["logo_url"] = branding.logo_url
 
-app = FastAPI(title="FBE Ausschreibungsplattform", version="0.2.0")
+app = FastAPI(title="Flüssigboden Akademie · Ausschreibungen", version="0.2.0")
 
 # Static-Ordner muss existieren bevor StaticFiles mountet, sonst crasht
 # der Service-Start mit RuntimeError ("Directory does not exist") - der
@@ -1412,7 +1412,7 @@ def admin_broadcast_post(
         flush_list()
         return "".join(blocks)
 
-    company_name = _html.escape(settings.company_name or "FBE Ausschreibungsplattform")
+    company_name = _html.escape(settings.company_name or "Flüssigboden Akademie · Ausschreibungen")
     logo_url = settings.company_logo_url or ""
     web = settings.company_web or ""
     contact_email = settings.company_email or settings.smtp_from or ""
@@ -1486,7 +1486,7 @@ def admin_broadcast_post(
     )
 
     plain_lines = [
-        f"[{settings.company_name or 'FBE Ausschreibungsplattform'}] Systemnachricht",
+        f"[{settings.company_name or 'Flüssigboden Akademie · Ausschreibungen'}] Systemnachricht",
         "=" * 60,
         "",
         subject,
@@ -3089,3 +3089,143 @@ def tender_claude_analyze(
     return RedirectResponse(
         url=f"/tender/{tender_id}?flash=Tiefe%20Claude-Analyse%20fertig.#claude-analysis",
         status_code=303)
+
+
+# --- Anhang-Manager: vom Enricher gefuetterte Vergabeunterlagen --------
+import base64 as _b64
+import re as _re_attach
+
+
+def _safe_filename(name: str) -> str:
+    """Striped + erlaubt nur ASCII/Unicode-Buchstaben/Zahlen/Punkt/Bindestrich."""
+    name = (name or "").strip()
+    name = name.replace("/", "_").replace("\\", "_")
+    name = _re_attach.sub(r"[^\w.\-]", "_", name, flags=_re_attach.UNICODE)
+    return (name or "unbenannt")[:200]
+
+
+@app.post("/api/internal/tenders/{tender_id}/attachments")
+def internal_attachment_upload(
+    tender_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Enricher liefert eine Datei pro Call.
+
+    JSON-Body:
+      filename:       Original-Dateiname
+      source_url:     URL, von der die Datei geladen wurde
+      content_type:   MIME (optional)
+      size_bytes:     Groesse (optional, wird auch aus Body abgeleitet)
+      content_b64:    base64-encoded Binary (optional - wenn fehlt, wird
+                      nur Metadaten gespeichert)
+      extracted_text: Optional, erste ~2000 Zeichen Volltext aus PDF
+    """
+    t = db.get(Tender, tender_id)
+    if not t:
+        return JSONResponse({"error": "tender not found"}, status_code=404)
+
+    filename = _safe_filename(payload.get("filename", ""))
+    source_url = (payload.get("source_url") or "")[:1000]
+    content_type = (payload.get("content_type") or "")[:120] or None
+    size_bytes = payload.get("size_bytes")
+    content_b64 = payload.get("content_b64") or ""
+    extracted_text = (payload.get("extracted_text") or "")[:8000] or None
+    if not filename or not source_url:
+        return JSONResponse({"error": "filename + source_url required"}, status_code=400)
+
+    # Duplikat? gleicher source_url je Tender wird ueberschrieben.
+    existing = (
+        db.query(TenderAttachment)
+        .filter(TenderAttachment.tender_id == tender_id,
+                TenderAttachment.source_url == source_url)
+        .first()
+    )
+
+    local_rel = None
+    if content_b64:
+        try:
+            blob = _b64.b64decode(content_b64)
+        except Exception as exc:
+            return JSONResponse({"error": f"base64 decode: {exc}"}, status_code=400)
+        size_bytes = size_bytes or len(blob)
+        from pathlib import Path as _Path
+        base = _Path(settings.attachment_dir) / str(tender_id)
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            fp = base / filename
+            # Wenn Datei mit Name schon da: -1, -2 ... anhaengen
+            stem, _, ext = filename.rpartition(".")
+            if not stem:
+                stem, ext = filename, ""
+            counter = 1
+            while fp.exists() and (not existing or existing.filename != filename):
+                fp = base / (f"{stem}-{counter}.{ext}" if ext else f"{stem}-{counter}")
+                counter += 1
+                if counter > 50:
+                    break
+            fp.write_bytes(blob)
+            local_rel = f"{tender_id}/{fp.name}"
+        except Exception as exc:
+            return JSONResponse({"error": f"file write: {exc}"}, status_code=500)
+
+    if existing:
+        existing.filename = filename
+        existing.content_type = content_type
+        existing.size_bytes = size_bytes
+        if local_rel:
+            existing.local_path = local_rel
+        if extracted_text:
+            existing.extracted_text = extracted_text
+    else:
+        existing = TenderAttachment(
+            tender_id=tender_id,
+            filename=filename,
+            source_url=source_url,
+            content_type=content_type,
+            size_bytes=size_bytes,
+            local_path=local_rel,
+            extracted_text=extracted_text,
+        )
+        db.add(existing)
+    db.commit()
+    return {"ok": True, "id": existing.id, "stored": bool(local_rel)}
+
+
+@app.get("/tender/{tender_id}/attachment/{attachment_id}")
+def tender_attachment_download(
+    tender_id: int,
+    attachment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Liefert eine gespeicherte Vergabeunterlage aus dem Shared-Volume.
+
+    Restricted-User: nur fuer Tender, die zu ihren Profilen passen.
+    """
+    t = db.get(Tender, tender_id)
+    if not t:
+        raise HTTPException(404, "Tender nicht gefunden")
+    if is_restricted(request):
+        q = db.query(Tender).filter(Tender.id == tender_id)
+        q, _, _ = _enforce_restricted(db, request, q)
+        if q.first() is None:
+            raise HTTPException(404, "Tender nicht gefunden")
+
+    att = db.get(TenderAttachment, attachment_id)
+    if not att or att.tender_id != tender_id:
+        raise HTTPException(404, "Anhang nicht gefunden")
+    # Wenn keine lokale Datei: auf Original-URL umleiten
+    if not att.local_path:
+        return RedirectResponse(url=att.source_url, status_code=303)
+    from pathlib import Path as _Path
+    fp = _Path(settings.attachment_dir) / att.local_path
+    if not fp.is_file():
+        # Datei verschwunden -> Fallback auf Quelle
+        return RedirectResponse(url=att.source_url, status_code=303)
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=str(fp),
+        media_type=att.content_type or "application/octet-stream",
+        filename=att.filename,
+    )

@@ -242,6 +242,37 @@ def add_portal_login_credential_columns() -> bool:
     return added
 
 
+def create_tender_attachments_table() -> bool:
+    """Tabelle fuer vom Enricher heruntergeladene Vergabeunterlagen."""
+    insp = inspect(engine)
+    if "tender_attachments" in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE tender_attachments ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "tender_id INTEGER NOT NULL, "
+                "filename VARCHAR(255) NOT NULL, "
+                "source_url VARCHAR(1000) NOT NULL, "
+                "local_path VARCHAR(500), "
+                "content_type VARCHAR(120), "
+                "size_bytes INTEGER, "
+                "extracted_text TEXT, "
+                "created_at DATETIME NOT NULL, "
+                "FOREIGN KEY (tender_id) REFERENCES tenders(id) ON DELETE CASCADE"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_tender_attachments_tender_id ON tender_attachments(tender_id)"
+            ))
+        log.info("Migration: tender_attachments-Tabelle angelegt.")
+        return True
+    except Exception as exc:  # pragma: no cover
+        log.exception("Migration tender_attachments fehlgeschlagen: %s", exc)
+        return False
+
+
 def add_tender_claude_columns() -> bool:
     """tenders.claude_analysis + claude_analyzed_at fuer die tiefe Claude-Analyse."""
     added = False
@@ -296,4 +327,5 @@ def run_all() -> dict:
         "portal_login_credentials_added": add_portal_login_credential_columns(),
         "portal_login_test_flag_added": add_portal_login_test_requested_column(),
         "tender_claude_columns_added": add_tender_claude_columns(),
+        "tender_attachments_table_created": create_tender_attachments_table(),
     }

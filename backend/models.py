@@ -299,3 +299,21 @@ class PortalLogin(Base):
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+class TenderAttachment(Base):
+    """Vom Enricher gefundene + lokal gespeicherte Vergabeunterlage."""
+    __tablename__ = "tender_attachments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tender_id = Column(Integer, ForeignKey("tenders.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    filename = Column(String(255), nullable=False)
+    source_url = Column(String(1000), nullable=False)
+    local_path = Column(String(500), nullable=True)   # relative zu settings.attachment_dir
+    content_type = Column(String(120), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    extracted_text = Column(Text, nullable=True)       # erste ~2000 Zeichen, optional
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tender = relationship("Tender", backref="attachments")

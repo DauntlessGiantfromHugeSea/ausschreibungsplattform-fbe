@@ -478,7 +478,15 @@ def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, st
             if sp:
                 ctx_kwargs["storage_state"] = sp
                 log.info("Session fuer %s aus %s wiederhergestellt", login_key, sp)
-        ctx = browser.new_context(**ctx_kwargs)
+        try:
+            ctx = browser.new_context(**ctx_kwargs)
+        except Exception as exc:
+            # storage_state-File kaputt? -> ohne probieren + Session loeschen
+            log.warning("new_context mit storage_state fehlgeschlagen (%s) - fallback ohne Session", exc)
+            if login_key:
+                _clear_session(login_key)
+            ctx_kwargs.pop("storage_state", None)
+            ctx = browser.new_context(**ctx_kwargs)
         page = ctx.new_page()
         page.set_default_timeout(PAGE_TIMEOUT_MS)
 

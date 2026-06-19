@@ -3344,7 +3344,13 @@ def admin_portal_login_import_session(
             url=f"/admin/portal-logins/{lid}/edit?error=Keine Cookies im JSON gefunden",
             status_code=303)
     # Cookies normalisieren - Playwright erwartet bestimmte Felder
+    # Cookie-Editor (Chrome-Extension) hat ein eigenes Format:
+    #   expirationDate (float, sec) -> expires (int)
+    #   sameSite "no_restriction" -> "None", "unspecified"|"" -> "Lax"
+    #   hostOnly:true -> domain ohne leading Punkt
+    #   session:true  -> kein expires (Session-Cookie)
     norm = []
+    skipped = []
     for c in cookies:
         if not isinstance(c, dict):
             continue
@@ -3353,21 +3359,50 @@ def admin_portal_login_import_session(
         domain = c.get("domain") or c.get("Domain") or ""
         path = c.get("path") or c.get("Path") or "/"
         if not name or not domain:
+            skipped.append(f"{name or '?'} (Pflichtfeld fehlt)")
             continue
-        ck = {"name": name, "value": str(value), "domain": str(domain), "path": str(path)}
-        for opt in ("expires", "httpOnly", "secure", "sameSite"):
-            if opt in c:
-                ck[opt] = c[opt]
-            elif opt.lower() in c:
-                ck[opt] = c[opt.lower()]
-        # Playwright braucht sameSite in ('Strict','Lax','None')
-        if "sameSite" in ck:
-            s = str(ck["sameSite"]).strip().capitalize()
-            ck["sameSite"] = s if s in ("Strict", "Lax", "None") else "Lax"
+        # hostOnly: domain darf keinen fuehrenden Punkt haben
+        host_only = c.get("hostOnly") or c.get("hostonly") or False
+        if host_only and domain.startswith("."):
+            domain = domain[1:]
+        ck = {"name": str(name), "value": str(value), "domain": str(domain), "path": str(path)}
+
+        # expires: Playwright erwartet int seconds. Cookie-Editor liefert
+        # 'expirationDate' (float). 'expires' direkt auch akzeptiert.
+        exp = c.get("expires")
+        if exp is None:
+            exp = c.get("expirationDate") or c.get("expirationdate")
+        is_session_cookie = bool(c.get("session"))
+        if exp is not None and not is_session_cookie:
+            try:
+                ck["expires"] = int(float(exp))
+            except (TypeError, ValueError):
+                pass
+
+        # httpOnly / secure
+        for src, dst in (("httpOnly", "httpOnly"), ("httponly", "httpOnly"),
+                         ("secure", "secure"), ("Secure", "secure")):
+            if src in c:
+                ck[dst] = bool(c[src])
+
+        # sameSite: Playwright will Strict/Lax/None
+        ss = c.get("sameSite") or c.get("samesite") or c.get("SameSite") or ""
+        ss = str(ss).strip().lower()
+        same_site_map = {
+            "strict": "Strict",
+            "lax": "Lax",
+            "none": "None",
+            "no_restriction": "None",
+            "norestriction": "None",
+            "unspecified": "Lax",
+            "": "Lax",
+        }
+        ck["sameSite"] = same_site_map.get(ss, "Lax")
+
         norm.append(ck)
     if not norm:
         return RedirectResponse(
-            url=f"/admin/portal-logins/{lid}/edit?error=Keine verwertbaren Cookies (name+domain pflicht)",
+            url=f"/admin/portal-logins/{lid}/edit?error=Keine verwertbaren Cookies. {len(skipped)} uebersprungen.",
             status_code=303)
 
     storage_state = {

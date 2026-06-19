@@ -41,25 +41,72 @@
   </div>
 </div>
 
-<!-- KPI -->
+<!-- KPI - Akademie-Style: grosse Zahl + dezenter Lime-Kreis unten rechts -->
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-  <a href="/" class="card p-5 hover:shadow-md transition">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">Gesamt in DB</div>
-    <div class="mt-1 text-3xl font-semibold">{{ stats.total }}</div>
+  <a href="/" class="kpi-card">
+    <div class="kpi-label">Gesamt in DB</div>
+    <div class="kpi-number">{{ stats.total }}</div>
+    <span class="kpi-dot"></span>
   </a>
-  <a href="/?quick=high" class="card p-5 hover:shadow-md transition">
-    <div class="text-xs uppercase tracking-wider text-rose-600">Hochrelevant</div>
-    <div class="mt-1 text-3xl font-semibold text-rose-700">{{ stats.high }}</div>
+  <a href="/?quick=high" class="kpi-card">
+    <div class="kpi-label text-rose-600">Hochrelevant</div>
+    <div class="kpi-number text-rose-700">{{ stats.high }}</div>
+    <span class="kpi-dot kpi-dot-rose"></span>
   </a>
-  <a href="/?quick=deadline-14" class="card p-5 hover:shadow-md transition">
-    <div class="text-xs uppercase tracking-wider text-amber-600">Frist ≤ 14 Tage</div>
-    <div class="mt-1 text-3xl font-semibold text-amber-700">{{ stats.soon }}</div>
+  <a href="/?quick=deadline-14" class="kpi-card">
+    <div class="kpi-label text-amber-600">Frist ≤ 14 Tage</div>
+    <div class="kpi-number text-amber-600">{{ stats.soon }}</div>
+    <span class="kpi-dot kpi-dot-amber"></span>
   </a>
-  <a href="/?status=interessant" class="card p-5 hover:shadow-md transition">
-    <div class="text-xs uppercase tracking-wider text-emerald-600">Als interessant</div>
-    <div class="mt-1 text-3xl font-semibold text-emerald-700">{{ stats.interesting }}</div>
+  <a href="/?status=interessant" class="kpi-card">
+    <div class="kpi-label text-emerald-600">Als interessant</div>
+    <div class="kpi-number text-emerald-700">{{ stats.interesting }}</div>
+    <span class="kpi-dot kpi-dot-emerald"></span>
   </a>
 </div>
+
+<style>
+  .kpi-card {
+    position: relative;
+    display: block;
+    background: #ffffff;
+    border-radius: 1.25rem;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 30px -18px rgba(15, 23, 42, 0.15);
+    padding: 1.5rem 1.75rem 1.75rem 1.75rem;
+    overflow: hidden;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .kpi-card:hover { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 18px 40px -20px rgba(15, 23, 42, 0.22); transform: translateY(-1px); }
+  .kpi-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgb(100, 116, 139);
+  }
+  .kpi-number {
+    margin-top: 0.4rem;
+    font-size: 2.6rem;
+    font-weight: 800;
+    line-height: 1.05;
+    color: rgb(15, 23, 42);
+    letter-spacing: -0.02em;
+  }
+  .kpi-dot {
+    position: absolute;
+    right: -12px;
+    bottom: -12px;
+    width: 60px;
+    height: 60px;
+    border-radius: 9999px;
+    background: rgba(212, 245, 97, 0.55);
+    pointer-events: none;
+  }
+  .kpi-dot-rose    { background: rgba(244, 114, 182, 0.30); }
+  .kpi-dot-amber   { background: rgba(251, 191, 36, 0.30); }
+  .kpi-dot-emerald { background: rgba(52, 211, 153, 0.30); }
+</style>
 
 <!-- Portal-Status: schmale Zusammenfassung mit Link zur Status-Seite -->
 <a href="/admin/status" class="card mb-6 p-3 flex items-center justify-between hover:bg-zinc-50 transition no-underline">

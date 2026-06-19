@@ -72,19 +72,7 @@
     <aside class="brand-panel text-white flex items-center justify-center px-10 py-16">
       <div class="max-w-md">
         <div class="mb-10">
-          {% if has_logo() %}
-          <img src="{{ logo_url('dark') }}" alt="Flüssigboden Akademie" class="h-16 w-auto">
-          {% else %}
-          <div class="flex items-center gap-3">
-            <div class="h-14 w-14 rounded-xl bg-accent-300 flex items-center justify-center text-brand-800 font-bold text-xl">
-              FBA
-            </div>
-            <div class="leading-tight">
-              <div class="text-xl font-bold">Flüssigboden Akademie</div>
-              <div class="text-sm opacity-80">Ausschreibungen</div>
-            </div>
-          </div>
-          {% endif %}
+          <img src="{{ logo_url('dark') }}?v=2" alt="Flüssigboden Akademie · Ausschreibungen" class="h-20 w-auto block">
         </div>
 
         <span class="lime-pill inline-block px-4 py-1.5 rounded-full text-xs font-bold tracking-wider mb-8">

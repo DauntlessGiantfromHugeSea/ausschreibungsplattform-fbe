@@ -353,13 +353,8 @@
 <header class="topbar sticky top-0 z-40">
   <div class="max-w-screen-2xl mx-auto px-6 h-18 py-2 flex items-center justify-between gap-4">
     <div class="flex items-center gap-8">
-      <a href="/" class="flex items-center text-white" title="Flüssigboden Akademie">
-        {% if has_logo() %}
-        <img src="{{ logo_url('dark') }}" alt="Flüssigboden Akademie · Ausschreibungen" class="h-12 w-auto">
-        {% else %}
-        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent-300 text-brand-800 text-sm font-bold">FBA</span>
-        <span class="ml-3 font-semibold">Flüssigboden Akademie</span>
-        {% endif %}
+      <a href="/" class="flex items-center text-white" title="Flüssigboden Akademie · Ausschreibungen">
+        <img src="{{ logo_url('dark') }}?v=2" alt="Flüssigboden Akademie · Ausschreibungen" class="h-14 w-auto block">
       </a>
       <nav class="hidden md:flex items-center gap-1 text-sm">
         <a href="/" class="nav-link {% if _path == '/' %}is-active{% endif %}">Dashboard</a>

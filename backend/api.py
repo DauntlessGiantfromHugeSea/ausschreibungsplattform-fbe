@@ -754,10 +754,25 @@ def detail(
             "ai_auto": settings.ai_auto_analyze,
             "enrich_markdown": enrich_markdown,
             "enrich_path": enrich_path,
+            "claude_configured": bool(settings.anthropic_api_key),
+            "claude_analysis": tender.claude_analysis,
+            "claude_analyzed_at": tender.claude_analyzed_at,
+            "claude_analysis_html": _cla_render(tender.claude_analysis),
             "flash": flash,
             "error": error,
         },
     )
+
+
+def _cla_render(md: str | None) -> str:
+    if not md:
+        return ""
+    try:
+        import markdown as _md
+        return _md.markdown(md, extensions=["fenced_code", "tables"])
+    except Exception:
+        from html import escape
+        return f"<pre style='white-space:pre-wrap'>{escape(md)}</pre>"
 
 
 @app.post("/tender/{tender_id}/comments")
@@ -3041,3 +3056,35 @@ def internal_portal_logins_pending_test(db: Session = Depends(get_db)):
             "password": it.password,
         })
     return out
+
+
+# --- Claude tiefe Tender-Analyse ----------------------------------------
+@app.post("/tender/{tender_id}/claude-analyze")
+def tender_claude_analyze(
+    tender_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Triggert eine tiefe Analyse via Claude. Restricted-User koennen das nur
+    fuer Tender ausloesen, die zu ihrem Profil passen."""
+    tender = db.get(Tender, tender_id)
+    if not tender:
+        raise HTTPException(404, "Ausschreibung nicht gefunden")
+    if is_restricted(request):
+        q = db.query(Tender).filter(Tender.id == tender_id)
+        q, _, _ = _enforce_restricted(db, request, q)
+        if q.first() is None:
+            raise HTTPException(404, "Ausschreibung nicht gefunden")
+    from . import claude_analysis as _cla
+    if not _cla.is_configured():
+        return RedirectResponse(
+            url=f"/tender/{tender_id}?error=Anthropic-API-Key fehlt - in der .env setzen + restart.",
+            status_code=303)
+    ok, content = _cla.run_and_store(db, tender)
+    if not ok:
+        return RedirectResponse(
+            url=f"/tender/{tender_id}?error=Claude-Analyse fehlgeschlagen: {content[:200]}",
+            status_code=303)
+    return RedirectResponse(
+        url=f"/tender/{tender_id}?flash=Tiefe%20Claude-Analyse%20fertig.#claude-analysis",
+        status_code=303)

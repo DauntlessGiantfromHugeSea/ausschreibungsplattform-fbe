@@ -88,6 +88,14 @@ class Settings(BaseSettings):
     # Aufruf kostet nichts.
     ai_auto_analyze: bool = True
 
+    # ---- KI-Anbindung (Claude / Anthropic) ---------------------------
+    # Tiefe Tender-Analyse: laeuft auf Knopfdruck im Detail-View und
+    # erzeugt Einsparungspotenzial + Fluessigboden-Eignung. Nutzt eine
+    # andere Engine als die Enricher-Anreicherung, damit man zwei
+    # unabhaengige Quellen vergleichen kann.
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-6"
+
     # ---- Enricher (separater Docker-Container) -----------------------
     # Shared-Secret fuer /api/internal/* - der Enricher schickt diesen
     # Token im Header X-Internal-Token. Wenn leer, sind die Endpoints

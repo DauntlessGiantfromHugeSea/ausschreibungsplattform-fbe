@@ -69,6 +69,11 @@ class Tender(Base):
     # Wird beim ersten Oeffnen der Detailseite generiert und gecached.
     ai_analysis = Column(Text, nullable=True)        # JSON-encoded
     ai_analyzed_at = Column(DateTime, nullable=True)
+    # Tiefe Claude-Analyse - on-demand via Detail-Button.
+    # Strukturiertes JSON: eckdaten, anhaenge, einsparungspotenzial,
+    # fluessigboden_eignung, gesamteinschaetzung.
+    claude_analysis = Column(Text, nullable=True)
+    claude_analyzed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False

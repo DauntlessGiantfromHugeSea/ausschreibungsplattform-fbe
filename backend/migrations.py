@@ -242,6 +242,29 @@ def add_portal_login_credential_columns() -> bool:
     return added
 
 
+def add_tender_claude_columns() -> bool:
+    """tenders.claude_analysis + claude_analyzed_at fuer die tiefe Claude-Analyse."""
+    added = False
+    if "tenders" not in {t for t in inspect(engine).get_table_names()}:
+        return False
+    cols = {c["name"] for c in inspect(engine).get_columns("tenders")}
+    statements = [
+        ("claude_analysis",     "ALTER TABLE tenders ADD COLUMN claude_analysis TEXT"),
+        ("claude_analyzed_at",  "ALTER TABLE tenders ADD COLUMN claude_analyzed_at DATETIME"),
+    ]
+    for col, ddl in statements:
+        if col in cols:
+            continue
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            log.info("Migration: tenders.%s hinzugefuegt.", col)
+            added = True
+        except Exception as exc:  # pragma: no cover
+            log.exception("Migration tenders.%s fehlgeschlagen: %s", col, exc)
+    return added
+
+
 def add_portal_login_test_requested_column() -> bool:
     """portal_logins.test_requested_at - Flag fuer Admin-getriggerten Login-Test."""
     if "portal_logins" not in {t for t in inspect(engine).get_table_names()}:
@@ -272,4 +295,5 @@ def run_all() -> dict:
         "viewer_role_migrated": migrate_viewer_role_to_user(),
         "portal_login_credentials_added": add_portal_login_credential_columns(),
         "portal_login_test_flag_added": add_portal_login_test_requested_column(),
+        "tender_claude_columns_added": add_tender_claude_columns(),
     }

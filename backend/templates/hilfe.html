@@ -141,6 +141,27 @@
     </p>
   </section>
 
+  <section id="claude-analyse">
+    <h2 class="text-xl font-semibold mb-3">🧠 Tiefe Claude-Analyse</h2>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+      Auf jeder Tender-Detail-Seite gibt es einen Block <em>„Tiefe Analyse (Claude)"</em> mit einem
+      „▶ Mit Claude analysieren"-Button. Claude liest die DB-Daten + die Enricher-Anreicherung +
+      die Admin-Wissensbasis und erzeugt eine strukturierte Bewertung mit fünf Abschnitten:
+    </p>
+    <ul class="list-disc pl-5 text-sm text-zinc-600 dark:text-zinc-400 space-y-1 mt-2">
+      <li><strong>Eckdaten</strong> — Auftraggeber, Ort, Frist, geschätzter Wert, Verfahrensart, Ansprechpartner</li>
+      <li><strong>Anhänge / Vergabeunterlagen</strong> — Liste der im Material gefundenen PDFs</li>
+      <li><strong>Einsparungspotenzial</strong> — konkrete EUR-/Prozent-Schätzung bei Einsatz von Flüssigboden gegenüber klassischer Verfüllung, mit den Annahmen</li>
+      <li><strong>Flüssigboden-Eignung</strong> — Bewertung (hoch/mittel/gering/nicht anwendbar) mit Begründung</li>
+      <li><strong>Empfehlung</strong> — soll FBE bieten? Falls ja, welcher Hebel</li>
+    </ul>
+    <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed mt-2">
+      Voraussetzung: <code>ANTHROPIC_API_KEY</code> in der <code>.env</code> auf dem Server gesetzt,
+      Service einmal neu gestartet. Modell wird per <code>ANTHROPIC_MODEL</code> gesteuert
+      (Default: <code>claude-sonnet-4-6</code>). Ergebnis wird gespeichert — beim nächsten Aufruf der Detail-Seite ist es sofort wieder da, ohne API-Kosten.
+    </p>
+  </section>
+
   <section id="assistent">
     <h2 class="text-xl font-semibold mb-3">Frag den Assistenten</h2>
     <p class="text-sm text-zinc-500 mb-3">

@@ -257,14 +257,58 @@
       color: #ffffff;
       border-color: rgba(255, 255, 255, 0.35);
     }
-    /* Solide Dropdown-Menues (Status, User, Profil) - kein Glass damit
-       Text gut lesbar bleibt und nichts durchscheint. */
+    /* Solide Dropdown-Menues (Status, User, Profil). Light + Dark Mode
+       deklarieren wir direkt - so spielt kein generischer text-zinc-*
+       Override mehr rein. */
     .menu-panel-solid {
-      background: #ffffff;
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      border-radius: 0.75rem;
+      background: #ffffff !important;
+      border: 1px solid rgba(15, 23, 42, 0.08) !important;
+      border-radius: 0.75rem !important;
       box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.18),
-                  0 2px 6px rgba(15, 23, 42, 0.06);
+                  0 2px 6px rgba(15, 23, 42, 0.06) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    .menu-panel-solid a,
+    .menu-panel-solid div,
+    .menu-panel-solid span,
+    .menu-panel-solid strong {
+      color: #1f2937 !important;
+    }
+    .menu-panel-solid a {
+      text-decoration: none;
+    }
+    .menu-panel-solid a:hover {
+      background-color: #f3f4f6 !important;
+    }
+    .menu-panel-solid a.danger,
+    .menu-panel-solid a[href="/logout"] {
+      color: #b91c1c !important;
+    }
+    .menu-panel-solid a.danger:hover,
+    .menu-panel-solid a[href="/logout"]:hover {
+      background-color: #fef2f2 !important;
+      color: #991b1b !important;
+    }
+    .dark .menu-panel-solid {
+      background: #27272a !important;
+      border-color: rgb(63 63 70) !important;
+    }
+    .dark .menu-panel-solid a,
+    .dark .menu-panel-solid div,
+    .dark .menu-panel-solid span,
+    .dark .menu-panel-solid strong {
+      color: #f4f4f5 !important;
+    }
+    .dark .menu-panel-solid a:hover {
+      background-color: rgb(63 63 70) !important;
+    }
+    .dark .menu-panel-solid a[href="/logout"] {
+      color: #fca5a5 !important;
+    }
+    .dark .menu-panel-solid a[href="/logout"]:hover {
+      background-color: rgba(220, 38, 38, 0.15) !important;
+      color: #fecaca !important;
     }
 
     /* Header-Active-Highlight (Status-/Settings-/Hilfe-Icons) auf Lime */

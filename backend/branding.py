@@ -28,6 +28,22 @@ LOGO_SVG = STATIC_DIR / "fbe-logo.svg"
 FBA_WORDMARK_DARK = STATIC_DIR / "fba-wordmark-white.svg"
 FBA_WORDMARK_LIGHT = STATIC_DIR / "fba-wordmark.svg"
 FBA_MARK = STATIC_DIR / "fba-mark.svg"
+
+# Admin-Uploads: wenn vorhanden, haben Vorrang vor allen Stock-Logos.
+# Werden vom Admin-UI unter /admin/branding hochgeladen.
+UPLOADED_DIR = STATIC_DIR / "uploaded"
+UPLOAD_EXTS = {".svg", ".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _uploaded(variant: str):
+    """Liefert Path zur hochgeladenen Datei einer Variante, falls vorhanden."""
+    if not UPLOADED_DIR.is_dir():
+        return None
+    for ext in UPLOAD_EXTS:
+        p = UPLOADED_DIR / f"logo-{variant}{ext}"
+        if p.exists() and p.stat().st_size > 50:
+            return p
+    return None
 # Wir nutzen das gleiche PNG als Favicon. Browser akzeptieren PNG seit
 # Jahren - eine separate ico-Datei ist nicht mehr noetig.
 FAVICON_FILE = STATIC_DIR / "favicon.png"
@@ -71,12 +87,17 @@ def has_logo() -> bool:
 
 
 def logo_url(variant: str = "light") -> str:
-    """Logo-URL je nach Hintergrund.
+    """Logo-URL je nach Hintergrund. Admin-Upload hat Vorrang.
 
     variant='dark'  -> Wortmarke fuer dunkle Topbar (weisse Schrift)
     variant='light' -> Wortmarke fuer helle Hintergruende (default)
     variant='mark'  -> Quadratische Mark (Avatar/Icon)
     """
+    # Cache-Buster: mtime der Datei haengt mit dran, damit Browser
+    # die neue Version nach Upload sofort zieht.
+    up = _uploaded(variant) or _uploaded("light")
+    if up:
+        return f"/static/uploaded/{up.name}?v={int(up.stat().st_mtime)}"
     if variant == "dark" and FBA_WORDMARK_DARK.exists() and FBA_WORDMARK_DARK.stat().st_size > 50:
         return "/static/fba-wordmark-white.svg"
     if variant == "mark" and FBA_MARK.exists() and FBA_MARK.stat().st_size > 50:
@@ -86,3 +107,46 @@ def logo_url(variant: str = "light") -> str:
     if LOGO_SVG.exists() and LOGO_SVG.stat().st_size > 50:
         return "/static/fbe-logo.svg"
     return "/static/fbe-logo.png"
+
+
+def save_uploaded_logo(variant: str, filename: str, content: bytes) -> tuple[bool, str]:
+    """Speichert eine hochgeladene Logo-Datei. Liefert (ok, msg)."""
+    if variant not in ("light", "dark", "mark"):
+        return False, "Ungueltige Variante"
+    if not content or len(content) < 50:
+        return False, "Datei ist leer oder zu klein"
+    if len(content) > 5 * 1024 * 1024:
+        return False, "Datei groesser als 5 MB"
+    ext = ""
+    for e in UPLOAD_EXTS:
+        if filename.lower().endswith(e):
+            ext = e
+            break
+    if not ext:
+        return False, "Unzulaessiges Format - nur SVG/PNG/JPG/WEBP"
+    try:
+        UPLOADED_DIR.mkdir(parents=True, exist_ok=True)
+        # Alle alten Varianten des gleichen Variant-Slots loeschen,
+        # damit das Format wirklich getauscht wird.
+        for old_ext in UPLOAD_EXTS:
+            old = UPLOADED_DIR / f"logo-{variant}{old_ext}"
+            if old.exists():
+                old.unlink()
+        (UPLOADED_DIR / f"logo-{variant}{ext}").write_bytes(content)
+        return True, "ok"
+    except Exception as exc:  # pragma: no cover
+        return False, f"Schreibfehler: {exc}"
+
+
+def delete_uploaded_logo(variant: str) -> bool:
+    if variant not in ("light", "dark", "mark"):
+        return False
+    if not UPLOADED_DIR.is_dir():
+        return False
+    deleted = False
+    for ext in UPLOAD_EXTS:
+        p = UPLOADED_DIR / f"logo-{variant}{ext}"
+        if p.exists():
+            p.unlink()
+            deleted = True
+    return deleted

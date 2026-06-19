@@ -1,14 +1,7 @@
 <!DOCTYPE html>
-<html lang="de" class="h-full bg-zinc-50 dark:bg-zinc-900">
+<html lang="de" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <script>
-    (function() {
-      const saved = localStorage.getItem('theme');
-      const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-      if (dark) document.documentElement.classList.add('dark');
-    })();
-  </script>
   <title>Anmelden – FBE Ausschreibungen</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% if has_logo() %}
@@ -16,79 +9,146 @@
   <link rel="shortcut icon" href="/static/favicon.png">
   <link rel="apple-touch-icon" href="/static/favicon.png">
   {% endif %}
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode:'class',
-      theme: { extend: { fontFamily: { sans: ['Inter','system-ui','sans-serif'] },
-      colors: { brand: { 500:'#3b5b86', 700:'#27406b', 800:'#1f3556' } } } } }
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              500: '#007e80', 600: '#006566', 700: '#004c4d', 800: '#003233', 900: '#00191a',
+            },
+            accent: {
+              300: '#d4f561', 400: '#c8e84a', 500: '#b7d836',
+            },
+          },
+        }
+      }
+    }
   </script>
   <style>
-    body{font-family:Inter,system-ui,sans-serif}
-    .dark body { background-color: rgb(24 24 27); color: rgb(244 244 245); }
-    .dark .bg-white { background-color: rgb(39 39 42) !important; }
-    .dark .border-zinc-200, .dark .border-zinc-200\/70, .dark .border-zinc-300 { border-color: rgb(63 63 70) !important; }
-    .dark input { background-color: rgb(24 24 27) !important; color: rgb(244 244 245) !important; border-color: rgb(82 82 91) !important; }
-    .dark .text-zinc-900 { color: rgb(244 244 245) !important; }
-    .dark .text-zinc-700, .dark .text-zinc-600, .dark .text-zinc-500, .dark .text-zinc-400 { color: rgb(161 161 170) !important; }
-    .dark .bg-rose-50 { background-color: rgb(76 5 25 / 0.4) !important; }
-    .dark .text-rose-800 { color: rgb(254 205 211) !important; }
-    .dark .border-rose-200 { border-color: rgb(136 19 55) !important; }
-    .dark .bg-emerald-50 { background-color: rgb(6 78 59 / 0.35) !important; }
-    .dark .text-emerald-800 { color: rgb(167 243 208) !important; }
-    .dark .border-emerald-200 { border-color: rgb(6 95 70) !important; }
+    html, body { height: 100%; font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    body { -webkit-font-smoothing: antialiased; }
+    .brand-panel {
+      background:
+        radial-gradient(circle at 70% 25%, rgba(255,255,255,0.10), transparent 55%),
+        radial-gradient(circle at 30% 75%, rgba(0, 25, 26, 0.35), transparent 60%),
+        linear-gradient(135deg, #006566 0%, #004c4d 50%, #003233 100%);
+    }
+    .lime-pill {
+      background: #d4f561;
+      color: #003233;
+    }
+    .btn-anmelden {
+      background: #d4f561;
+      color: #003233;
+      transition: background 0.15s ease, filter 0.15s ease;
+    }
+    .btn-anmelden:hover { background: #c8e84a; }
+    .btn-anmelden:active { filter: brightness(0.97); }
+    .input-clean {
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, 0.18);
+      border-radius: 9999px;
+      padding: 0.85rem 1.25rem;
+      font-size: 0.95rem;
+      background: #fff;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .input-clean:focus {
+      outline: none;
+      border-color: #007e80;
+      box-shadow: 0 0 0 4px rgba(0, 126, 128, 0.12);
+    }
   </style>
 </head>
-<body class="h-full text-zinc-900 dark:text-zinc-100 flex items-center justify-center px-4">
-  <div class="w-full max-w-sm">
-    <div class="text-center mb-6">
-      {% if has_logo() %}
-      <img src="/static/fbe-logo.png" alt="FBE" class="mx-auto h-14 w-auto">
-      {% else %}
-      <span class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand-700 text-white text-base font-semibold">FBE</span>
-      {% endif %}
-      <h1 class="mt-3 text-xl font-semibold">Ausschreibungsplattform</h1>
-      <p class="text-sm text-zinc-500">Bitte anmelden</p>
-    </div>
+<body class="text-zinc-900">
+  <div class="grid grid-cols-1 md:grid-cols-2 min-h-screen">
 
-    <form method="post" action="/login" class="bg-white rounded-2xl border border-zinc-200/70 shadow-sm p-6 space-y-4">
-      {% if flash %}
-        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          ✓ {{ flash }}
+    <!-- Linke Seite: Brand-Panel -->
+    <aside class="brand-panel text-white flex items-center justify-center px-10 py-16">
+      <div class="max-w-md">
+        <div class="flex items-center gap-3 mb-10">
+          {% if has_logo() %}
+          <img src="{{ logo_url() }}" alt="FBE" class="h-14 w-auto">
+          {% else %}
+          <div class="h-14 w-14 rounded-xl bg-accent-300 flex items-center justify-center text-brand-800 font-bold">
+            FBE
+          </div>
+          {% endif %}
+          <div class="leading-tight">
+            <div class="text-2xl font-bold">FBE</div>
+            <div class="text-sm opacity-80">Flüssigboden Engineering</div>
+          </div>
         </div>
-      {% endif %}
-      {% if error %}
-        <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {{ error }}
-        </div>
-      {% endif %}
-      <input type="hidden" name="next" value="{{ next or '/' }}">
-      <div>
-        <label class="block text-xs font-medium text-zinc-600 mb-1">Benutzername</label>
-        <input class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm
-                      shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none"
-               type="text" name="username" autofocus required autocomplete="username">
-      </div>
-      <div>
-        <label class="block text-xs font-medium text-zinc-600 mb-1">Passwort</label>
-        <input class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm
-                      shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none"
-               type="password" name="password" required autocomplete="current-password">
-      </div>
-      <button type="submit"
-              class="w-full inline-flex items-center justify-center rounded-lg px-3.5 py-2
-                     text-sm font-medium shadow-sm bg-brand-700 text-white hover:bg-brand-800">
-        Anmelden
-      </button>
-    
-<a href="/forgot-password" class="block text-xs text-zinc-500 hover:text-zinc-800 mt-3 text-center">Passwort vergessen?</a>
-</form>
 
-    <p class="text-xs text-zinc-400 text-center mt-6">
-      Flüssigboden Engineering · interne Auswertung
-    </p>
+        <span class="lime-pill inline-block px-4 py-1.5 rounded-full text-xs font-bold tracking-wider mb-8">
+          AUSSCHREIBUNGSPLATTFORM
+        </span>
+
+        <h1 class="text-4xl md:text-5xl font-bold leading-tight mb-6">
+          Tiefbau.<br>
+          Verfüllung.<br>
+          Flüssigboden.
+        </h1>
+        <p class="text-base text-white/80 leading-relaxed">
+          Die zentrale Plattform der Flüssigboden Engineering für
+          Ausschreibungs-Recherche, KI-gestützte Bewertung und Lead-Tracking.
+        </p>
+      </div>
+    </aside>
+
+    <!-- Rechte Seite: Login-Form -->
+    <main class="flex items-center justify-center px-6 py-12 bg-white">
+      <div class="w-full max-w-md">
+        <h2 class="text-3xl font-bold mb-2">Willkommen zurück</h2>
+        <p class="text-zinc-500 mb-8">Bitte melde dich an, um fortzufahren.</p>
+
+        {% if flash %}
+          <div class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            ✓ {{ flash }}
+          </div>
+        {% endif %}
+        {% if error %}
+          <div class="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            {{ error }}
+          </div>
+        {% endif %}
+
+        <form method="post" action="/login" class="space-y-5">
+          <input type="hidden" name="next" value="{{ next or '/' }}">
+          <div>
+            <label class="block text-sm font-semibold mb-2">E-Mail / Benutzername</label>
+            <input class="input-clean" type="text" name="username"
+                   autofocus required autocomplete="username">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2">Passwort</label>
+            <input class="input-clean" type="password" name="password"
+                   required autocomplete="current-password">
+          </div>
+          <button type="submit"
+                  class="btn-anmelden w-full inline-flex items-center justify-center rounded-full py-3.5
+                         text-base font-bold">
+            Anmelden
+          </button>
+        </form>
+
+        <div class="text-center mt-6">
+          <a href="/forgot-password" class="text-sm text-zinc-500 hover:text-zinc-800">
+            Passwort vergessen?
+          </a>
+        </div>
+
+        <p class="text-xs text-zinc-400 text-center mt-10">
+          Bei Problemen wende dich an deinen Administrator.
+        </p>
+      </div>
+    </main>
+
   </div>
 </body>
 </html>

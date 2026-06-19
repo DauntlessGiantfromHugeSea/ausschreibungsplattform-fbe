@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#007e80"/>
+  <text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle"
+        font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        font-weight="700" font-size="200" fill="#ffffff">FBE</text>
+  <text x="50%" y="80%" text-anchor="middle"
+        font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        font-weight="500" font-size="42" fill="#ffffff" letter-spacing="4">AUSSCHREIBUNGEN</text>
+</svg>

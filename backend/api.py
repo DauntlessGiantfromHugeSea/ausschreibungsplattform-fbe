@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["has_logo"] = branding.has_logo
+templates.env.globals["logo_url"] = branding.logo_url
 
 app = FastAPI(title="FBE Ausschreibungsplattform", version="0.2.0")
 

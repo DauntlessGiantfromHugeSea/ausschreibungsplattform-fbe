@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 LOGO_URL = "https://fb-eng.de/wp-content/uploads/2024/10/FBE_green.png"
 STATIC_DIR = PROJECT_ROOT / "backend" / "static"
 LOGO_FILE = STATIC_DIR / "fbe-logo.png"
+LOGO_SVG = STATIC_DIR / "fbe-logo.svg"
 # Wir nutzen das gleiche PNG als Favicon. Browser akzeptieren PNG seit
 # Jahren - eine separate ico-Datei ist nicht mehr noetig.
 FAVICON_FILE = STATIC_DIR / "favicon.png"
@@ -58,4 +59,13 @@ def ensure_logo() -> bool:
 
 
 def has_logo() -> bool:
+    if LOGO_SVG.exists() and LOGO_SVG.stat().st_size > 50:
+        return True
     return LOGO_FILE.exists() and LOGO_FILE.stat().st_size > 100
+
+
+def logo_url() -> str:
+    """Liefert die bevorzugte Logo-URL fuer das Template. SVG vor PNG."""
+    if LOGO_SVG.exists() and LOGO_SVG.stat().st_size > 50:
+        return "/static/fbe-logo.svg"
+    return "/static/fbe-logo.png"

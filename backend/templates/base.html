@@ -30,8 +30,7 @@
             sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Inter', 'sans-serif'],
           },
           colors: {
-            // Brand-Palette uebernommen aus Teilnahmemanagement (Teal/Tuerkis).
-            // Primaerton 500 = rgb(0, 126, 128).
+            // Brand-Palette aus Teilnahmemanagement (Teal/Tuerkis).
             brand: {
               50:  '#e6f2f2',
               100: '#cce5e6',
@@ -44,7 +43,20 @@
               800: '#003233',
               900: '#00191a',
             },
-            accent: { 500: '#e0a83a', 600: '#c8902a' },
+            // Accent = Lime/Chartreuse (CTAs, aktive Nav-Pills).
+            accent: {
+              50:  '#f7fce4',
+              100: '#eef9c5',
+              200: '#dff48d',
+              300: '#d4f561',
+              400: '#c8e84a',
+              500: '#b7d836',
+              600: '#9bc127',
+              700: '#7a9d20',
+            },
+            // Direkter Zugriff auf den dunklen Nav-Hintergrund.
+            navbg: '#003233',
+            navbg2: '#004c4d',
           },
         }
       }
@@ -54,35 +66,188 @@
     @layer base {
       body { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Inter', sans-serif; }
     }
+
+    /* ============================================================
+       Theme - Dark Teal Nav + Lime Accent (FB Akademie)
+       ============================================================ */
+    :root {
+      --bg-base: #eef2f5;
+      --bg-tint-1: rgba(0, 126, 128, 0.08);
+      --bg-tint-2: rgba(99, 102, 241, 0.05);
+      --bg-tint-3: rgba(212, 245, 97, 0.06);
+      --nav-bg: #003233;
+      --nav-bg-2: #004c4d;
+      --accent: #d4f561;
+      --accent-hover: #c8e84a;
+      --glass-bg: rgba(255, 255, 255, 0.72);
+      --glass-bg-strong: rgba(255, 255, 255, 0.85);
+      --glass-border: rgba(255, 255, 255, 0.55);
+      --glass-stroke: rgba(15, 23, 42, 0.06);
+      --text: #0f172a;
+      --text-muted: #475569;
+      --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 30px -18px rgba(15, 23, 42, 0.18);
+      --shadow-card-hover: 0 1px 2px rgba(15, 23, 42, 0.05), 0 18px 40px -20px rgba(15, 23, 42, 0.22);
+    }
+
+    html, body {
+      min-height: 100%;
+      color: var(--text);
+      background-color: var(--bg-base);
+      background-image:
+        radial-gradient(900px 600px at 8% -10%, var(--bg-tint-1), transparent 60%),
+        radial-gradient(700px 500px at 92% 0%, var(--bg-tint-2), transparent 65%),
+        radial-gradient(800px 600px at 60% 110%, var(--bg-tint-3), transparent 60%);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
     @layer components {
-      .card { @apply bg-white dark:bg-zinc-800 rounded-[23px] border border-zinc-200/70 dark:border-zinc-700 shadow-sm dark:shadow-none; }
-      .pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium dark:bg-zinc-700 dark:text-zinc-100; }
-      .input {
-        @apply w-full rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 dark:text-zinc-100 px-3 py-2 text-sm
-               shadow-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
-               focus:outline-none transition;
-      }
-      .btn {
-        @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2
-               text-sm font-medium shadow-sm transition focus:outline-none
-               focus:ring-2 focus:ring-offset-1;
-      }
-      .btn-primary { @apply btn bg-brand-700 text-white hover:bg-brand-800 focus:ring-brand-500; }
-      .btn-ghost   { @apply btn bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-100 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-600 focus:ring-zinc-300; }
-      .btn-icon {
-        @apply inline-flex h-8 w-8 items-center justify-center rounded-lg
-               border border-zinc-200 bg-white text-zinc-500
-               hover:bg-zinc-50 hover:text-zinc-900 transition;
-      }
+      .pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium; }
       .relevance-bar { @apply h-1.5 rounded-full bg-zinc-100 overflow-hidden; }
       .chip {
-        @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium
-               border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 transition;
+        @apply inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition;
+        background: #ffffff;
+        border: 1.5px solid rgba(0, 50, 51, 0.18);
+        color: rgb(15, 23, 42);
       }
+      .chip:hover { background: #f5f7f8; border-color: rgba(0, 50, 51, 0.4); }
       .chip-active {
-        @apply !bg-brand-700 !text-white !border-brand-700;
+        background: var(--accent) !important;
+        color: rgb(0, 50, 51) !important;
+        border-color: transparent !important;
+        font-weight: 600 !important;
       }
     }
+
+    /* Liquid-Glass Karten - frosted weiss + soft shadow */
+    .card {
+      border-radius: 1rem;
+      background: var(--glass-bg-strong);
+      backdrop-filter: saturate(1.4) blur(20px);
+      -webkit-backdrop-filter: saturate(1.4) blur(20px);
+      border: 1px solid var(--glass-stroke);
+      box-shadow: var(--shadow-card), inset 0 1px 0 var(--glass-border);
+      transition: box-shadow 0.25s ease, transform 0.25s ease;
+    }
+    .card:hover { box-shadow: var(--shadow-card-hover); }
+
+    .glass {
+      background: var(--glass-bg);
+      backdrop-filter: saturate(1.4) blur(20px);
+      -webkit-backdrop-filter: saturate(1.4) blur(20px);
+      border: 1px solid var(--glass-stroke);
+      box-shadow: var(--shadow-card), inset 0 1px 0 var(--glass-border);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+      border-radius: 9999px;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      transition: transform 0.15s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
+    }
+    .btn:active { transform: translateY(0.5px); }
+    .btn-primary {
+      color: rgb(0, 50, 51);
+      background: var(--accent);
+      border: 1px solid transparent;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:active { filter: brightness(0.97); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost, .btn-secondary {
+      color: rgb(15, 23, 42);
+      background: #ffffff;
+      border: 1.5px solid rgba(0, 50, 51, 0.18);
+    }
+    .btn-ghost:hover, .btn-secondary:hover {
+      background: #f5f7f8;
+      border-color: rgba(0, 50, 51, 0.4);
+    }
+    .btn-danger {
+      color: #fff;
+      background: #dc2626;
+      border: 1px solid transparent;
+    }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 2.25rem; width: 2.25rem; border-radius: 9999px;
+      background: #ffffff;
+      border: 1.5px solid rgba(0, 50, 51, 0.12);
+      color: rgb(71, 85, 105);
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .btn-icon:hover {
+      background: #f5f7f8;
+      color: rgb(0, 50, 51);
+      border-color: rgba(0, 50, 51, 0.35);
+    }
+
+    /* Inputs - klar, weiss, brand-fokus */
+    .input {
+      width: 100%;
+      border-radius: 0.75rem;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.9rem;
+      background: #ffffff;
+      border: 1px solid rgba(15, 23, 42, 0.12);
+      color: var(--text);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .input:focus {
+      outline: none;
+      border-color: rgb(0, 126, 128);
+      box-shadow: 0 0 0 4px rgba(0, 126, 128, 0.12);
+    }
+    select.input { padding-right: 2.25rem; }
+
+    /* Topbar - solid dunkles teal */
+    header.topbar {
+      background: var(--nav-bg);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: env(safe-area-inset-top);
+      color: #ffffff;
+    }
+    header.topbar a { color: rgba(255, 255, 255, 0.85); }
+    header.topbar a:hover { color: #ffffff; }
+    /* Nav-Pills im Header */
+    header.topbar .nav-link {
+      padding: 0.5rem 1.1rem;
+      border-radius: 9999px;
+      font-weight: 500;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    header.topbar .nav-link:hover { background: rgba(255, 255, 255, 0.06); }
+    header.topbar .nav-link.is-active {
+      background: var(--accent);
+      color: rgb(0, 50, 51) !important;
+      font-weight: 600;
+    }
+    /* Header-Icons auf dunklem BG: dezente weisse Outlines */
+    header.topbar .btn-icon {
+      background: transparent;
+      border-color: rgba(255, 255, 255, 0.18);
+      color: rgba(255, 255, 255, 0.85);
+    }
+    header.topbar .btn-icon:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.35);
+    }
+    /* Header-Active-Highlight (Status-/Settings-/Hilfe-Icons) auf Lime */
+    header.topbar .btn-icon[class*='!bg-brand-50'] {
+      background: var(--accent) !important;
+      color: rgb(0, 50, 51) !important;
+      border-color: transparent !important;
+    }
+    /* User-Avatar-Initial wird im Header lime */
+    header.topbar .bg-brand-100 { background-color: var(--accent) !important; }
+    header.topbar .text-brand-700 { color: rgb(0, 50, 51) !important; }
     table.dashboard { @apply w-full text-sm; }
     table.dashboard thead th {
       @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10;
@@ -185,21 +350,21 @@
 {% set _is_settings = _path.startswith('/admin/settings') or _path.startswith('/admin/portals') or _path.startswith('/admin/search-terms') or _path.startswith('/admin/users') %}
 {% set _is_help = _path.startswith('/hilfe') %}
 
-<header class="bg-white border-b border-zinc-200 sticky top-0 z-40">
+<header class="topbar sticky top-0 z-40">
   <div class="max-w-screen-2xl mx-auto px-6 h-16 flex items-center justify-between">
     <div class="flex items-center gap-6">
-      <a href="/" class="flex items-center gap-2.5 font-semibold text-zinc-900">
+      <a href="/" class="flex items-center gap-2.5 font-semibold text-white">
         {% if has_logo() %}
-        <img src="/static/fbe-logo.png" alt="FBE" class="h-8 w-auto">
+        <img src="{{ logo_url() }}" alt="FBE" class="h-9 w-auto">
         {% else %}
-        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-700 text-white text-sm">FBE</span>
+        <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-accent-300 text-brand-800 text-sm font-bold">FBE</span>
         {% endif %}
-        <span>Ausschreibungen</span>
+        <span class="text-white">Ausschreibungen</span>
       </a>
       <nav class="hidden md:flex items-center gap-1 text-sm">
-        <a href="/" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path == '/' %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Dashboard</a>
+        <a href="/" class="nav-link {% if _path == '/' %}is-active{% endif %}">Dashboard</a>
         {% if _is_admin %}
-        <a href="/admin/profiles" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 text-zinc-700 {% if _path.startswith('/admin/profiles') %}bg-zinc-100 text-zinc-900 font-medium{% endif %}">Profile</a>
+        <a href="/admin/profiles" class="nav-link {% if _path.startswith('/admin/profiles') %}is-active{% endif %}">Profile</a>
         {% endif %}
       </nav>
     </div>

@@ -39,7 +39,15 @@ try:
 except ImportError:  # pragma: no cover
     pdf_extract_text = None
 
-from portal_logins import load_config as _load_login_cfg, find_config_for as _find_login_cfg, perform_login as _perform_login
+from portal_logins import (
+    load_config as _load_login_cfg,
+    find_config_for as _find_login_cfg,
+    perform_login as _perform_login,
+    saved_state_path as _saved_state_path,
+    save_session as _save_session,
+    is_session_alive as _is_session_alive,
+    clear_session as _clear_session,
+)
 
 # Fallback: ENV-basierte Logins (nur wenn die Plattform keine liefert).
 _ENV_LOGINS = _load_login_cfg()
@@ -105,6 +113,9 @@ def run_pending_login_tests() -> int:
             lid = conf.get("id")
             host = conf.get("host", "?")
             log.info("Login-Test fuer %s ...", host)
+            # Login-Test = bewusst ohne gespeicherte Session, damit der Test
+            # ehrlich von vorne pruefte, dass Credentials + Selektoren stimmen.
+            _clear_session(host)
             browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
             try:
                 ctx = browser.new_context(
@@ -120,9 +131,11 @@ def run_pending_login_tests() -> int:
                     report_login_result(lid, False, f"exception: {exc}")
                     continue
                 if ok:
-                    log.info("Login-Test %s OK (%s)", host, reason)
+                    # Erfolgreicher Test -> Session auf Disk fuer
+                    # spaetere Crawls (kein erneuter Login noetig).
+                    _save_session(ctx, host)
+                    log.info("Login-Test %s OK (%s) - Session gespeichert", host, reason)
                     report_login_result(lid, True, reason)
-                    _LOGGED_IN.add(host)
                 else:
                     log.warning("Login-Test %s FAIL: %s", host, reason)
                     report_login_result(lid, False, reason)
@@ -450,29 +463,48 @@ def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, st
     sources: list[tuple[str, str, str]] = []
     browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
     try:
-        ctx = browser.new_context(
+        # Falls wir fuer den Host eine gespeicherte Session haben, laden
+        # wir sie ins frische Browser-Context rein -> Cookies/localStorage
+        # ueberleben Crawls + Container-Restarts.
+        portal_logins = get_portal_logins()
+        login_key, login_conf = _find_login_cfg(url, portal_logins)
+        ctx_kwargs = dict(
             user_agent="Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
             locale="de-DE",
             accept_downloads=True,
         )
+        if login_key:
+            sp = _saved_state_path(login_key)
+            if sp:
+                ctx_kwargs["storage_state"] = sp
+                log.info("Session fuer %s aus %s wiederhergestellt", login_key, sp)
+        ctx = browser.new_context(**ctx_kwargs)
         page = ctx.new_page()
         page.set_default_timeout(PAGE_TIMEOUT_MS)
 
-        # 0) Falls fuer diesen Host ein Login konfiguriert ist und wir hier
-        #    noch nicht eingeloggt sind: einmal einloggen, Cookies bleiben
-        #    im ctx fuer alle folgenden Seiten dieser Domain.
-        portal_logins = get_portal_logins()
-        login_key, login_conf = _find_login_cfg(url, portal_logins)
-        if login_conf and login_key not in _LOGGED_IN:
-            log.info("Login-Versuch fuer Domain %s", login_key)
-            ok, reason = _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS)
-            if ok:
-                _LOGGED_IN.add(login_key)
-                log.info("Login erfolgreich fuer %s (%s)", login_key, reason)
-                report_login_result(login_conf.get("id"), True, reason)
-            else:
-                log.warning("Login fehlgeschlagen fuer %s: %s", login_key, reason)
-                report_login_result(login_conf.get("id"), False, reason)
+        # 0) Login-Strategie:
+        #    a) keine config -> skip
+        #    b) Session restored UND alive -> skip
+        #    c) sonst -> perform_login + save_session
+        if login_conf:
+            need_login = True
+            if _saved_state_path(login_key):
+                if _is_session_alive(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS):
+                    need_login = False
+                    log.info("Bestehende Session fuer %s noch gueltig - kein Re-Login", login_key)
+                else:
+                    log.info("Bestehende Session fuer %s abgelaufen - Re-Login", login_key)
+                    _clear_session(login_key)
+            if need_login:
+                log.info("Login-Versuch fuer Domain %s", login_key)
+                ok, reason = _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS)
+                if ok:
+                    _save_session(ctx, login_key)
+                    log.info("Login erfolgreich fuer %s (%s) - Session gespeichert", login_key, reason)
+                    report_login_result(login_conf.get("id"), True, reason)
+                else:
+                    log.warning("Login fehlgeschlagen fuer %s: %s", login_key, reason)
+                    report_login_result(login_conf.get("id"), False, reason)
 
         # 1) Hauptseite
         page.goto(url, wait_until="networkidle")

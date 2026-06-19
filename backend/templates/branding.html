@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Logo & Branding – Flüssigboden Akademie · Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Logo & Branding</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="mb-6">
+  <h1 class="text-2xl font-semibold tracking-tight">Logo & Branding</h1>
+  <p class="text-sm text-zinc-500 mt-1">
+    Eigenes Logo hochladen — wird sofort in Header, Login und Mails verwendet. SVG bevorzugt
+    (skalierbar, nie unscharf), aber PNG / JPG / WEBP gehen auch. Max 5 MB.
+  </p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  {% for v in variants %}
+  <div class="card p-6">
+    <h3 class="font-semibold mb-1">{{ v.label }}</h3>
+    <p class="text-xs text-zinc-500 mb-4">{{ v.hint }}</p>
+
+    <div class="rounded-xl border border-zinc-200 mb-4 flex items-center justify-center overflow-hidden"
+         style="min-height: 120px; background: {% if v.key == 'dark' %}#003233{% else %}#f5f7f8{% endif %};">
+      {% if v.current_url %}
+        <img src="{{ v.current_url }}" alt="{{ v.label }}"
+             style="max-height: 90px; max-width: 90%; height: auto; width: auto; object-fit: contain; display: block;">
+      {% else %}
+        <span class="text-xs {% if v.key == 'dark' %}text-white/60{% else %}text-zinc-400{% endif %}">
+          Stock-Logo wird verwendet
+        </span>
+      {% endif %}
+    </div>
+
+    <form method="post" action="/admin/branding/upload" enctype="multipart/form-data" class="space-y-3">
+      <input type="hidden" name="variant" value="{{ v.key }}">
+      <input type="file" name="logo" accept="image/svg+xml,image/png,image/jpeg,image/webp"
+             class="block w-full text-sm text-zinc-700 file:mr-3 file:py-2 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-zinc-100 file:text-zinc-700 hover:file:bg-zinc-200 cursor-pointer"
+             required>
+      <div class="flex gap-2">
+        <button type="submit" class="btn-primary text-sm">Hochladen</button>
+        {% if v.uploaded %}
+        <button type="submit" form="del-{{ v.key }}" class="btn-ghost text-sm">Entfernen</button>
+        {% endif %}
+      </div>
+    </form>
+    {% if v.uploaded %}
+    <form method="post" action="/admin/branding/delete" id="del-{{ v.key }}" class="hidden"
+          onsubmit="return confirm('Upload {{ v.key }} wirklich entfernen?');">
+      <input type="hidden" name="variant" value="{{ v.key }}">
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card p-5 mt-6 text-sm">
+  <h3 class="font-semibold mb-2">Tipps</h3>
+  <ul class="list-disc pl-5 text-zinc-600 space-y-1">
+    <li><strong>SVG</strong> ist erste Wahl: skaliert perfekt, kein Verzerren, kein Pixelmatsch.</li>
+    <li><strong>PNG mit Transparenz</strong> für photographische Logos. Empfehlung ~600 px Höhe für Retina.</li>
+    <li>Das Logo wird mit <code>object-fit: contain</code> eingebettet — Seitenverhältnis bleibt immer erhalten, auch bei breiten oder hohen Logos.</li>
+    <li>Cache: nach Upload den Browser einmal hart neu laden (Strg+F5), falls das alte Logo noch hängen bleibt.</li>
+    <li>Mails (Invite, Reset, Tender-Mail) nutzen das Logo via öffentliche URL — wenn der Server nicht von außen erreichbar ist, lege es zusätzlich auf <code>fb-akademie.de</code> ab und setze <code>COMPANY_LOGO_URL</code> in der <code>.env</code>.</li>
+  </ul>
+</div>
+
+{% endblock %}

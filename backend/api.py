@@ -3229,3 +3229,63 @@ def tender_attachment_download(
         media_type=att.content_type or "application/octet-stream",
         filename=att.filename,
     )
+
+
+# --- Admin: Logo-Upload ---------------------------------------------
+from fastapi import UploadFile, File
+
+
+@app.get("/admin/branding", response_class=HTMLResponse)
+def admin_branding(
+    request: Request,
+    flash: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    from . import branding as _br
+    variants = []
+    for v, label, hint in [
+        ("light", "Logo für helle Hintergründe", "Z.B. die normale Wortmarke in Markenfarben — für Login-Form, Mails, helle Seiten."),
+        ("dark",  "Logo für dunkle Topbar",      "Wortmarke in weiss/heller — wird im Header oben links angezeigt."),
+        ("mark",  "Quadratisches Mark (optional)", "Nur das B-Mark als Square, für Favicon/Avatar-Look."),
+    ]:
+        up = _br._uploaded(v)
+        variants.append({
+            "key": v, "label": label, "hint": hint,
+            "current_url": (f"/static/uploaded/{up.name}?v={int(up.stat().st_mtime)}" if up else None),
+            "current_name": (up.name if up else None),
+            "uploaded": bool(up),
+        })
+    return templates.TemplateResponse(
+        request, "branding.html",
+        {
+            "variants": variants,
+            "user": request.session.get("user"),
+            "flash": flash, "error": error,
+        },
+    )
+
+
+@app.post("/admin/branding/upload")
+async def admin_branding_upload(
+    variant: str = Form(...),
+    logo: UploadFile = File(...),
+):
+    from . import branding as _br
+    if not logo or not logo.filename:
+        return RedirectResponse(url="/admin/branding?error=Keine Datei ausgewaehlt", status_code=303)
+    content = await logo.read()
+    ok, msg = _br.save_uploaded_logo(variant, logo.filename, content)
+    if not ok:
+        return RedirectResponse(url=f"/admin/branding?error={msg}", status_code=303)
+    return RedirectResponse(
+        url=f"/admin/branding?flash=Logo ({variant}) hochgeladen - Hard-Reload (Strg+F5) im Browser falls das alte noch im Cache haengt.",
+        status_code=303)
+
+
+@app.post("/admin/branding/delete")
+def admin_branding_delete(variant: str = Form(...)):
+    from . import branding as _br
+    _br.delete_uploaded_logo(variant)
+    return RedirectResponse(
+        url=f"/admin/branding?flash=Upload ({variant}) entfernt - Stock-Logo wird wieder verwendet.",
+        status_code=303)

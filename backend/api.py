@@ -759,6 +759,7 @@ def detail(
             "claude_analysis": tender.claude_analysis,
             "claude_analyzed_at": tender.claude_analyzed_at,
             "claude_analysis_html": _cla_render(tender.claude_analysis),
+            "claude_trace": request.session.pop(f"claude_trace_{tender_id}", None),
             "flash": flash,
             "error": error,
         },
@@ -3076,12 +3077,16 @@ def tender_claude_analyze(
         q, _, _ = _enforce_restricted(db, request, q)
         if q.first() is None:
             raise HTTPException(404, "Ausschreibung nicht gefunden")
-    from . import claude_analysis as _cla
+    from . import claude_agent as _cla
     if not _cla.is_configured():
         return RedirectResponse(
             url=f"/tender/{tender_id}?error=Anthropic-API-Key fehlt - in der .env setzen + restart.",
             status_code=303)
-    ok, content = _cla.run_and_store(db, tender)
+    ok, content, trace = _cla.run_and_store(db, tender)
+    # Trace in der Session speichern, damit das Template ihn einmalig
+    # anzeigen kann.
+    if trace:
+        request.session[f"claude_trace_{tender_id}"] = trace[:30]
     if not ok:
         return RedirectResponse(
             url=f"/tender/{tender_id}?error=Claude-Analyse fehlgeschlagen: {content[:200]}",

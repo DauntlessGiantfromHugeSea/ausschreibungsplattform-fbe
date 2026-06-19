@@ -206,9 +206,9 @@
     <div class="card p-6" id="claude-analysis">
       <div class="flex items-start justify-between gap-3 mb-3 flex-wrap">
         <div>
-          <h3 class="text-base font-semibold">🧠 Tiefe Analyse (Claude)</h3>
+          <h3 class="text-base font-semibold">🧠 Tiefe Analyse (Claude-Agent)</h3>
           <p class="text-xs text-zinc-500 mt-1">
-            Einsparungspotenzial, Flüssigboden-Eignung, Empfehlung — nutzt das gesamte vorliegende Material + Wissensbasis.
+            Agent mit Tool-Use: durchsucht Wissensbasis, liest Anhänge, vergleicht ähnliche Tender — bis er genug Material hat. Liefert dann Einsparungspotenzial, FBA-Eignung und Empfehlung.
           </p>
         </div>
         <form method="post" action="/tender/{{ tender.id }}/claude-analyze" class="shrink-0">
@@ -224,6 +224,27 @@
           {% endif %}
         </form>
       </div>
+      {% if claude_trace %}
+        <details class="mb-4 bg-zinc-50 border border-zinc-200 rounded-lg">
+          <summary class="cursor-pointer px-3 py-2 text-xs font-medium text-zinc-700">
+            🔧 Agent-Trace ({{ claude_trace|length }} Tool-Aufrufe) — anklicken zum Ausklappen
+          </summary>
+          <ol class="divide-y divide-zinc-200">
+            {% for step in claude_trace %}
+            <li class="px-3 py-2 text-xs">
+              <div class="font-mono">
+                <span class="text-zinc-400">#{{ step.iteration }}</span>
+                <span class="font-semibold text-brand-700">{{ step.tool }}</span>
+                <span class="text-zinc-500">({{ step.args|tojson }})</span>
+              </div>
+              {% if step.result_excerpt %}
+              <div class="mt-1 text-zinc-600 whitespace-pre-wrap font-mono text-[11px] leading-relaxed">{{ step.result_excerpt }}{% if step.result_excerpt|length >= 600 %} …{% endif %}</div>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ol>
+        </details>
+      {% endif %}
       {% if claude_analysis %}
         <div class="text-xs text-zinc-400 mb-3">
           Stand: {{ claude_analyzed_at.strftime('%d.%m.%Y %H:%M') if claude_analyzed_at else '—' }}
@@ -233,7 +254,7 @@
         </div>
       {% elif claude_configured %}
         <div class="text-sm text-zinc-500 bg-zinc-50 border border-zinc-200 rounded p-4">
-          Noch nicht analysiert. Klick auf „▶ Mit Claude analysieren" — Claude liest die DB-Felder + die Enricher-Anreicherung + die Admin-Wissensbasis und liefert eine strukturierte FBE-Bewertung mit Einsparungspotenzial.
+          Noch nicht analysiert. Klick auf „▶ Mit Claude analysieren" — der Agent durchsucht Wissensbasis, liest Anhänge + Enricher-Material, vergleicht mit ähnlichen Tendern und liefert eine FBA-Bewertung mit Einsparungspotenzial.
         </div>
       {% endif %}
     </div>

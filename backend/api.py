@@ -3294,3 +3294,105 @@ def admin_branding_delete(variant: str = Form(...)):
     return RedirectResponse(
         url=f"/admin/branding?flash=Upload ({variant}) entfernt - Stock-Logo wird wieder verwendet.",
         status_code=303)
+
+
+# --- Portal-Login: Session manuell importieren (Cookie-Extension) ----
+@app.post("/admin/portal-logins/{lid}/import-session")
+def admin_portal_login_import_session(
+    lid: int,
+    storage_state_json: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Speichert ein vom Admin gepastetes Playwright-storage_state-JSON
+    fuer einen Host. Der Enricher nutzt es ab dann anstelle eines
+    skript-getriebenen Logins.
+
+    Format = Playwright storage_state:
+      { "cookies": [{name,value,domain,path,...}, ...],
+        "origins": [{origin, localStorage:[{name,value}]}, ...] }
+
+    Browser-Extensions wie 'Cookie-Editor' oder 'EditThisCookie'
+    koennen das direkt im Playwright-JSON-Format exportieren.
+    Alternativ akzeptieren wir ein dict mit nur 'cookies'.
+    """
+    import json as _json
+    it = db.get(PortalLogin, lid)
+    if not it:
+        return RedirectResponse(url="/admin/portal-logins?error=Nicht gefunden", status_code=303)
+    raw = (storage_state_json or "").strip()
+    if not raw:
+        return RedirectResponse(
+            url=f"/admin/portal-logins/{lid}/edit?error=Leere Eingabe",
+            status_code=303)
+    try:
+        data = _json.loads(raw)
+    except _json.JSONDecodeError as exc:
+        return RedirectResponse(
+            url=f"/admin/portal-logins/{lid}/edit?error=Ungueltiges JSON: {exc}",
+            status_code=303)
+    # Akzeptiere a) Playwright-Format mit "cookies"+"origins"
+    # oder b) reine Cookie-Liste (von Cookie-Editor o.ae.)
+    if isinstance(data, list):
+        data = {"cookies": data, "origins": []}
+    if not isinstance(data, dict) or "cookies" not in data:
+        return RedirectResponse(
+            url=f"/admin/portal-logins/{lid}/edit?error=Format ungueltig - erwarte {{cookies:[...]}} oder eine Cookie-Liste",
+            status_code=303)
+    cookies = data.get("cookies") or []
+    if not isinstance(cookies, list) or not cookies:
+        return RedirectResponse(
+            url=f"/admin/portal-logins/{lid}/edit?error=Keine Cookies im JSON gefunden",
+            status_code=303)
+    # Cookies normalisieren - Playwright erwartet bestimmte Felder
+    norm = []
+    for c in cookies:
+        if not isinstance(c, dict):
+            continue
+        name = c.get("name") or c.get("Name") or ""
+        value = c.get("value") or c.get("Value") or ""
+        domain = c.get("domain") or c.get("Domain") or ""
+        path = c.get("path") or c.get("Path") or "/"
+        if not name or not domain:
+            continue
+        ck = {"name": name, "value": str(value), "domain": str(domain), "path": str(path)}
+        for opt in ("expires", "httpOnly", "secure", "sameSite"):
+            if opt in c:
+                ck[opt] = c[opt]
+            elif opt.lower() in c:
+                ck[opt] = c[opt.lower()]
+        # Playwright braucht sameSite in ('Strict','Lax','None')
+        if "sameSite" in ck:
+            s = str(ck["sameSite"]).strip().capitalize()
+            ck["sameSite"] = s if s in ("Strict", "Lax", "None") else "Lax"
+        norm.append(ck)
+    if not norm:
+        return RedirectResponse(
+            url=f"/admin/portal-logins/{lid}/edit?error=Keine verwertbaren Cookies (name+domain pflicht)",
+            status_code=303)
+
+    storage_state = {
+        "cookies": norm,
+        "origins": data.get("origins") or [],
+    }
+
+    # Slug analog enricher/portal_logins.session_file_for
+    import re as _re
+    slug = _re.sub(r"[^a-z0-9._-]+", "_", it.host.lower()).strip("_") or "default"
+    target_dir = Path(settings.enrich_dir) / "sessions"
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / f"{slug}.json").write_text(
+            _json.dumps(storage_state, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+    except Exception as exc:
+        return RedirectResponse(
+            url=f"/admin/portal-logins/{lid}/edit?error=Schreibfehler: {exc}",
+            status_code=303)
+    # Status auf 'ok' setzen - manuell importiert ist genauso gut wie geprueft.
+    it.last_attempt_at = datetime.utcnow()
+    it.last_status = "ok"
+    it.last_error = f"Session manuell importiert ({len(norm)} Cookies)"
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/portal-logins?flash=Session fuer {it.host} importiert ({len(norm)} Cookies). Enricher nutzt sie sofort.",
+        status_code=303)

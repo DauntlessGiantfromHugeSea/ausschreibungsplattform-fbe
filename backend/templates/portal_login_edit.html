@@ -171,6 +171,44 @@
   </div>
 </form>
 
+{% if not is_new %}
+<div class="card p-6 max-w-3xl mt-6">
+  <h3 class="text-base font-semibold mb-2">🎫 Session manuell importieren</h3>
+  <p class="text-sm text-zinc-600 mb-4">
+    Funktioniert, wenn der skript-getriebene Login nicht durchgeht (Captcha, 2FA, Keycloak-SSO, …).
+    Logg dich in <strong>deinem eigenen Browser</strong> ein, exportiere die Cookies, paste das JSON hier rein —
+    der Enricher nutzt es ab dann wie eine echte Session.
+  </p>
+
+  <details class="bg-zinc-50 border border-zinc-200 rounded-lg mb-4">
+    <summary class="cursor-pointer px-3 py-2 text-sm font-medium">Anleitung (Cookie-Editor-Extension)</summary>
+    <div class="px-4 py-3 text-sm text-zinc-700 space-y-2">
+      <ol class="list-decimal pl-5 space-y-1">
+        <li>Browser-Extension installieren:
+          <a href="https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm" target="_blank" rel="noopener" class="text-brand-700 hover:underline">Cookie-Editor</a> (Chrome / Edge / Firefox)
+        </li>
+        <li>Auf <code>{{ item.host }}</code> einloggen (mit deinen normalen Daten)</li>
+        <li>Extension-Icon klicken → <strong>Export → "JSON" oder "Puppeteer/Playwright JSON"</strong></li>
+        <li>Das kopierte JSON unten ins Feld pasten → <em>Importieren</em></li>
+      </ol>
+      <p class="text-xs text-zinc-500 mt-2">
+        Wir speichern das im Playwright-Format unter <code>/srv/fbe-enrich/sessions/{{ item.host|replace('.','_') }}.json</code>.
+        Cookies werden so lange wiederverwendet, bis das Portal sie ablaufen lässt — bei DTVP/Keycloak typisch
+        7–30 Tage.
+      </p>
+    </div>
+  </details>
+
+  <form method="post" action="/admin/portal-logins/{{ item.id }}/import-session" class="space-y-3">
+    <label class="block text-xs font-medium text-zinc-600">Cookie-JSON (Playwright-Format oder Cookie-Liste)</label>
+    <textarea name="storage_state_json" required rows="10"
+              class="input font-mono text-xs"
+              placeholder='[{"name":"sessionid","value":"...","domain":"{{ item.host }}","path":"/"}]'></textarea>
+    <button type="submit" class="btn-primary">Importieren</button>
+  </form>
+</div>
+{% endif %}
+
 <script>
   document.getElementById('pw-toggle')?.addEventListener('click', () => {
     const f = document.getElementById('pw-field');

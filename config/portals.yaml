@@ -85,11 +85,29 @@ portals:
     '
   config:
     user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
-    listing_paths:
-    - /search.html?3
-    - /search.html?publishDateRange=ALL
-    - /search.html?1
-    - /search.html
+    # Pro Keyword eine Such-URL - effizienter als 1200 Eintraege client-seitig zu filtern.
+    search_path: /search.html?searchString={term}&publishDateRange=ALL
+    url_terms:
+    - tiefbau
+    - tiefbauarbeiten
+    - erdarbeiten
+    - erdbau
+    - verfuellung
+    - verfuellarbeiten
+    - leitungsbau
+    - rohrleitungsbau
+    - kanalbau
+    - spundwand
+    - bohrpfahl
+    - bohrpfaehle
+    - baugrubensicherung
+    - schachtbau
+    - fluessigboden
+    - zfsv
+    - trinkwasserleitung
+    - hausanschluss
+    - wasserhaltung
+    - wegebau
     wait_for_selector: 'a[href*="tenderdetails.html"]'
     wait_timeout_ms: 20000
     # Eine Ergebniszeile = ein <tr> mit einem tenderdetails-Link drin.
@@ -101,6 +119,8 @@ portals:
     deadline_selector: 'td.deadline, .frist, .submissionDeadline'
     publication_selector: 'td.publicationDate, .published, .veroeffentlicht'
     description_selector: '.description, td.description, td.cpv'
+    # Such-URL liefert nur passende Treffer - kein client-side Filter noetig
+    filter_by_terms: false
     # Sicherheit: Title-Strings, die wir NIE als Tender akzeptieren (Page-Header etc.)
     title_blocklist:
     - Ausschreibungssuche
@@ -638,13 +658,19 @@ portals:
   notes: "Datenservice Oeffentlicher Einkauf (DOEE), bundesweite eForms-Plattform.\nUI ist eine Vue/React-SPA - Listing wird JS-seitig nachgeladen.\nBietet OpenData-REST: /api/opendata/v3/...  (eForms / JSON),\nSwagger: /documentation/swagger-ui/opendata/index.html.\nFuer den ersten Schuss scrapen wir das UI-Listing per Playwright;\ndie API-Anbindung kann spaeter ueber einen dedizierten Scraper\nersetzt werden, sobald die Endpoints geprueft sind.\n"
   config:
     user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
-    listing_paths:
-    - /ui/de/search/?searchQuery=Tiefbau&page=1&pageSize=50
-    - /ui/de/search/?searchQuery=Erdarbeiten&page=1&pageSize=50
-    - /ui/de/search/?searchQuery=Verfuellung&page=1&pageSize=50
-    - /ui/de/search/?searchQuery=Leitungsbau&page=1&pageSize=50
-    - /ui/de/search/?searchQuery=Spundwand&page=1&pageSize=50
-    - /ui/de/search/?searchQuery=Fluessigboden&page=1&pageSize=50
+    # Pro Keyword eine Such-URL
+    search_path: /ui/de/search/?searchQuery={term}&page=1&pageSize=50
+    url_terms:
+    - Tiefbau
+    - Erdarbeiten
+    - Verfuellung
+    - Leitungsbau
+    - Spundwand
+    - Fluessigboden
+    - Kanalbau
+    - Rohrleitungsbau
+    - Bohrpfahl
+    - Baugrubensicherung
     wait_for_selector: 'a[href*="/ui/de/notices/"], a[href*="/notice/"], .search-result-item, article'
     wait_timeout_ms: 20000
     result_selector: 'article, .search-result-item, li:has(a[href*="/ui/de/notices/"])'
@@ -659,4 +685,4 @@ portals:
     - Suche
     - Suchergebnisse
     - Bekanntmachungen
-    filter_by_terms: true
+    filter_by_terms: false

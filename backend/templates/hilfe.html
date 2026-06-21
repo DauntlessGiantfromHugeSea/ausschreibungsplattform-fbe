@@ -233,7 +233,23 @@
 
   <section id="changelog">
     <h2 class="text-xl font-semibold mb-3">Update-Verlauf</h2>
-    <p class="text-sm text-zinc-500 mb-4">Neueste Aenderungen zuerst. Versionsnummern folgen <code>major.minor.patch</code>.</p>
+    <p class="text-sm text-zinc-500 mb-4">
+      Neueste Änderungen zuerst. Fragen oder Wünsche? → <a href="/feedback" class="text-brand-700 hover:underline">Feedback senden</a>. Anleitungen findest du oben in dieser Hilfeseite.
+    </p>
+    {% if changelog_db %}
+    <ol class="space-y-6 mb-6">
+      {% for e in changelog_db %}
+      <li class="border-l-2 border-brand-500 pl-4">
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <span class="text-lg font-semibold">{{ e.version }}</span>
+          <span class="text-xs text-zinc-500">{{ e.created_at.strftime('%d.%m.%Y') }}</span>
+          {% if e.title %}<span class="pill bg-brand-50 text-brand-800 border border-brand-200">{{ e.title }}</span>{% endif %}
+        </div>
+        <div class="mt-2 text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">{{ e.body_md }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
     {% include "_changelog.html" %}
   </section>
 

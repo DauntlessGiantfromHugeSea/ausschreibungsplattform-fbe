@@ -443,6 +443,28 @@ def add_pending_registration_columns() -> bool:
     return added
 
 
+def create_changelog_entries_table() -> bool:
+    insp = inspect(engine)
+    if "changelog_entries" in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE changelog_entries ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "version VARCHAR(40) NOT NULL, "
+                "title VARCHAR(200), "
+                "body_md TEXT NOT NULL, "
+                "is_published BOOLEAN NOT NULL DEFAULT 1, "
+                "created_at DATETIME NOT NULL, "
+                "author VARCHAR(80))"
+            ))
+        return True
+    except Exception as exc:
+        log.exception("Migration changelog_entries fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -463,4 +485,5 @@ def run_all() -> dict:
         "feedback_created": create_feedback_table(),
         "pending_registrations_created": create_pending_registrations_table(),
         "pending_registration_columns_added": add_pending_registration_columns(),
+        "changelog_entries_created": create_changelog_entries_table(),
     }

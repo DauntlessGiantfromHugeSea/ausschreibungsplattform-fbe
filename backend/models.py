@@ -380,3 +380,16 @@ class PendingRegistration(Base):
     requested_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     decided_at = Column(DateTime, nullable=True)
     decided_by = Column(String(80), nullable=True)
+
+
+class ChangelogEntry(Base):
+    """Update-Eintrag (von Admin gepflegt, erscheint in der Hilfe-Seite)."""
+    __tablename__ = "changelog_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    version = Column(String(40), nullable=False)
+    title = Column(String(200), nullable=True)
+    body_md = Column(Text, nullable=False)
+    is_published = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    author = Column(String(80), nullable=True)

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Update-Verlauf bearbeiten – Flüssigboden Akademie · Ausschreibungen{% endblock %}
+{% block content %}
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Update-Verlauf</span>
+</nav>
+
+{% if flash %}<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>{% endif %}
+{% if error %}<div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>{% endif %}
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2">Update-Verlauf pflegen</h1>
+<p class="text-sm text-zinc-500 mb-6">
+  Neue Einträge erscheinen sofort auf der <a href="/hilfe#changelog" class="text-brand-700 hover:underline">Hilfe-Seite</a> für alle User. Markdown im Body-Feld ist erlaubt (Bullets mit <code>-</code>, **fett**, etc.).
+</p>
+
+<details class="card p-6 max-w-3xl mb-6" {% if not items %}open{% endif %}>
+  <summary class="cursor-pointer text-base font-semibold mb-2">+ Neuer Eintrag</summary>
+  <form method="post" action="/admin/changelog/save" class="space-y-3 mt-4">
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Version *</label>
+        <input class="input" type="text" name="version" required placeholder="z.B. V1.0.3" value="{{ next_version }}">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Titel (optional)</label>
+        <input class="input" type="text" name="title" placeholder="Self-Registration, Feedback-KI, …">
+      </div>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Beschreibung (Markdown) *</label>
+      <textarea class="input font-mono text-sm min-h-[200px]" name="body_md" required
+                placeholder="- **Neu:** XYZ
+- Verbesserung: …
+- Bugfix: …
+
+Bei Fragen → /hilfe oder dem Admin via /feedback Bescheid geben."></textarea>
+    </div>
+    <label class="inline-flex items-center gap-2 text-sm">
+      <input type="checkbox" name="is_published" checked class="rounded">
+      veröffentlicht (für alle User sichtbar in der Hilfe)
+    </label>
+    <button class="btn-primary">Speichern</button>
+  </form>
+</details>
+
+{% if items %}
+<div class="space-y-3">
+  {% for e in items %}
+  <div class="card p-5">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+      <div class="flex items-center gap-2">
+        <span class="pill {% if e.is_published %}bg-emerald-100 text-emerald-800{% else %}bg-zinc-100 text-zinc-600{% endif %}">{{ e.version }}</span>
+        {% if e.title %}<span class="font-semibold">{{ e.title }}</span>{% endif %}
+        {% if not e.is_published %}<span class="text-xs text-zinc-500">(unveröffentlicht)</span>{% endif %}
+      </div>
+      <div class="text-xs text-zinc-400">{{ e.created_at.strftime('%d.%m.%Y %H:%M') }} · {{ e.author or '—' }}</div>
+    </div>
+    <details>
+      <summary class="cursor-pointer text-sm text-brand-700 hover:underline">✎ Bearbeiten</summary>
+      <form method="post" action="/admin/changelog/save" class="space-y-3 mt-3">
+        <input type="hidden" name="entry_id" value="{{ e.id }}">
+        <div class="grid grid-cols-2 gap-3">
+          <input class="input" type="text" name="version" required value="{{ e.version }}">
+          <input class="input" type="text" name="title" value="{{ e.title or '' }}" placeholder="Titel">
+        </div>
+        <textarea class="input font-mono text-sm min-h-[200px]" name="body_md" required>{{ e.body_md }}</textarea>
+        <label class="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" name="is_published" {% if e.is_published %}checked{% endif %} class="rounded">
+          veröffentlicht
+        </label>
+        <div class="flex gap-2">
+          <button class="btn-primary text-sm">Speichern</button>
+          <button type="submit" form="del-{{ e.id }}" class="btn-ghost text-sm hover:!text-rose-600">Löschen</button>
+        </div>
+      </form>
+      <form method="post" action="/admin/changelog/{{ e.id }}/delete" id="del-{{ e.id }}" class="hidden"
+            onsubmit="return confirm('Eintrag {{ e.version }} loeschen?');"></form>
+    </details>
+    <div class="text-sm text-zinc-700 whitespace-pre-wrap mt-2">{{ e.body_md|truncate(300) }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card p-6 text-center text-zinc-500">
+  Noch keine Einträge — schreib oben einen.
+</div>
+{% endif %}
+
+{% endblock %}

@@ -363,6 +363,30 @@ def _html_to_text(html: str, limit: int) -> str:
     return text
 
 
+def _portal_specific_subpages(base_url: str) -> list[str]:
+    """Liefert deterministisch konstruierbare Sub-URLs pro Portal, wo
+    Vergabeunterlagen liegen. Spart uns das Klicken durch Reveal-Buttons.
+
+    evergabe-online.de:
+      tenderdetails.html?id=NNN  ->  tenderdocuments.html?id=NNN&cookieCheck
+    """
+    out: list[str] = []
+    try:
+        parsed = urlparse(base_url)
+    except Exception:
+        return out
+    host = (parsed.netloc or "").lower()
+    path = parsed.path or ""
+    query = parsed.query or ""
+    if "evergabe-online.de" in host and "tenderdetails.html" in path:
+        # ID extrahieren und auf tenderdocuments.html mappen
+        m = re.search(r"[?&]id=(\d+)", query)
+        if m:
+            tid = m.group(1)
+            out.append(f"https://www.evergabe-online.de/tenderdocuments.html?id={tid}&cookieCheck")
+    return out
+
+
 def _find_detail_subpages(page, base_url: str, max_n: int) -> list[str]:
     """Sammelt Sub-URLs der gleichen Domain, deren Linktext auf 'Details'
     hindeutet. Max max_n eindeutige URLs."""
@@ -440,30 +464,83 @@ def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
 
 def _reveal_documents(page) -> int:
     """Klickt 'Ausschreibungsunterlagen einsehen' o.ae., damit die Datei-Tabelle
-    sichtbar wird. Liefert die Zahl der ausgefuehrten Klicks."""
+    sichtbar wird. Liefert die Zahl der ausgefuehrten Klicks.
+
+    Apache-Wicket-Plattformen (evergabe-online) reagieren mit AJAX *oder*
+    Navigation auf eine eigene Anhangseite. Beides muss funktionieren:
+    - bei AJAX warten wir auf zusaetzliche Dokument-Links im DOM
+    - bei Navigation laesst Playwright die neue Seite einfach laden
+    """
     clicked = 0
+    pdf_count_before = _count_download_links(page)
+    start_url = page.url
+
     for pat in REVEAL_DOCS_PATTERNS:
         try:
+            # 1. Text-Match (gross/klein egal)
             locator = page.locator(
-                f"button:has-text('{pat}'), a:has-text('{pat}'), input[value*='{pat}' i]",
-                has_text=re.compile(pat, re.IGNORECASE),
+                f"a:has-text('{pat}'), button:has-text('{pat}'), input[value*='{pat}' i]"
             )
             n = min(locator.count(), 3)
             for i in range(n):
                 try:
                     locator.nth(i).scroll_into_view_if_needed(timeout=1500)
-                    locator.nth(i).click(timeout=3000, no_wait_after=True)
+                    # Wicket: KEIN no_wait_after - kann navigieren
+                    locator.nth(i).click(timeout=5000)
                     clicked += 1
+                    # Nach jedem Klick kurz warten + DOM-Check
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=8000)
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(800)
+                    # Genug PDFs zu sehen? Dann fertig
+                    if _count_download_links(page) > pdf_count_before:
+                        return clicked
                 except Exception:
                     continue
         except Exception:
             continue
+
+    # 2. Fallback ueber Klassen-Selektor (Wicket-Standard btn-primary)
+    if clicked == 0:
+        try:
+            wicket_btn = page.locator("main a.btn.btn-primary, a.btn-primary, button.btn-primary").first
+            if wicket_btn.count() > 0:
+                txt = (wicket_btn.inner_text() or "").lower()
+                if any(k in txt for k in ["unterlagen", "einsehen", "dokument", "anhang"]):
+                    wicket_btn.scroll_into_view_if_needed(timeout=1500)
+                    wicket_btn.click(timeout=5000)
+                    clicked += 1
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(1200)
+        except Exception:
+            pass
+
+    # 3. Wenn navigiert wurde, ist der DOM ggf. ganz neu - egal, _find_pdf_links
+    #    scannt einfach den aktuellen Zustand. Hier nur final stabilisieren.
     if clicked:
         try:
             page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
             pass
+    if page.url != start_url:
+        log.info("reveal_documents: navigiert nach %s", page.url[:120])
     return clicked
+
+
+def _count_download_links(page) -> int:
+    """Best-effort: zaehlt, wie viele plausible Download-Links aktuell im DOM sind."""
+    try:
+        return int(page.evaluate("""() => {
+            const re = /(\\.pdf|\\.docx?|\\.xlsx?|\\.zip|download|attachment|getfile|\\/files\\/)/i;
+            return [...document.querySelectorAll('a[href]')].filter(a => re.test(a.getAttribute('href') || '')).length;
+        }"""))
+    except Exception:
+        return 0
 
 
 def _filename_from_response(resp, fallback_url: str) -> str:
@@ -666,6 +743,11 @@ def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, st
         # Mapping URL -> page (fuer Click-Fallback noetig: auf welcher Seite war der Link?)
         url_origin: dict[str, str] = {u: page.url for u in pdf_urls}
         sub_urls = _find_detail_subpages(page, url, MAX_SUBPAGES)
+        # Portal-spezifisch deterministisch konstruierbare Unterseiten
+        # (z.B. evergabe-online tenderdocuments.html) ergaenzen
+        for extra in _portal_specific_subpages(url):
+            if extra not in sub_urls:
+                sub_urls.insert(0, extra)
 
         # 3) Unterseiten besuchen
         for sub in sub_urls:

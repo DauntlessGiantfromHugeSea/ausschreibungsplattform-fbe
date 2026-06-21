@@ -490,6 +490,16 @@ def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
 
 
 def _reveal_documents(page) -> int:
+    """Klick-Reveal ist DEAKTIVIERT. Auf evergabe-online erzeugen Klicks
+    auf 'Ausschreibungsunterlagen einsehen' beim Bot regelmaessig Wicket-
+    Session-Fehler (Navigation nach internalerror.html). Statt zu klicken
+    konstruieren wir die Dokumenten-URL deterministisch in
+    _portal_specific_subpages(). Diese Funktion bleibt als No-Op fuer
+    kuenftige Portale, die einen Reveal-Klick brauchen koennen."""
+    return 0
+
+
+def _reveal_documents_DISABLED(page) -> int:
     """Klickt 'Ausschreibungsunterlagen einsehen' o.ae., damit die Datei-Tabelle
     sichtbar wird. Liefert die Zahl der ausgefuehrten Klicks.
 

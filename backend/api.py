@@ -22,7 +22,7 @@ from . import branding
 from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User, PortalLogin, TenderAttachment, UserTenderStatus, Feedback, PendingRegistration
+from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User, PortalLogin, TenderAttachment, UserTenderStatus, Feedback, PendingRegistration, ChangelogEntry
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -1473,12 +1473,22 @@ def admin_broadcast_post(
             '</td></tr>'
             # Body
             '<tr><td style="padding:18px 28px 8px 28px;">{body_blocks}</td></tr>'
-            # Disclaimer
+            # Disclaimer / Helpful links
             '<tr><td style="padding:6px 28px 22px 28px;">'
-              '<div style="font-size:13px;color:#71717a;background:#fafafa;border:1px solid #ececef;'
-              'border-radius:8px;padding:12px 14px;">'
-              'Dies ist eine automatisch erzeugte Nachricht der {company} – bitte nicht darauf antworten. '
-              'Bei Fragen wende dich an den Administrator der Plattform.'
+              '<div style="font-size:13px;color:#3f3f46;background:#fafafa;border:1px solid #ececef;'
+              'border-radius:8px;padding:14px 16px;line-height:1.55;">'
+              '<div style="font-weight:600;color:#1f2937;margin-bottom:6px;">So geht es weiter</div>'
+              '<div>Du kannst dich direkt in der Plattform einloggen und alle neuen Funktionen ausprobieren. '
+              'Eine ausführliche Beschreibung – inklusive Update-Verlauf, Tipps zu Suchprofilen, KI-Analyse und '
+              'Portal-Logins – findest du auf der <a href="https://app.fb-akademie.de/hilfe" '
+              'style="color:#006566;text-decoration:none;font-weight:600;">Hilfeseite</a>.</div>'
+              '<div style="margin-top:8px;">Fragen, Wünsche oder Bugs? Schreib uns einfach über '
+              '<a href="https://app.fb-akademie.de/feedback" style="color:#006566;text-decoration:none;'
+              'font-weight:600;">Feedback &amp; Vorschläge</a> – wir lesen jedes Stichwort, '
+              'jeden Wunsch und jeden Verbesserungsvorschlag und melden uns zurück.</div>'
+              '<div style="margin-top:10px;color:#71717a;font-size:12px;">'
+              'Diese Mail ist automatisch erzeugt – Antworten an diesen Absender werden nicht gelesen. '
+              'Nutze stattdessen die Feedback-Seite oder die Hilfeseite in der Plattform.</div>'
               '</div>'
             '</td></tr>'
             # Footer
@@ -1506,7 +1516,12 @@ def admin_broadcast_post(
         body,
         "",
         "-" * 60,
-        "Dies ist eine automatisch erzeugte Nachricht. Bitte nicht antworten.",
+        "So geht es weiter:",
+        " - Hilfeseite & Update-Verlauf: https://app.fb-akademie.de/hilfe",
+        " - Feedback, Wünsche, Bugs:     https://app.fb-akademie.de/feedback",
+        "",
+        "Diese Mail ist automatisch erzeugt – bitte nicht antworten.",
+        "Nutze die Feedback-Seite, wenn du uns etwas mitteilen möchtest.",
     ]
     plain = "\n".join(plain_lines)
 
@@ -2505,8 +2520,12 @@ def me_notifications_test(
 
 
 @app.get("/hilfe", response_class=HTMLResponse)
-def hilfe(request: Request):
-    return templates.TemplateResponse(request, "hilfe.html", {"user": _session_user(request)})
+def hilfe(request: Request, db: Session = Depends(get_db)):
+    changelog_db = (db.query(ChangelogEntry)
+                    .filter(ChangelogEntry.is_published == True)
+                    .order_by(ChangelogEntry.created_at.desc()).all())
+    return templates.TemplateResponse(request, "hilfe.html",
+        {"user": _session_user(request), "changelog_db": changelog_db})
 
 
 
@@ -3888,3 +3907,46 @@ def register_submit(
     db.commit()
     _notify_admins_new_registration(db, pending)
     return RedirectResponse(url="/login?flash=Registrierung gesendet - der Admin pruefe dein Konto und meldet sich per E-Mail.", status_code=303)
+
+
+# --- Editierbarer Changelog ------------------------------------------
+@app.get("/admin/changelog", response_class=HTMLResponse)
+def admin_changelog(request: Request, db: Session = Depends(get_db),
+                    flash: Optional[str] = None, error: Optional[str] = None):
+    items = (db.query(ChangelogEntry)
+             .order_by(ChangelogEntry.created_at.desc()).all())
+    return templates.TemplateResponse(request, "changelog_admin.html",
+        {"items": items, "user": request.session.get("user"),
+         "flash": flash, "error": error})
+
+
+@app.post("/admin/changelog/save")
+def admin_changelog_save(
+    request: Request,
+    entry_id: str = Form(""),
+    version: str = Form(...),
+    title: str = Form(""),
+    body_md: str = Form(...),
+    is_published: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    eid = int(entry_id) if entry_id and entry_id.isdigit() else None
+    entry = db.get(ChangelogEntry, eid) if eid else None
+    if not entry:
+        entry = ChangelogEntry(body_md="", version="")
+        db.add(entry)
+    entry.version = version.strip()[:40]
+    entry.title = title.strip()[:200] or None
+    entry.body_md = body_md.strip()
+    entry.is_published = is_published == "on"
+    entry.author = request.session.get("user")
+    db.commit()
+    return RedirectResponse(url="/admin/changelog?flash=Eintrag gespeichert", status_code=303)
+
+
+@app.post("/admin/changelog/{eid}/delete")
+def admin_changelog_delete(eid: int, db: Session = Depends(get_db)):
+    e = db.get(ChangelogEntry, eid)
+    if e:
+        db.delete(e); db.commit()
+    return RedirectResponse(url="/admin/changelog?flash=Geloescht", status_code=303)

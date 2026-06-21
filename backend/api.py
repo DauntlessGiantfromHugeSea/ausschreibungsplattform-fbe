@@ -36,6 +36,17 @@ log = logging.getLogger(__name__)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["has_logo"] = branding.has_logo
 templates.env.globals["logo_url"] = branding.logo_url
+templates.env.globals["favicon_url"] = branding.favicon_url
+
+
+@app.get("/favicon.png")
+@app.get("/favicon.ico")
+def serve_favicon():
+    from fastapi.responses import FileResponse, Response
+    p = branding.favicon_path()
+    if not p:
+        return Response(status_code=204)
+    return FileResponse(str(p), media_type="image/png")
 
 APP_VERSION = "1.0.0"
 app = FastAPI(title="Flüssigboden Akademie · Ausschreibungen", version=APP_VERSION)
@@ -3419,8 +3430,19 @@ async def admin_branding_upload(
 def admin_branding_delete(variant: str = Form(...)):
     from . import branding as _br
     _br.delete_uploaded_logo(variant)
+    if variant in ("mark", "light"):
+        _br._refresh_favicon()
     return RedirectResponse(
         url=f"/admin/branding?flash=Upload ({variant}) entfernt - Stock-Logo wird wieder verwendet.",
+        status_code=303)
+
+
+@app.post("/admin/branding/refresh-favicon")
+def admin_branding_refresh_favicon():
+    from . import branding as _br
+    _br._refresh_favicon()
+    return RedirectResponse(
+        url="/admin/branding?flash=Favicon neu generiert - Hard-Reload (Strg+Shift+R) im Browser.",
         status_code=303)
 
 

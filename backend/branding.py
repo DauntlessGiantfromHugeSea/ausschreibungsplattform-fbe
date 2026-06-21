@@ -133,9 +133,45 @@ def save_uploaded_logo(variant: str, filename: str, content: bytes) -> tuple[boo
             if old.exists():
                 old.unlink()
         (UPLOADED_DIR / f"logo-{variant}{ext}").write_bytes(content)
+        # Favicon-File aktualisieren wenn Mark oder Light geaendert wurde.
+        if variant in ("mark", "light"):
+            _refresh_favicon()
         return True, "ok"
     except Exception as exc:  # pragma: no cover
         return False, f"Schreibfehler: {exc}"
+
+
+def favicon_path():
+    """Pfad der besten verfuegbaren Favicon-Quelle. Bevorzugt mark (quadratisch)."""
+    for variant in ("mark", "light"):
+        p = _uploaded(variant)
+        if p and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
+            return p
+    if FAVICON_FILE.exists() and FAVICON_FILE.stat().st_size > 100:
+        return FAVICON_FILE
+    if LOGO_FILE.exists() and LOGO_FILE.stat().st_size > 100:
+        return LOGO_FILE
+    return None
+
+
+def favicon_url() -> str:
+    """Liefert die /favicon.png-URL inklusive Cache-Buster (mtime)."""
+    p = favicon_path()
+    if p:
+        return f"/favicon.png?v={int(p.stat().st_mtime)}"
+    return "/static/favicon.png"
+
+
+def _refresh_favicon() -> None:
+    """Spiegelt das beste Upload-Mark/Light auf favicon.png, damit Browser
+    die neue Version ueber /favicon.png?v=<mtime> ziehen."""
+    p = favicon_path()
+    if not p or p == FAVICON_FILE:
+        return
+    try:
+        FAVICON_FILE.write_bytes(p.read_bytes())
+    except Exception as exc:  # pragma: no cover
+        log.warning("Favicon-Refresh fehlgeschlagen: %s", exc)
 
 
 # ---------------------------------------------------------------------------

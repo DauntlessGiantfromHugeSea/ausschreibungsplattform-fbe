@@ -39,15 +39,6 @@ templates.env.globals["logo_url"] = branding.logo_url
 templates.env.globals["favicon_url"] = branding.favicon_url
 
 
-@app.get("/favicon.png")
-@app.get("/favicon.ico")
-def serve_favicon():
-    from fastapi.responses import FileResponse, Response
-    p = branding.favicon_path()
-    if not p:
-        return Response(status_code=204)
-    return FileResponse(str(p), media_type="image/png")
-
 APP_VERSION = "1.0.0"
 app = FastAPI(title="Flüssigboden Akademie · Ausschreibungen", version=APP_VERSION)
 
@@ -59,6 +50,16 @@ _STATIC_DIR = Path(__file__).parent / "static"
 _STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 install_auth(app)
+
+
+@app.get("/favicon.png")
+@app.get("/favicon.ico")
+def serve_favicon():
+    from fastapi.responses import FileResponse, Response
+    p = branding.favicon_path()
+    if not p:
+        return Response(status_code=204)
+    return FileResponse(str(p), media_type="image/png")
 
 
 @app.on_event("startup")

@@ -465,6 +465,104 @@ def create_changelog_entries_table() -> bool:
         return False
 
 
+def seed_changelog_entries() -> bool:
+    """Einmalig die historischen Eintraege in die DB schreiben, falls leer."""
+    insp = inspect(engine)
+    if "changelog_entries" not in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(text("SELECT COUNT(*) FROM changelog_entries")).fetchone()
+            if row and row[0] > 0:
+                return False
+            seed = [
+                ("V1.0.2", "Update-Verlauf editierbar & User-freundliche Broadcast-Mails", "2026-06-21 10:00:00",
+                 "- **Neu:** Update-Verlauf direkt im Admin-Bereich pflegbar (Einstellungen → Update-Verlauf). "
+                 "Eintraege erscheinen sofort fuer alle User auf der Hilfeseite.\n"
+                 "- **Verbesserung:** Broadcast-Mails enthalten keine Admin-Hinweise mehr, sondern verlinken "
+                 "direkt auf /feedback und /hilfe.\n"
+                 "- **Verbesserung:** Versionsfeld im Changelog-Formular wird automatisch hochgezaehlt."),
+                ("V1.0.1", "Self-Registration & Support-Modus-Fix", "2026-06-20 18:00:00",
+                 "- **Neu:** Registrierung auch ohne Microsoft-Konto, mit Firmendaten, Telefon und Nachricht.\n"
+                 "- **Bugfix:** Aus dem Support-Modus (Impersonation) kommt man jetzt wieder sauber heraus.\n"
+                 "- **Verbesserung:** Beim Approval einer Registrierungsanfrage wird das vom User gesetzte "
+                 "Passwort uebernommen."),
+                ("V1.0.0", "Stable Release", "2026-06-19 12:00:00",
+                 "- **Microsoft-Login (OAuth2):** User koennen sich mit ihrem Microsoft-/Azure-Konto registrieren. "
+                 "Neue Accounts landen in *Registrierungs-Anfragen*, alle Admins bekommen eine E-Mail.\n"
+                 "- **Persoenliche Status-Markierungen:** Jeder User kann pro Tender einen eigenen Status setzen, "
+                 "der nur fuer ihn selbst sichtbar ist.\n"
+                 "- **Admin-Impersonation:** Im User-Edit gibt es einen Support-Modus-Button mit Banner und "
+                 "Zurueck-Knopf.\n"
+                 "- **KI-Features pro User freigeben:** Claude-Analyse und KI-Assistent sind fuer Rolle `user` "
+                 "standardmaessig aus und werden pro User freigeschaltet.\n"
+                 "- **Globale Suchleiste:** Sucht auch in KI- und Claude-Analyse.\n"
+                 "- **Feedback-Seite** mit KI-Keyword-Vorschlaegen fuer Suchprofil-Wuensche.\n"
+                 "- **App-Version 1.0.0** sichtbar im Footer."),
+                ("V0.10.0", "Anhang-Manager & Hochleistungs-Bot", "2026-06-19 10:00:00",
+                 "- **Vollstaendige Anhang-Erfassung:** Enricher-Bot sammelt alle verlinkten Vergabeunterlagen "
+                 "(PDF, DOCX, XLSX, ZIP) und meldet Metadaten an die Plattform.\n"
+                 "- **Anhang-Block auf der Detail-Seite** mit Name, Groesse und direktem Download-Link.\n"
+                 "- **Login-tiefe Crawls:** Bei hinterlegten Portal-Zugangsdaten sieht der Bot auch geschuetzte PDFs.\n"
+                 "- **Konfigurierbar:** `MAX_ATTACHMENTS`, `MAX_ATTACHMENT_MB`, `ATTACHMENT_EXTENSIONS`."),
+                ("V0.9.0", "Design-Refresh & Claude-Analyse", "2026-06-19 09:00:00",
+                 "- **Komplettes UI-Refresh:** Dunkles Teal-Navigation und Lime-CTAs, Liquid-Glass-Cards.\n"
+                 "- **Split-Login-Screen** mit Markenpanel links und Formular rechts.\n"
+                 "- **Neues SVG-Logo** plus aktualisierte Mail-Templates.\n"
+                 "- **Tiefe Claude-Analyse:** Strukturierte FBE-Bewertung mit Einsparungspotenzial und "
+                 "Fluessigboden-Eignung (Default `claude-sonnet-4-6`).\n"
+                 "- **Portal-Logins per UI** mit Test-Button und Live-Status.\n"
+                 "- **Notes & Wissensbasis:** Obsidian-artiger Markdown-Editor, fliesst in den Enricher-Prompt.\n"
+                 "- **Profilgebundene User:** Neue Rolle `user` sieht nur zugewiesene Suchprofile.\n"
+                 "- **Neue Quellen:** bund.de RSS, greenprofi.de, vergabeportal-bw.de, DB Bieterportal, myFUTURA."),
+                ("V0.6.0", "KI-Assistent & Tender-Analyse", "2026-05-19 12:00:00",
+                 "- **KI-Analyse pro Ausschreibung:** Auf jeder Detailseite automatische Bewertung mit "
+                 "FBE-Eignung, Stichpunkten und geschaetzter Kostenersparnis.\n"
+                 "- **Globaler Assistent:** Sparkles-Icon oeffnet einen Chat mit FBE-Wissen im Kontext.\n"
+                 "- **Schnellfrage in der Hilfe** ohne Chat-Verlauf.\n"
+                 "- **Editierbare Wissensbasis** unter Einstellungen → KI-Wissensbasis (Markdown).\n"
+                 "- **Modell:** OpenAI `gpt-4o-mini` als Default."),
+                ("V0.5.0", "Persoenliche Benachrichtigungen", "2026-05-19 10:00:00",
+                 "- **Eigene Zusammenfassungen:** Taegliche oder woechentliche Mail mit den relevantesten "
+                 "Ausschreibungen, ueber das User-Menue konfigurierbar.\n"
+                 "- **Score-Schwelle (0-100)** frei waehlbar.\n"
+                 "- **Mail-Adresse pro User** beim Speichern uebernommen.\n"
+                 "- **Test-Mail-Knopf** auf der Einstellungsseite.\n"
+                 "- **Scheduler** prueft taeglich frueh die faelligen Nutzer."),
+                ("V0.4.0", "Verlauf, Broadcast & UI-Aufraeumen", "2026-05-19 09:00:00",
+                 "- **Verlauf pro Ausschreibung:** Wer hat wann was geaendert, an wen wurde gemailt — alles "
+                 "in einer Timeline.\n"
+                 "- **Broadcast-Mail:** Admins koennen alle aktiven Nutzer per BCC anschreiben.\n"
+                 "- **Erst-Login mit eigenem Passwort:** Einladungs-Mail mit Link (24 Std. gueltig).\n"
+                 "- **Passwort vergessen:** Reset-Link per Mail (1 Std. gueltig).\n"
+                 "- **Top-Menue minimal**, Icons fuer Status/Einstellungen/Hilfe.\n"
+                 "- **Linke Sidebar** auf Einstellungen- und Hilfe-Seiten.\n"
+                 "- **Hilfe-Seite** unter /hilfe mit Doku und Update-Verlauf."),
+                ("V0.3.0", "Suchprofile & Scoring", "2026-04-15 10:00:00",
+                 "- **Suchprofile:** Benannte Filtersets mit Keywords, Regionen, Vergabearten — "
+                 "wiederverwendbar und sharebar.\n"
+                 "- **Scoring 0-100:** Pro Ausschreibung wird die Profil-Passung berechnet und farblich angezeigt.\n"
+                 "- **Match-Begruendung:** Welche Keywords/Regionen wie viele Punkte gegeben haben."),
+                ("V0.2.0", "Multi-Portal-Crawler", "2026-03-20 10:00:00",
+                 "- **Mehrere Portale gleichzeitig:** YAML-konfiguriert, mit Selektoren, Pagination und Cron.\n"
+                 "- **Deduplizierung** ueber Titel und Portal-ID.\n"
+                 "- **Manuelle Re-Crawl-Buttons** pro Portal im Admin-Bereich."),
+                ("V0.1.0", "Erste Version", "2026-02-01 10:00:00",
+                 "- **Erste Version der Plattform:** Login, Tender-Liste, Detail-Seite.\n"
+                 "- **Status-Workflow** (offen/interessant/beworben/abgelehnt).\n"
+                 "- **SQLite-Backend** und einfaches Mailing."),
+            ]
+            for version, title, created_at, body_md in seed:
+                conn.execute(text(
+                    "INSERT INTO changelog_entries (version, title, body_md, is_published, created_at, author) "
+                    "VALUES (:v, :t, :b, 1, :c, :a)"
+                ), {"v": version, "t": title, "b": body_md, "c": created_at, "a": "System"})
+        return True
+    except Exception as exc:
+        log.exception("Seed changelog fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -486,4 +584,5 @@ def run_all() -> dict:
         "pending_registrations_created": create_pending_registrations_table(),
         "pending_registration_columns_added": add_pending_registration_columns(),
         "changelog_entries_created": create_changelog_entries_table(),
+        "changelog_seeded": seed_changelog_entries(),
     }

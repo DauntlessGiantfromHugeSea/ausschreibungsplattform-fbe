@@ -3527,9 +3527,49 @@ def _ai_allowed(request: Request, db: Session) -> bool:
 
 # --- 5) Feedback ------------------------------------------------------
 @app.get("/feedback", response_class=HTMLResponse)
-def feedback_form(request: Request, flash: Optional[str] = None, error: Optional[str] = None):
+def feedback_form(request: Request, db: Session = Depends(get_db),
+                  flash: Optional[str] = None, error: Optional[str] = None):
+    uid = request.session.get("user_id")
+    uname = request.session.get("user")
+    my_items = []
+    if uid is not None:
+        my_items = (db.query(Feedback)
+                    .filter((Feedback.user_id == uid) | (Feedback.username == uname))
+                    .order_by(Feedback.created_at.desc())
+                    .limit(20).all())
     return templates.TemplateResponse(request, "feedback.html",
-        {"user": request.session.get("user"), "flash": flash, "error": error})
+        {"user": request.session.get("user"),
+         "my_items": my_items,
+         "is_admin": require_admin(request),
+         "claude_available": bool(settings.anthropic_api_key),
+         "flash": flash, "error": error})
+
+
+@app.post("/feedback/suggest-keywords")
+def feedback_suggest_keywords(payload: dict):
+    """AJAX: nimmt Body-Text, gibt KI-Vorschlag fuer Suchprofil-Keywords."""
+    body = (payload.get("body") or "").strip()
+    if not body:
+        return {"ok": False, "error": "leere Eingabe"}
+    if not settings.anthropic_api_key:
+        return {"ok": False, "error": "Claude-API nicht konfiguriert (ANTHROPIC_API_KEY)"}
+    try:
+        from anthropic import Anthropic
+        cli = Anthropic(api_key=settings.anthropic_api_key)
+        resp = cli.messages.create(
+            model=settings.anthropic_model, max_tokens=300,
+            system=("Du bekommst einen Suchprofil-Wunsch und gibst 3-8 deutsche "
+                    "Stichwoerter (ein Wort oder kurze Phrase) aus, die in "
+                    "Ausschreibungs-Titeln/Beschreibungen matchen wuerden. "
+                    "Antwort: nur die Worte, je Zeile eins, keine Nummerierung, "
+                    "keine Erklaerungen."),
+            messages=[{"role": "user", "content": body[:1500]}],
+        )
+        txt = "".join([b.text for b in resp.content if getattr(b, "type", "") == "text"])
+        kws = [ln.strip("- *\t ").strip() for ln in txt.splitlines() if ln.strip()]
+        return {"ok": True, "keywords": kws[:10]}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
 
 
 @app.post("/feedback")

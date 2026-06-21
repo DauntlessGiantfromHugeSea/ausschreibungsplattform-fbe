@@ -7,24 +7,25 @@
   <span class="text-zinc-700">Feedback</span>
 </nav>
 
-{% if flash %}
-  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
-{% endif %}
-{% if error %}
-  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
-{% endif %}
+{% if flash %}<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>{% endif %}
+{% if error %}<div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>{% endif %}
 
-<div class="mb-6">
-  <h1 class="text-2xl font-semibold tracking-tight">Feedback & Wünsche</h1>
-  <p class="text-sm text-zinc-500 mt-1">
-    Bugs, Verbesserungs-Ideen oder neue Suchprofile gewünscht? Schreib's hier rein — geht direkt an den Admin.
-  </p>
+<div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Feedback & Wünsche</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      Bugs, Verbesserungsideen oder neue Suchprofile gewünscht? Schreib's hier rein.
+    </p>
+  </div>
+  {% if is_admin %}
+  <a href="/admin/feedback" class="btn-ghost text-sm">📋 Alles Feedback verwalten →</a>
+  {% endif %}
 </div>
 
-<form method="post" action="/feedback" class="card p-6 max-w-2xl space-y-4">
+<form method="post" action="/feedback" class="card p-6 max-w-2xl space-y-4" id="fb-form">
   <div>
     <label class="block text-xs font-medium text-zinc-600 mb-1">Was möchtest du melden?</label>
-    <select name="kind" class="input">
+    <select name="kind" id="fb-kind" class="input">
       <option value="general">Allgemeines Feedback</option>
       <option value="bug">Bug / Fehler</option>
       <option value="feature">Verbesserungsvorschlag</option>
@@ -37,9 +38,97 @@
   </div>
   <div>
     <label class="block text-xs font-medium text-zinc-600 mb-1">Beschreibung *</label>
-    <textarea class="input min-h-[150px]" name="body" required placeholder="Was soll passieren / was ist kaputt / welche Begriffe sollen ins neue Profil?"></textarea>
+    <textarea class="input min-h-[150px]" name="body" id="fb-body" required
+              placeholder="Was soll passieren / was ist kaputt / welche Begriffe sollen ins neue Profil?"></textarea>
   </div>
-  <button type="submit" class="btn-primary">Absenden</button>
+
+  {# KI-Live-Vorschau (nur sinnvoll bei kind=profile) #}
+  <div id="fb-suggest-row" class="hidden">
+    <button type="button" id="fb-suggest-btn" class="btn-ghost text-sm" {% if not claude_available %}disabled{% endif %}>
+      🧠 KI-Keywords vorschlagen
+    </button>
+    {% if not claude_available %}
+    <span class="text-xs text-amber-700 ml-2">Claude-API nicht konfiguriert.</span>
+    {% endif %}
+    <div id="fb-suggest-out" class="hidden mt-3 text-sm bg-emerald-50 border border-emerald-200 rounded-lg p-3"></div>
+  </div>
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn-primary">Absenden</button>
+  </div>
 </form>
+
+{% if my_items %}
+<div class="mt-8 max-w-2xl">
+  <h2 class="text-lg font-semibold mb-3">Mein Feedback ({{ my_items|length }})</h2>
+  <div class="space-y-2">
+    {% for f in my_items %}
+    <div class="card p-4">
+      <div class="flex items-center gap-2 mb-1 flex-wrap text-xs">
+        <span class="pill {% if f.kind == 'bug' %}bg-rose-100 text-rose-800{% elif f.kind == 'feature' %}bg-amber-100 text-amber-800{% elif f.kind == 'profile' %}bg-emerald-100 text-emerald-800{% else %}bg-zinc-100 text-zinc-700{% endif %}">{{ f.kind }}</span>
+        <span class="pill {% if f.status == 'neu' %}bg-amber-100 text-amber-800{% elif f.status == 'erledigt' %}bg-emerald-100 text-emerald-800{% elif f.status == 'abgelehnt' %}bg-rose-100 text-rose-800{% else %}bg-zinc-100 text-zinc-700{% endif %}">{{ f.status }}</span>
+        <span class="text-zinc-400">· {{ f.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+      </div>
+      {% if f.title %}<div class="font-medium text-sm">{{ f.title }}</div>{% endif %}
+      <div class="text-sm text-zinc-700 whitespace-pre-wrap mt-1">{{ f.body }}</div>
+      {% if f.suggested_keywords %}<div class="mt-2 text-xs text-emerald-700">KI-Vorschlag: <code>{{ f.suggested_keywords }}</code></div>{% endif %}
+      {% if f.admin_reply %}<div class="mt-2 text-xs bg-zinc-50 border border-zinc-200 rounded p-2"><strong>Admin:</strong> {{ f.admin_reply }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+  const kindSel = document.getElementById('fb-kind');
+  const suggestRow = document.getElementById('fb-suggest-row');
+  const suggestBtn = document.getElementById('fb-suggest-btn');
+  const suggestOut = document.getElementById('fb-suggest-out');
+  const bodyEl = document.getElementById('fb-body');
+
+  function toggleSuggest() {
+    if (kindSel.value === 'profile') suggestRow.classList.remove('hidden');
+    else { suggestRow.classList.add('hidden'); suggestOut.classList.add('hidden'); }
+  }
+  kindSel.addEventListener('change', toggleSuggest);
+  toggleSuggest();
+
+  suggestBtn?.addEventListener('click', async () => {
+    const body = (bodyEl.value || '').trim();
+    if (body.length < 5) {
+      suggestOut.classList.remove('hidden');
+      suggestOut.innerHTML = '<span class="text-rose-700">Bitte erst die Beschreibung ausfüllen (min. 5 Zeichen).</span>';
+      return;
+    }
+    suggestBtn.disabled = true;
+    const origText = suggestBtn.textContent;
+    suggestBtn.textContent = '⏳ Frage Claude …';
+    suggestOut.classList.remove('hidden');
+    suggestOut.innerHTML = '<span class="text-zinc-500">Lade …</span>';
+    try {
+      const r = await fetch('/feedback/suggest-keywords', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({body: body}),
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        suggestOut.innerHTML = '<span class="text-rose-700">Fehler: ' + (j.error || 'unbekannt') + '</span>';
+      } else if (!j.keywords || !j.keywords.length) {
+        suggestOut.innerHTML = '<span class="text-zinc-500">Keine Vorschläge — versuch eine konkretere Beschreibung.</span>';
+      } else {
+        const chips = j.keywords.map(k =>
+          '<code class="inline-block bg-white border border-emerald-300 rounded-full px-3 py-1 mr-1 mb-1 text-emerald-800">' + k + '</code>'
+        ).join('');
+        suggestOut.innerHTML = '<div class="text-xs text-emerald-800 mb-2 font-medium">' + j.keywords.length + ' Vorschläge — der Admin sieht das beim Bestätigen:</div>' + chips;
+      }
+    } catch (err) {
+      suggestOut.innerHTML = '<span class="text-rose-700">Fehler: ' + err + '</span>';
+    } finally {
+      suggestBtn.disabled = false;
+      suggestBtn.textContent = origText;
+    }
+  });
+</script>
 
 {% endblock %}

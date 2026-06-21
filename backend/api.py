@@ -1371,6 +1371,43 @@ def admin_release_lock(request: Request):
     )
 
 
+@app.post("/admin/restart")
+def admin_restart(request: Request, background_tasks: BackgroundTasks):
+    """Startet die Plattform (systemd-Service) und den Enricher-Container
+    neu. Antwortet sofort mit einem Redirect, der Restart laeuft asynchron
+    nach kurzer Verzoegerung im Hintergrund - so kommt die Redirect-Antwort
+    noch vor dem Shutdown beim Browser an.
+    """
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+
+    def _do_restart():
+        import subprocess, time
+        # Kurz warten, damit die HTTP-Antwort den Client sicher erreicht
+        time.sleep(2)
+        # Enricher zuerst (laeuft unabhaengig)
+        try:
+            subprocess.run(["docker", "restart", "fbe-enricher"],
+                           timeout=15, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as exc:
+            log.warning("Enricher-Restart fehlgeschlagen: %s", exc)
+        # Plattform-Service (zuletzt - kappt unseren eigenen Prozess)
+        try:
+            subprocess.Popen(["systemctl", "restart", "fbe-tender"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        except Exception as exc:
+            log.warning("Plattform-Restart fehlgeschlagen: %s", exc)
+
+    background_tasks.add_task(_do_restart)
+    return RedirectResponse(
+        url="/admin/settings?flash=Neustart+ausgeloest+-+10-15+Sek+warten,+dann+Seite+neu+laden.",
+        status_code=303,
+    )
+
+
 @app.post("/admin/test-mail")
 def admin_test_mail(request: Request):
     """Sendet eine kurze Test-Mail an NOTIFY_EMAIL um die SMTP-Konfig

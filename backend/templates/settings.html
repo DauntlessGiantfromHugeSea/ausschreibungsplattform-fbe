@@ -93,6 +93,12 @@
       </button>
     </form>
     {% endif %}
+    <form method="post" action="/admin/restart"
+          onsubmit="return confirm('Plattform + Enricher neu starten? Die Seite ist 10-15 Sekunden nicht erreichbar.');">
+      <button class="btn bg-rose-600 text-white hover:bg-rose-700 text-sm">
+        ↻ System neu starten (Plattform + Enricher)
+      </button>
+    </form>
   </div>
 </div>
 

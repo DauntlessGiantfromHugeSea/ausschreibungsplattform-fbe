@@ -389,9 +389,24 @@ def _portal_specific_subpages(base_url: str) -> list[str]:
 
 def _find_detail_subpages(page, base_url: str, max_n: int) -> list[str]:
     """Sammelt Sub-URLs der gleichen Domain, deren Linktext auf 'Details'
-    hindeutet. Max max_n eindeutige URLs."""
+    hindeutet. Max max_n eindeutige URLs.
+
+    Schliesst explizit URLs aus, die nach Datei-Download aussehen
+    (Wicket-AJAX 'downloadLink', /download/, /files/, Endung .pdf/.docx etc.)
+    - solche URLs werden separat ueber _find_pdf_links abgearbeitet und
+    duerfen NICHT als page.goto() angesteuert werden (Playwright bricht
+    sonst mit 'Download is starting' ab).
+    """
     base_host = urlparse(base_url).netloc
     found, seen = [], set()
+    download_marker_re = re.compile(
+        r"(downloadlink|download(\.html|attachment|file)?|getfile|attachment|/file\?|/files/|fileservlet|/downloads/installer/)",
+        re.IGNORECASE,
+    )
+    file_ext_re = re.compile(
+        r"\.(pdf|docx?|xlsx?|zip|csv|rtf|odt|ods|txt)(\?|$)",
+        re.IGNORECASE,
+    )
     try:
         html = page.content()
     except Exception:
@@ -408,6 +423,11 @@ def _find_detail_subpages(page, base_url: str, max_n: int) -> list[str]:
         if urlparse(full).netloc != base_host:
             continue
         if full == base_url or full in seen:
+            continue
+        # Datei-Downloads NICHT als Sub-Pages anfahren (page.goto wuerde sonst
+        # mit 'Download is starting' abbrechen). Diese URLs werden separat
+        # ueber _find_pdf_links + _download_and_extract_pdf erfasst.
+        if download_marker_re.search(full) or file_ext_re.search(full):
             continue
         if not DETAIL_LINK_RE.search(text):
             continue
@@ -431,7 +451,12 @@ def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
         return []
     soup = BeautifulSoup(html, "html.parser")
     download_url_re = re.compile(
-        r"(download(\.html|attachment|file)?|getfile|attachment|/file\?|/files/|fileservlet)",
+        r"(downloadlink|download(\.html|attachment|file)?|getfile|attachment|/file\?|/files/|fileservlet)",
+        re.IGNORECASE,
+    )
+    # Bekannte False-Positives ausschliessen (Installer, Marketing-Downloads).
+    blocklist_re = re.compile(
+        r"(/downloads/installer/|/installer\.|/setup\.exe|/marketing/)",
         re.IGNORECASE,
     )
     for a in soup.find_all("a", href=True):
@@ -447,6 +472,8 @@ def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
         if urlparse(full).netloc != base_host:
             continue
         if full in seen:
+            continue
+        if blocklist_re.search(full):
             continue
         low = full.lower()
         # Direkter Dateilink ueber Endung?
@@ -623,14 +650,18 @@ def _download_and_extract_pdf(ctx, url: str) -> tuple[str, bytes, str, str]:
             log.info("Anhang %s zu gross (%.1f MB), uebersprungen", url[:80], len(body) / 1024 / 1024)
             return "", b"", "", ""
         ct = ""
+        cd = ""
         try:
             ct = resp.headers.get("content-type", "")
+            cd = resp.headers.get("content-disposition", "")
         except Exception:
             pass
         filename = _filename_from_response(resp, url)
         # HTML-Antwort statt Datei? -> kein Anhang, ggf. via Klick versuchen
         low_ct = (ct or "").lower()
-        if "html" in low_ct and not filename.lower().endswith(tuple(ATTACHMENT_EXTENSIONS)):
+        has_attachment_cd = "attachment" in (cd or "").lower()
+        is_file_ext = filename.lower().endswith(tuple(ATTACHMENT_EXTENSIONS))
+        if "html" in low_ct and not (is_file_ext or has_attachment_cd):
             return "", b"", "", ""
         text = ""
         if filename.lower().endswith(".pdf") and pdf_extract_text:

@@ -328,7 +328,9 @@ def _enforce_restricted(
 def login_get(request: Request, next: str = "/", error: Optional[str] = None, flash: Optional[str] = None):
     if request.session.get("user"):
         return RedirectResponse(next, status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"next": next, "error": error, "flash": flash})
+    from . import branding as _br
+    return templates.TemplateResponse(request, "login.html",
+        {"next": next, "error": error, "flash": flash, "login_texts": _br.get_login_texts()})
 
 
 @app.post("/login")
@@ -3370,14 +3372,30 @@ def admin_branding(
             "current_name": (up.name if up else None),
             "uploaded": bool(up),
         })
+    texts = _br.get_login_texts()
     return templates.TemplateResponse(
         request, "branding.html",
         {
             "variants": variants,
+            "texts": texts,
             "user": request.session.get("user"),
             "flash": flash, "error": error,
         },
     )
+
+
+@app.post("/admin/branding/texts")
+def admin_branding_texts(
+    badge: str = Form(""),
+    headline: str = Form(...),
+    subtitle: str = Form(...),
+):
+    from . import branding as _br
+    ok, msg = _br.save_login_texts(badge, headline, subtitle)
+    if not ok:
+        return RedirectResponse(url=f"/admin/branding?error={msg}", status_code=303)
+    return RedirectResponse(
+        url="/admin/branding?flash=Login-Texte gespeichert.", status_code=303)
 
 
 @app.post("/admin/branding/upload")

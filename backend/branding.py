@@ -138,6 +138,52 @@ def save_uploaded_logo(variant: str, filename: str, content: bytes) -> tuple[boo
         return False, f"Schreibfehler: {exc}"
 
 
+# ---------------------------------------------------------------------------
+# Editierbare Login-Texte (Brand-Panel auf /login)
+# ---------------------------------------------------------------------------
+import json as _json
+
+TEXTS_FILE = UPLOADED_DIR / "login-texts.json"
+DEFAULT_TEXTS = {
+    "badge":    "AUSSCHREIBUNGEN",
+    "headline": "Tiefbau.\nVerfüllung.\nFlüssigboden.",
+    "subtitle": "Die zentrale Plattform der Flüssigboden Akademie für Ausschreibungs-Recherche, KI-gestützte Bewertung und Lead-Tracking.",
+}
+
+
+def get_login_texts() -> dict:
+    """Liefert die aktuellen Login-Texte. Faellt auf Defaults zurueck."""
+    out = dict(DEFAULT_TEXTS)
+    try:
+        if TEXTS_FILE.exists():
+            data = _json.loads(TEXTS_FILE.read_text(encoding="utf-8"))
+            for k in DEFAULT_TEXTS:
+                v = data.get(k)
+                if isinstance(v, str) and v.strip():
+                    out[k] = v
+    except Exception as exc:  # pragma: no cover
+        log.warning("Login-Texte laden fehlgeschlagen: %s", exc)
+    return out
+
+
+def save_login_texts(badge: str, headline: str, subtitle: str) -> tuple[bool, str]:
+    """Speichert die Login-Texte. Liefert (ok, msg)."""
+    payload = {
+        "badge":    (badge or "").strip()[:60],
+        "headline": (headline or "").strip()[:200],
+        "subtitle": (subtitle or "").strip()[:600],
+    }
+    if not payload["headline"] or not payload["subtitle"]:
+        return False, "Headline und Beschreibung sind Pflicht"
+    try:
+        UPLOADED_DIR.mkdir(parents=True, exist_ok=True)
+        TEXTS_FILE.write_text(_json.dumps(payload, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+        return True, "ok"
+    except Exception as exc:  # pragma: no cover
+        return False, f"Schreibfehler: {exc}"
+
+
 def delete_uploaded_logo(variant: str) -> bool:
     if variant not in ("light", "dark", "mark"):
         return False

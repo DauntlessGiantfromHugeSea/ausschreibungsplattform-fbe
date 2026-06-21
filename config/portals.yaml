@@ -71,61 +71,15 @@ portals:
     - schachtbau
 - name: evergabe-online.de (BMI)
   enabled: true
-  scraper: playwright_html
+  scraper: rss_generic
   base_url: https://www.evergabe-online.de
-  strategy: scrape
-  notes: 'Bund-Laender-Plattform der Beschaffungsstelle des BMI. Listing
-
-    hat 1262+ Bekanntmachungen total. Wir crawlen die ersten
-
-    max_details Detailseiten und filtern client-seitig auf die
-
-    Cluster-Begriffe.
-
-    '
+  strategy: rss
+  notes: "Bund-Laender-Plattform der Beschaffungsstelle des BMI.\nOffizieller News-RSS aus evergabe-online.info enthaelt alle neuen\nBekanntmachungen. Wir filtern client-seitig auf die FBE-Cluster-\nBegriffe (Tiefbau, Erdarbeiten, Leitungsbau, Spundwand, Verfuellung,\nFluessigboden, ZFSV, etc.). Die Item-URL zeigt direkt auf die\ntenderdetails.html-Seite - dort klickt der Enricher\n'Ausschreibungsunterlagen einsehen' und zieht die Anhaenge.\n"
   config:
-    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
-    # Pro Keyword eine Such-URL - effizienter als 1200 Eintraege client-seitig zu filtern.
-    search_path: /search.html?searchString={term}&publishDateRange=ALL
-    url_terms:
-    - tiefbau
-    - tiefbauarbeiten
-    - erdarbeiten
-    - erdbau
-    - verfuellung
-    - verfuellarbeiten
-    - leitungsbau
-    - rohrleitungsbau
-    - kanalbau
-    - spundwand
-    - bohrpfahl
-    - bohrpfaehle
-    - baugrubensicherung
-    - schachtbau
-    - fluessigboden
-    - zfsv
-    - trinkwasserleitung
-    - hausanschluss
-    - wasserhaltung
-    - wegebau
-    wait_for_selector: 'a[href*="tenderdetails.html"]'
-    wait_timeout_ms: 20000
-    # Eine Ergebniszeile = ein <tr> mit einem tenderdetails-Link drin.
-    result_selector: 'tr:has(a[href*="tenderdetails.html"])'
-    title_selector: 'a[href*="tenderdetails.html"]'
-    link_selector: 'a[href*="tenderdetails.html"]'
-    authority_selector: 'td.authority, td.buyer, .vergabestelle, .auftraggeber'
-    location_selector: 'td.place, td.location, .ort, .erfuellungsort'
-    deadline_selector: 'td.deadline, .frist, .submissionDeadline'
-    publication_selector: 'td.publicationDate, .published, .veroeffentlicht'
-    description_selector: '.description, td.description, td.cpv'
-    # Such-URL liefert nur passende Treffer - kein client-side Filter noetig
-    filter_by_terms: false
-    # Sicherheit: Title-Strings, die wir NIE als Tender akzeptieren (Page-Header etc.)
-    title_blocklist:
-    - Ausschreibungssuche
-    - Suchergebnisse
-    - Bekanntmachungen suchen
+    feed_urls:
+    - https://www.evergabe-online.info/SiteGlobals/Functions/RSSFeed/DE/eVergabe/RSSNewsfeed/RSSNewsfeed.xml?nn=1063186
+    filter_by_terms: true
+    max_items_per_feed: 500
 - name: DTVP - Deutsches Vergabeportal
   enabled: true
   scraper: dtvp

@@ -21,15 +21,23 @@
   <table class="dashboard min-w-full">
     <thead>
       <tr>
-        <th>E-Mail</th><th>Name</th><th>Provider</th><th>Status</th>
+        <th>E-Mail / Name</th><th>Firma / Kontakt</th><th>Provider</th><th>Status</th>
         <th>Angefragt</th><th class="text-right pr-4">Aktion</th>
       </tr>
     </thead>
     <tbody>
       {% for r in items %}
       <tr>
-        <td class="font-medium">{{ r.email }}</td>
-        <td class="text-sm">{{ r.full_name or '—' }}</td>
+        <td>
+          <div class="font-medium">{{ r.email }}</div>
+          {% if r.full_name %}<div class="text-xs text-zinc-500">{{ r.full_name }}</div>{% endif %}
+        </td>
+        <td class="text-sm">
+          {% if r.company %}<div>{{ r.company }}</div>{% endif %}
+          {% if r.phone %}<div class="text-xs text-zinc-500">{{ r.phone }}</div>{% endif %}
+          {% if r.address %}<div class="text-xs text-zinc-500">{{ r.address }}</div>{% endif %}
+          {% if r.message %}<div class="text-xs text-zinc-600 italic mt-1">„{{ r.message|truncate(120) }}"</div>{% endif %}
+        </td>
         <td><span class="pill bg-zinc-100 text-zinc-700">{{ r.provider }}</span></td>
         <td>
           {% if r.status == 'pending' %}<span class="pill bg-amber-100 text-amber-800">offen</span>

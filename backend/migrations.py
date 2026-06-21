@@ -417,6 +417,32 @@ def create_pending_registrations_table() -> bool:
         return False
 
 
+def add_pending_registration_columns() -> bool:
+    """company/address/phone/message/password_hash fuer manuelle Reg."""
+    insp = inspect(engine)
+    if "pending_registrations" not in insp.get_table_names():
+        return False
+    cols = {c["name"] for c in insp.get_columns("pending_registrations")}
+    added = False
+    statements = [
+        ("company", "ALTER TABLE pending_registrations ADD COLUMN company VARCHAR(200)"),
+        ("address", "ALTER TABLE pending_registrations ADD COLUMN address VARCHAR(500)"),
+        ("phone", "ALTER TABLE pending_registrations ADD COLUMN phone VARCHAR(80)"),
+        ("message", "ALTER TABLE pending_registrations ADD COLUMN message TEXT"),
+        ("password_hash", "ALTER TABLE pending_registrations ADD COLUMN password_hash VARCHAR(255)"),
+    ]
+    for col, ddl in statements:
+        if col in cols:
+            continue
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            added = True
+        except Exception as exc:  # pragma: no cover
+            log.exception("Migration pending_registrations.%s: %s", col, exc)
+    return added
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -436,4 +462,5 @@ def run_all() -> dict:
         "user_tender_status_created": create_user_tender_status_table(),
         "feedback_created": create_feedback_table(),
         "pending_registrations_created": create_pending_registrations_table(),
+        "pending_registration_columns_added": add_pending_registration_columns(),
     }

@@ -261,10 +261,15 @@
             <button type="submit" class="btn-primary text-sm">
               {% if claude_analysis %}↻ Neu analysieren{% else %}▶ Mit Claude analysieren{% endif %}
             </button>
-          {% else %}
+          {% elif not claude_configured %}
             <span class="pill bg-amber-100 text-amber-800 text-xs"
                   title="ANTHROPIC_API_KEY in der .env setzen + fbe-tender restart">
               ⚠ Claude-Key fehlt
+            </span>
+          {% else %}
+            <span class="pill bg-zinc-100 text-zinc-700 text-xs"
+                  title="Admin muss die KI-Features fuer deinen Account freischalten">
+              🔒 KI für dich gesperrt
             </span>
           {% endif %}
         </form>

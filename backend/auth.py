@@ -33,7 +33,7 @@ from .database import SessionLocal
 
 log = logging.getLogger(__name__)
 
-PUBLIC_PATHS = {"/login", "/forgot-password", "/set-password", "/reset-password", "/logout", "/api/health"}
+PUBLIC_PATHS = {"/login", "/forgot-password", "/set-password", "/reset-password", "/logout", "/api/health", "/register", "/auth/microsoft/login", "/auth/microsoft/callback"}
 PUBLIC_PREFIXES = ("/static", "/.well-known")
 ADMIN_PREFIXES = ("/admin/",)
 # Internal-API: nicht via Session, sondern via Shared-Token authentifiziert.

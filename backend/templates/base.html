@@ -417,7 +417,7 @@
 {% if request and request.session.get('impersonator_id') %}
 <div style="background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 16px;text-align:center;font-size:13px;color:#78350f;">
   ⚠ Du bist als <strong>{{ request.session.get('user') }}</strong> angemeldet (Support-Modus).
-  <form method="post" action="/admin/users/end-impersonation" style="display:inline;margin-left:12px;">
+  <form method="post" action="/end-impersonation" style="display:inline;margin-left:12px;">
     <button class="btn-ghost" style="padding:4px 12px;font-size:12px;">Zurück zu deinem Admin-Account</button>
   </form>
 </div>

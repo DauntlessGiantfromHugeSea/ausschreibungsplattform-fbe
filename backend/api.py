@@ -674,6 +674,12 @@ def index(
             },
             "configured_portals": enabled_portals(),
             "status_summary": _portal_status_summary(last_run),
+            "pending_reg_count": (db.query(PendingRegistration)
+                                  .filter(PendingRegistration.status == "pending").count()
+                                  if require_admin(request) else 0),
+            "new_feedback_count": (db.query(Feedback)
+                                   .filter(Feedback.status == "neu").count()
+                                   if require_admin(request) else 0),
             "flash": flash,
             "error": error,
             "last_run": last_run,
@@ -3501,16 +3507,20 @@ def admin_impersonate(user_id: int, request: Request, db: Session = Depends(get_
     return RedirectResponse(url="/?flash=Als " + target.username + " angemeldet (Support-Modus)", status_code=303)
 
 
-@app.post("/admin/users/end-impersonation")
+@app.post("/end-impersonation")
 def admin_end_impersonation(request: Request, db: Session = Depends(get_db)):
+    """Beendet Support-Modus. Liegt BEWUSST nicht unter /admin/, weil
+    der eingeloggte User in dem Moment NICHT admin ist (Middleware
+    wuerde ihn rauswerfen)."""
     imp_id = request.session.pop("impersonator_id", None)
     imp_name = request.session.pop("impersonator_name", None)
-    if imp_id:
-        u = db.get(User, imp_id)
-        request.session["user"] = imp_name or (u.username if u else "admin")
-        request.session["role"] = "admin"
-        request.session["user_id"] = imp_id
-    return RedirectResponse(url="/admin/users?flash=Impersonation beendet", status_code=303)
+    if not imp_id:
+        return RedirectResponse(url="/?error=Nicht im Support-Modus", status_code=303)
+    u = db.get(User, imp_id) if imp_id else None
+    request.session["user"] = imp_name or (u.username if u else "admin")
+    request.session["role"] = "admin"
+    request.session["user_id"] = imp_id
+    return RedirectResponse(url="/admin/users?flash=Support-Modus beendet", status_code=303)
 
 
 # --- 4) AI-Toggle pro User (gelesen im Template + Routen) -------------
@@ -3793,7 +3803,7 @@ def admin_registration_approve(rid: int, request: Request,
         username = f"{base}{suffix}"
     new_user = User(
         username=username, email=pending.email,
-        password_hash="",  # OAuth-User braucht kein lokales Passwort
+        password_hash=(pending.password_hash or ""),  # OAuth leer, E-Mail-Reg uebernimmt
         role=role, is_active=True,
         ai_enabled=(role in ("admin", "viewer")),
     )
@@ -3826,3 +3836,55 @@ def admin_registration_reject(rid: int, request: Request, db: Session = Depends(
     pending.decided_by = request.session.get("user")
     db.commit()
     return RedirectResponse(url="/admin/registrations?flash=Abgelehnt", status_code=303)
+
+
+# --- Manuelle E-Mail-Registrierung ------------------------------------
+@app.get("/register", response_class=HTMLResponse)
+def register_form(request: Request, flash: Optional[str] = None, error: Optional[str] = None):
+    return templates.TemplateResponse(request, "register.html",
+        {"flash": flash, "error": error})
+
+
+@app.post("/register")
+def register_submit(
+    request: Request,
+    email: str = Form(...),
+    full_name: str = Form(...),
+    company: str = Form(""),
+    address: str = Form(""),
+    phone: str = Form(""),
+    password: str = Form(...),
+    password2: str = Form(...),
+    message: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    email = email.strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return RedirectResponse(url="/register?error=E-Mail ungueltig", status_code=303)
+    if password != password2:
+        return RedirectResponse(url="/register?error=Passwoerter stimmen nicht ueberein", status_code=303)
+    if len(password) < 8:
+        return RedirectResponse(url="/register?error=Passwort min. 8 Zeichen", status_code=303)
+    # Existiert User schon?
+    if db.query(User).filter(User.email == email).first():
+        return RedirectResponse(url="/login?error=E-Mail bereits registriert - bitte einloggen", status_code=303)
+    existing = db.query(PendingRegistration).filter(PendingRegistration.email == email).first()
+    if existing and existing.status == "pending":
+        return RedirectResponse(url="/login?flash=Anfrage liegt bereits beim Admin", status_code=303)
+    if existing and existing.status == "rejected":
+        return RedirectResponse(url="/login?error=Anfrage wurde bereits abgelehnt", status_code=303)
+    pending = existing or PendingRegistration(email=email)
+    pending.full_name = full_name.strip()
+    pending.provider = "email"
+    pending.company = company.strip() or None
+    pending.address = address.strip() or None
+    pending.phone = phone.strip() or None
+    pending.message = message.strip() or None
+    pending.password_hash = hash_password(password)
+    pending.status = "pending"
+    pending.requested_at = datetime.utcnow()
+    if not existing:
+        db.add(pending)
+    db.commit()
+    _notify_admins_new_registration(db, pending)
+    return RedirectResponse(url="/login?flash=Registrierung gesendet - der Admin pruefe dein Konto und meldet sich per E-Mail.", status_code=303)

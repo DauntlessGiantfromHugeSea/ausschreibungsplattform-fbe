@@ -361,8 +361,8 @@ class Feedback(Base):
 
 
 class PendingRegistration(Base):
-    """Selbst-Registrierungs-Anfrage (z.B. via Microsoft-Login) - wartet
-    auf Admin-Freigabe. Bei Approval wird ein User-Account angelegt."""
+    """Selbst-Registrierungs-Anfrage (Microsoft-Login ODER manuelle
+    E-Mail-Registrierung) - wartet auf Admin-Freigabe."""
     __tablename__ = "pending_registrations"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -370,6 +370,12 @@ class PendingRegistration(Base):
     full_name = Column(String(200), nullable=True)
     provider = Column(String(40), nullable=False, default="microsoft")
     provider_subject = Column(String(255), nullable=True)  # 'sub' Claim aus OIDC
+    # Manuelle Registrierung: Firmendaten + Passwort-Hash
+    company = Column(String(200), nullable=True)
+    address = Column(String(500), nullable=True)
+    phone = Column(String(80), nullable=True)
+    message = Column(Text, nullable=True)
+    password_hash = Column(String(255), nullable=True)
     status = Column(String(20), default="pending", nullable=False)  # pending|approved|rejected
     requested_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     decided_at = Column(DateTime, nullable=True)

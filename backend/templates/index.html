@@ -7,6 +7,14 @@
     ✓ {{ flash }}
   </div>
 {% endif %}
+{% if _is_admin and ((pending_reg_count and pending_reg_count > 0) or (new_feedback_count and new_feedback_count > 0)) %}
+<div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-center gap-4 flex-wrap">
+  <span class="font-semibold">📬 Admin-Aufgaben:</span>
+  {% if pending_reg_count %}<a href="/admin/registrations" class="hover:underline">{{ pending_reg_count }} offene Registrierung{{ '' if pending_reg_count == 1 else 'en' }}</a>{% endif %}
+  {% if pending_reg_count and new_feedback_count %}<span class="text-amber-400">·</span>{% endif %}
+  {% if new_feedback_count %}<a href="/admin/feedback" class="hover:underline">{{ new_feedback_count }} neue{{ 's' if new_feedback_count == 1 else '' }} Feedback</a>{% endif %}
+</div>
+{% endif %}
 {% if error %}
   <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
     ✕ Fehler: {{ error }}

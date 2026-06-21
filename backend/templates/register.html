@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <title>Registrieren – Flüssigboden Akademie · Ausschreibungen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background:#f5f7f8; }
+    .input-clean { width:100%; border:1px solid rgba(15,23,42,0.18); border-radius:9999px; padding:0.75rem 1.15rem; font-size:0.9rem; background:#fff; }
+    .input-clean:focus { outline:none; border-color:#007e80; box-shadow:0 0 0 4px rgba(0,126,128,0.12); }
+    .btn-anmelden { background:#d4f561; color:#003233; }
+    .btn-anmelden:hover { background:#c8e84a; }
+  </style>
+</head>
+<body class="text-zinc-900 py-10 px-4">
+  <div class="max-w-2xl mx-auto">
+    <div class="text-center mb-8">
+      <img src="{{ logo_url('light') }}" alt="Flüssigboden Akademie" style="height:80px;width:auto;margin:0 auto 1rem;object-fit:contain;">
+      <h1 class="text-3xl font-bold">Registrieren</h1>
+      <p class="text-zinc-500 mt-2">Konto beantragen — der Admin gibt es manuell frei und du bekommst eine E-Mail.</p>
+    </div>
+
+    {% if flash %}<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>{% endif %}
+    {% if error %}<div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>{% endif %}
+
+    <form method="post" action="/register" class="bg-white rounded-2xl border border-zinc-200 shadow-sm p-8 space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Name *</label>
+          <input class="input-clean" type="text" name="full_name" required autocomplete="name">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">E-Mail *</label>
+          <input class="input-clean" type="email" name="email" required autocomplete="email">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Passwort *</label>
+          <input class="input-clean" type="password" name="password" required minlength="8" autocomplete="new-password">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Passwort wiederholen *</label>
+          <input class="input-clean" type="password" name="password2" required minlength="8" autocomplete="new-password">
+        </div>
+      </div>
+
+      <hr class="my-2 border-zinc-200">
+      <div class="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Firmendaten</div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Firma</label>
+          <input class="input-clean" type="text" name="company" autocomplete="organization">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Telefon</label>
+          <input class="input-clean" type="tel" name="phone" autocomplete="tel">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Adresse</label>
+        <input class="input-clean" type="text" name="address" placeholder="Straße, PLZ Ort" autocomplete="street-address">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Nachricht an den Admin (optional)</label>
+        <textarea class="input-clean" name="message" rows="3" style="border-radius:1rem;" placeholder="Wofür brauchst du den Zugang? Welche Profile interessieren dich?"></textarea>
+      </div>
+
+      <button type="submit" class="btn-anmelden w-full inline-flex items-center justify-center rounded-full py-3.5 text-base font-bold mt-4">
+        Antrag absenden
+      </button>
+      <p class="text-center text-sm text-zinc-500">
+        Schon Konto? <a href="/login" class="text-brand-700 hover:underline" style="color:#007e80;">Hier anmelden</a>
+      </p>
+    </form>
+
+    <p class="text-xs text-zinc-400 text-center mt-6">
+      Flüssigboden Akademie · <a href="https://fb-akademie.de/impressum" target="_blank">Impressum</a> · <a href="https://fb-akademie.de/datenschutz" target="_blank">Datenschutz</a>
+    </p>
+  </div>
+</body>
+</html>

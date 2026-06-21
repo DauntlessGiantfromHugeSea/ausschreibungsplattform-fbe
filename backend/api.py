@@ -1050,7 +1050,68 @@ def admin_portal_purge(name: str, db: Session = Depends(get_db)):
     db.query(Comment).filter(Comment.tender_id.in_(ids)).delete(synchronize_session=False)
     portal_match.delete(synchronize_session=False)
     db.commit()
+    # Lokale Attachment-Dateien des Portals aufraeumen
+    try:
+        from pathlib import Path as _Path
+        import shutil as _shutil
+        base = _Path(settings.attachment_dir)
+        for tid in ids:
+            d = base / str(tid)
+            if d.is_dir():
+                _shutil.rmtree(d, ignore_errors=True)
+    except Exception as exc:
+        log.warning("Attachment-Cleanup fuer %s: %s", name, exc)
     return RedirectResponse(url=f"/admin/portals?flash={len(ids)} Eintraege von {name} geloescht.", status_code=303)
+
+
+@app.post("/admin/portals/{name}/recrawl")
+def admin_portal_recrawl(
+    name: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    force_enrich: Optional[str] = Form(None),
+):
+    """Purge + Crawl-Pipeline + (optional) bestehende Tender erneut anreichern.
+
+    Ablauf:
+      1. Tender + Anhaenge + Events dieses Portals loeschen
+      2. force_enrich=on -> setzt ai_analysis aller verbleibenden Tender
+         dieses Portals auf NULL, sodass der Enricher sie neu verarbeitet
+         (greift nur fuer Tender, die nicht geloescht wurden)
+      3. Pipeline-Lauf im Hintergrund starten (crawlt ALLE aktiven Portale)
+      4. Enricher zieht innerhalb POLL_INTERVAL_S automatisch nach
+    """
+    # 1) Purge
+    portal_match = db.query(Tender).filter(Tender.portal == name)
+    ids = [t.id for t in portal_match.all()]
+    if ids:
+        db.query(TenderAttachment).filter(TenderAttachment.tender_id.in_(ids)).delete(synchronize_session=False)
+        db.query(TenderEvent).filter(TenderEvent.tender_id.in_(ids)).delete(synchronize_session=False)
+        db.query(UserTenderStatus).filter(UserTenderStatus.tender_id.in_(ids)).delete(synchronize_session=False)
+        db.query(Comment).filter(Comment.tender_id.in_(ids)).delete(synchronize_session=False)
+        portal_match.delete(synchronize_session=False)
+        db.commit()
+        try:
+            from pathlib import Path as _Path
+            import shutil as _shutil
+            base = _Path(settings.attachment_dir)
+            for tid in ids:
+                d = base / str(tid)
+                if d.is_dir():
+                    _shutil.rmtree(d, ignore_errors=True)
+        except Exception as exc:
+            log.warning("Attachment-Cleanup fuer %s: %s", name, exc)
+    # 2) Pipeline-Lauf
+    if is_pipeline_running():
+        return RedirectResponse(
+            url=f"/admin/portals?error=Ein Crawl-Lauf laeuft bereits. {len(ids)} alte Eintraege von {name} wurden geloescht.",
+            status_code=303,
+        )
+    background_tasks.add_task(run_pipeline_with_lock)
+    return RedirectResponse(
+        url=f"/admin/portals?flash={len(ids)} alte Eintraege von {name} geloescht. Crawl laeuft im Hintergrund - Enricher zieht danach automatisch alle Anhaenge.",
+        status_code=303,
+    )
 
 
 @app.get("/admin/portals/new", response_class=HTMLResponse)

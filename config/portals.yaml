@@ -630,3 +630,33 @@ portals:
     description_selector: .description, .beschreibung, .teaser, p
     filter_by_terms: true
     auto_discover: false
+- name: oeffentlichevergabe.de (DOEE)
+  enabled: true
+  scraper: playwright_html
+  base_url: https://oeffentlichevergabe.de
+  strategy: scrape
+  notes: "Datenservice Oeffentlicher Einkauf (DOEE), bundesweite eForms-Plattform.\nUI ist eine Vue/React-SPA - Listing wird JS-seitig nachgeladen.\nBietet OpenData-REST: /api/opendata/v3/...  (eForms / JSON),\nSwagger: /documentation/swagger-ui/opendata/index.html.\nFuer den ersten Schuss scrapen wir das UI-Listing per Playwright;\ndie API-Anbindung kann spaeter ueber einen dedizierten Scraper\nersetzt werden, sobald die Endpoints geprueft sind.\n"
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    listing_paths:
+    - /ui/de/search/?searchQuery=Tiefbau&page=1&pageSize=50
+    - /ui/de/search/?searchQuery=Erdarbeiten&page=1&pageSize=50
+    - /ui/de/search/?searchQuery=Verfuellung&page=1&pageSize=50
+    - /ui/de/search/?searchQuery=Leitungsbau&page=1&pageSize=50
+    - /ui/de/search/?searchQuery=Spundwand&page=1&pageSize=50
+    - /ui/de/search/?searchQuery=Fluessigboden&page=1&pageSize=50
+    wait_for_selector: 'a[href*="/ui/de/notices/"], a[href*="/notice/"], .search-result-item, article'
+    wait_timeout_ms: 20000
+    result_selector: 'article, .search-result-item, li:has(a[href*="/ui/de/notices/"])'
+    title_selector: 'a[href*="/ui/de/notices/"], a[href*="/notice/"], h2 a, h3 a, .title'
+    link_selector: 'a[href*="/ui/de/notices/"], a[href*="/notice/"]'
+    authority_selector: '.buyer, .vergabestelle, .auftraggeber, [data-testid*="buyer" i]'
+    location_selector: '.location, .ort, [data-testid*="location" i]'
+    deadline_selector: '.deadline, .frist, [data-testid*="deadline" i]'
+    publication_selector: '.publication, .pub-date, [data-testid*="publication" i]'
+    description_selector: '.description, .teaser, .summary, p'
+    title_blocklist:
+    - Suche
+    - Suchergebnisse
+    - Bekanntmachungen
+    filter_by_terms: true

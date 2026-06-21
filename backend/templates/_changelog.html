@@ -3,6 +3,23 @@
 
   <li class="border-l-2 border-brand-500 pl-4">
     <div class="flex items-baseline gap-2 flex-wrap">
+      <span class="text-lg font-semibold">V1.0.0</span>
+      <span class="text-xs text-zinc-500">2026-06-19</span>
+      <span class="pill bg-emerald-100 text-emerald-800 border border-emerald-200">Stable Release</span>
+    </div>
+    <ul class="list-disc pl-5 mt-2 text-sm text-zinc-700 dark:text-zinc-300 space-y-1.5">
+      <li><strong>Microsoft-Login (OAuth2):</strong> User können sich mit ihrem Microsoft-/Azure-Konto registrieren. Neue Accounts landen in <em>Registrierungs-Anfragen</em>, alle Admins bekommen eine E-Mail, Approval per Klick. Voraussetzung: <code>MICROSOFT_CLIENT_ID/SECRET/TENANT_ID</code> in der <code>.env</code> + Redirect-URI in Azure App-Registration.</li>
+      <li><strong>Persönliche Status-Markierungen:</strong> Jeder User kann pro Tender einen eigenen Status setzen (interessant/beworben/…), der nur für ihn selbst sichtbar ist. Admins sehen alle privaten Stati zusätzlich zum globalen.</li>
+      <li><strong>Admin-Impersonation:</strong> Im User-Edit gibt's einen „🎭 Als X anmelden"-Button. Banner zeigt klar an, wenn man im Support-Modus ist. „Zurück"-Klick stellt Admin-Session wieder her.</li>
+      <li><strong>KI-Features pro User freigeben:</strong> Claude-Analyse + KI-Assistent sind für Rolle <code>user</code> standardmäßig aus. Im User-Edit gibt's eine Checkbox „🧠 KI-Features freischalten" — Admin entscheidet pro User. Admins haben KI immer.</li>
+      <li><strong>Globale Suchleiste:</strong> Im Header (für Admin + Viewer) ist jetzt ein Suchfeld, das auch in der KI-Analyse und Claude-Analyse sucht — nicht nur in Titel/Beschreibung.</li>
+      <li><strong>Feedback-Seite:</strong> Unter <em>/feedback</em> kann jeder Bugs, Verbesserungsideen und neue Suchprofil-Wünsche melden. Profil-Wünsche bekommen automatisch eine KI-Keyword-Vorschlag-Liste. Admin verwaltet alles unter <em>Einstellungen → Feedback</em>.</li>
+      <li><strong>Versionierung:</strong> App-Version 1.0.0, sichtbar im Footer.</li>
+    </ul>
+  </li>
+
+  <li class="border-l-2 border-brand-500 pl-4">
+    <div class="flex items-baseline gap-2 flex-wrap">
       <span class="text-lg font-semibold">v0.10.0</span>
       <span class="text-xs text-zinc-500">2026-06-19</span>
       <span class="pill bg-brand-50 text-brand-800 border border-brand-200">Anhang-Manager &amp; Hochleistungs-Bot</span>

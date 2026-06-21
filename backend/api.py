@@ -22,7 +22,7 @@ from . import branding
 from .config import PROJECT_ROOT, settings
 from .database import get_db, init_db
 from .export import to_csv, to_xlsx
-from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User, PortalLogin, TenderAttachment
+from .models import Comment, Tender, TenderStatus, SearchProfile, TenderEvent, User, PortalLogin, TenderAttachment, UserTenderStatus, Feedback, PendingRegistration
 from .pipeline import _load_scraper
 from .portal_config import enabled_portals, load_portals
 from .run_state import load_run_state
@@ -37,7 +37,8 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["has_logo"] = branding.has_logo
 templates.env.globals["logo_url"] = branding.logo_url
 
-app = FastAPI(title="Flüssigboden Akademie · Ausschreibungen", version="0.2.0")
+APP_VERSION = "1.0.0"
+app = FastAPI(title="Flüssigboden Akademie · Ausschreibungen", version=APP_VERSION)
 
 # Static-Ordner muss existieren bevor StaticFiles mountet, sonst crasht
 # der Service-Start mit RuntimeError ("Directory does not exist") - der
@@ -184,6 +185,8 @@ def _filtered_query(
                 Tender.description.ilike(like),
                 Tender.contracting_authority.ilike(like),
                 Tender.matched_terms.ilike(like),
+                Tender.ai_analysis.ilike(like),
+                Tender.claude_analysis.ilike(like),
             )
         )
 
@@ -760,6 +763,8 @@ def detail(
             "claude_analyzed_at": tender.claude_analyzed_at,
             "claude_analysis_html": _cla_render(tender.claude_analysis),
             "claude_trace": request.session.pop(f"claude_trace_{tender_id}", None),
+            "ai_allowed": _ai_allowed(request, db),
+            "my_status": _get_my_user_status(db, request.session.get("user_id"), tender_id),
             "flash": flash,
             "error": error,
         },
@@ -1926,6 +1931,7 @@ def admin_user_save(
     send_invite: Optional[str] = Form(None),
     profile_ids: str = Form(""),
     profile_assign_present: str = Form(""),  # Sentinel: '1' wenn die Checkbox-UI im Form war
+    ai_enabled: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     username = username.strip()
@@ -1950,6 +1956,7 @@ def admin_user_save(
         edited.role = role
         edited.is_active = is_active == "on"
         edited.email = email.strip() or None
+        edited.ai_enabled = (ai_enabled == "on") or (role == "admin")
         if password.strip():
             edited.password_hash = hash_password(password)
         # Nur dann Zuweisungen ueberschreiben, wenn der Block tatsaechlich im
@@ -3431,3 +3438,322 @@ def admin_portal_login_import_session(
     return RedirectResponse(
         url=f"/admin/portal-logins?flash=Session fuer {it.host} importiert ({len(norm)} Cookies). Enricher nutzt sie sofort.",
         status_code=303)
+
+
+# ============================================================
+# V1.0 Feature-Block: Per-User-Status, Impersonation, AI-Toggle,
+# Suche-Bar, Feedback, Microsoft-Login, Registrierungs-Approval.
+# ============================================================
+import secrets as _secrets
+import urllib.parse as _urlparse
+
+
+# --- 1) Per-User-Status -----------------------------------------------
+def _get_my_user_status(db, user_id: int | None, tender_id: int) -> str | None:
+    if not user_id:
+        return None
+    row = (db.query(UserTenderStatus)
+             .filter(UserTenderStatus.user_id == user_id,
+                     UserTenderStatus.tender_id == tender_id).first())
+    return row.status if row else None
+
+
+@app.post("/tender/{tender_id}/my-status")
+def tender_set_my_status(
+    tender_id: int,
+    request: Request,
+    status: str = Form(...),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Setzt einen PRIVATEN Status fuer diesen User. Andere Nutzer sehen
+    das nicht. Admin sieht alle privaten Stati zusaetzlich."""
+    uid = request.session.get("user_id")
+    if not uid:
+        return RedirectResponse(url=f"/tender/{tender_id}?error=Nicht eingeloggt", status_code=303)
+    if status not in STATUS_VALUES:
+        return RedirectResponse(url=f"/tender/{tender_id}?error=Ungueltiger Status", status_code=303)
+    row = (db.query(UserTenderStatus)
+             .filter(UserTenderStatus.user_id == uid,
+                     UserTenderStatus.tender_id == tender_id).first())
+    if not row:
+        row = UserTenderStatus(user_id=uid, tender_id=tender_id, status=status)
+        db.add(row)
+    row.status = status
+    row.note = note.strip() or None
+    db.commit()
+    return RedirectResponse(url=f"/tender/{tender_id}?flash=Persoenlicher Status: {status}", status_code=303)
+
+
+# --- 3) Admin-Impersonation -------------------------------------------
+@app.post("/admin/users/{user_id}/impersonate")
+def admin_impersonate(user_id: int, request: Request, db: Session = Depends(get_db)):
+    target = db.get(User, user_id)
+    if not target or not target.is_active:
+        return RedirectResponse(url="/admin/users?error=User nicht gefunden / inaktiv", status_code=303)
+    # Original-Admin-Session merken
+    if "impersonator_id" not in request.session:
+        request.session["impersonator_id"] = request.session.get("user_id")
+        request.session["impersonator_name"] = request.session.get("user")
+    request.session["user"] = target.username
+    request.session["role"] = target.role
+    request.session["user_id"] = target.id
+    return RedirectResponse(url="/?flash=Als " + target.username + " angemeldet (Support-Modus)", status_code=303)
+
+
+@app.post("/admin/users/end-impersonation")
+def admin_end_impersonation(request: Request, db: Session = Depends(get_db)):
+    imp_id = request.session.pop("impersonator_id", None)
+    imp_name = request.session.pop("impersonator_name", None)
+    if imp_id:
+        u = db.get(User, imp_id)
+        request.session["user"] = imp_name or (u.username if u else "admin")
+        request.session["role"] = "admin"
+        request.session["user_id"] = imp_id
+    return RedirectResponse(url="/admin/users?flash=Impersonation beendet", status_code=303)
+
+
+# --- 4) AI-Toggle pro User (gelesen im Template + Routen) -------------
+def _ai_allowed(request: Request, db: Session) -> bool:
+    """True wenn der eingeloggte User die KI-Funktionen nutzen darf."""
+    if require_admin(request):
+        return True
+    uid = request.session.get("user_id")
+    if not uid:
+        return False
+    u = db.get(User, uid)
+    return bool(u and u.ai_enabled)
+
+
+# --- 5) Feedback ------------------------------------------------------
+@app.get("/feedback", response_class=HTMLResponse)
+def feedback_form(request: Request, flash: Optional[str] = None, error: Optional[str] = None):
+    return templates.TemplateResponse(request, "feedback.html",
+        {"user": request.session.get("user"), "flash": flash, "error": error})
+
+
+@app.post("/feedback")
+def feedback_submit(
+    request: Request,
+    kind: str = Form("general"),
+    title: str = Form(""),
+    body: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    username = request.session.get("user") or "anonym"
+    uid = request.session.get("user_id")
+    suggested = None
+    # Profil-Vorschlag: Claude gibt 3-5 keywords zurueck
+    if kind == "profile" and settings.anthropic_api_key:
+        try:
+            from anthropic import Anthropic
+            cli = Anthropic(api_key=settings.anthropic_api_key)
+            resp = cli.messages.create(
+                model=settings.anthropic_model, max_tokens=300,
+                system=("Du bekommst einen Suchprofil-Wunsch und gibst 3-5 deutsche "
+                        "Stichwoerter aus, die in Ausschreibungs-Titeln/Beschreibungen "
+                        "matchen wuerden. Antwort: nur die Worte, je Zeile eins. "
+                        "Keine Erklaerungen."),
+                messages=[{"role": "user", "content": body[:1500]}],
+            )
+            txt = "".join([b.text for b in resp.content if getattr(b, "type", "") == "text"])
+            import json as _json
+            kws = [ln.strip("- *\t ").strip() for ln in txt.splitlines() if ln.strip()]
+            suggested = _json.dumps(kws[:8], ensure_ascii=False)
+        except Exception:
+            pass
+    fb = Feedback(user_id=uid, username=username, kind=kind,
+                  title=title.strip() or None, body=body.strip(),
+                  suggested_keywords=suggested)
+    db.add(fb); db.commit()
+    return RedirectResponse(url="/feedback?flash=Danke! Dein Feedback ist beim Admin.", status_code=303)
+
+
+@app.get("/admin/feedback", response_class=HTMLResponse)
+def admin_feedback_list(request: Request, db: Session = Depends(get_db),
+                       flash: Optional[str] = None, error: Optional[str] = None):
+    items = db.query(Feedback).order_by(Feedback.created_at.desc()).limit(200).all()
+    return templates.TemplateResponse(request, "feedback_admin.html",
+        {"items": items, "user": request.session.get("user"),
+         "flash": flash, "error": error})
+
+
+@app.post("/admin/feedback/{fid}/status")
+def admin_feedback_status(fid: int, status: str = Form(...),
+                          admin_reply: str = Form(""), db: Session = Depends(get_db)):
+    fb = db.get(Feedback, fid)
+    if not fb:
+        return RedirectResponse(url="/admin/feedback?error=Nicht gefunden", status_code=303)
+    fb.status = status[:30]
+    if admin_reply.strip():
+        fb.admin_reply = admin_reply.strip()
+    db.commit()
+    return RedirectResponse(url="/admin/feedback?flash=Status aktualisiert", status_code=303)
+
+
+# --- 7) Microsoft-OAuth -----------------------------------------------
+@app.get("/auth/microsoft/login")
+def msft_login(request: Request):
+    if not (settings.microsoft_client_id and settings.microsoft_client_secret):
+        return RedirectResponse(url="/login?error=Microsoft-Login nicht konfiguriert", status_code=303)
+    state = _secrets.token_urlsafe(24)
+    request.session["msft_oauth_state"] = state
+    redirect_uri = settings.microsoft_redirect_uri or (_base_url(request) + "/auth/microsoft/callback")
+    params = {
+        "client_id": settings.microsoft_client_id,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "response_mode": "query",
+        "scope": "openid email profile User.Read",
+        "state": state,
+    }
+    base = f"https://login.microsoftonline.com/{settings.microsoft_tenant_id}/oauth2/v2.0/authorize"
+    return RedirectResponse(url=f"{base}?{_urlparse.urlencode(params)}", status_code=303)
+
+
+@app.get("/auth/microsoft/callback")
+def msft_callback(
+    request: Request,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    db: Session = Depends(get_db),
+):
+    if error:
+        return RedirectResponse(url=f"/login?error=Microsoft: {error}", status_code=303)
+    if not code or state != request.session.pop("msft_oauth_state", None):
+        return RedirectResponse(url="/login?error=OAuth-State invalid", status_code=303)
+    redirect_uri = settings.microsoft_redirect_uri or (_base_url(request) + "/auth/microsoft/callback")
+    try:
+        import httpx as _httpx
+        token_resp = _httpx.post(
+            f"https://login.microsoftonline.com/{settings.microsoft_tenant_id}/oauth2/v2.0/token",
+            data={
+                "client_id": settings.microsoft_client_id,
+                "client_secret": settings.microsoft_client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri,
+                "scope": "openid email profile User.Read",
+            }, timeout=15,
+        )
+        token_resp.raise_for_status()
+        tokens = token_resp.json()
+        access = tokens.get("access_token")
+        if not access:
+            return RedirectResponse(url="/login?error=Kein access_token", status_code=303)
+        me = _httpx.get("https://graph.microsoft.com/v1.0/me",
+                        headers={"Authorization": f"Bearer {access}"}, timeout=15).json()
+    except Exception as exc:
+        log.exception("Microsoft-OAuth-Fehler")
+        return RedirectResponse(url=f"/login?error=Microsoft-OAuth-Fehler: {str(exc)[:120]}", status_code=303)
+
+    email = (me.get("mail") or me.get("userPrincipalName") or "").lower().strip()
+    name = me.get("displayName") or email
+    sub = me.get("id") or ""
+    if not email:
+        return RedirectResponse(url="/login?error=Keine E-Mail von Microsoft erhalten", status_code=303)
+
+    # User mit dieser E-Mail vorhanden?
+    user = db.query(User).filter(User.email == email).first()
+    if user and user.is_active:
+        user.last_login_at = datetime.utcnow()
+        db.commit()
+        request.session["user"] = user.username
+        request.session["role"] = user.role
+        request.session["user_id"] = user.id
+        return RedirectResponse(url="/", status_code=303)
+
+    # Sonst: PendingRegistration anlegen / wiederverwenden + Admins informieren
+    pending = db.query(PendingRegistration).filter(PendingRegistration.email == email).first()
+    if not pending:
+        pending = PendingRegistration(email=email, full_name=name,
+                                       provider="microsoft", provider_subject=sub)
+        db.add(pending); db.commit()
+        _notify_admins_new_registration(db, pending)
+    elif pending.status == "rejected":
+        return RedirectResponse(url="/login?error=Registrierungs-Anfrage wurde abgelehnt", status_code=303)
+    return RedirectResponse(url="/login?flash=Registrierungsanfrage gesendet - Admin muss freigeben.", status_code=303)
+
+
+def _notify_admins_new_registration(db: Session, pending: PendingRegistration) -> None:
+    admins = db.query(User).filter(User.role == "admin", User.is_active == True,  # noqa: E712
+                                    User.email.isnot(None)).all()
+    emails = [a.email for a in admins if a.email]
+    if not emails:
+        return
+    from backend import notify as _notify
+    subj = f"[FBA] Neue Registrierungsanfrage: {pending.email}"
+    plain = (
+        f"Hallo Admin,\n\n"
+        f"{pending.full_name or pending.email} hat sich per {pending.provider} "
+        f"angemeldet und wartet auf Freigabe.\n\n"
+        f"Im Admin-Bereich pruefen: /admin/registrations\n"
+    )
+    try:
+        _notify._send_to(emails, subj, plain)
+    except Exception:
+        log.exception("Admin-Notify fuer Registrierung fehlgeschlagen")
+
+
+# --- 8) Registrierungs-Approval ---------------------------------------
+@app.get("/admin/registrations", response_class=HTMLResponse)
+def admin_registrations(request: Request, db: Session = Depends(get_db),
+                        flash: Optional[str] = None, error: Optional[str] = None):
+    items = db.query(PendingRegistration).order_by(PendingRegistration.requested_at.desc()).all()
+    return templates.TemplateResponse(request, "registrations.html",
+        {"items": items, "user": request.session.get("user"),
+         "flash": flash, "error": error})
+
+
+@app.post("/admin/registrations/{rid}/approve")
+def admin_registration_approve(rid: int, request: Request,
+                                role: str = Form("user"),
+                                db: Session = Depends(get_db)):
+    pending = db.get(PendingRegistration, rid)
+    if not pending:
+        return RedirectResponse(url="/admin/registrations?error=Nicht gefunden", status_code=303)
+    if role not in ROLES:
+        role = "user"
+    # User-Account anlegen
+    username = pending.email.split("@")[0]
+    base = username
+    suffix = 1
+    while db.query(User).filter(User.username == username).first():
+        suffix += 1
+        username = f"{base}{suffix}"
+    new_user = User(
+        username=username, email=pending.email,
+        password_hash="",  # OAuth-User braucht kein lokales Passwort
+        role=role, is_active=True,
+        ai_enabled=(role in ("admin", "viewer")),
+    )
+    db.add(new_user)
+    pending.status = "approved"
+    pending.decided_at = datetime.utcnow()
+    pending.decided_by = request.session.get("user")
+    db.commit()
+    # Welcome-Mail
+    try:
+        from backend import notify as _notify
+        _notify._send_to([pending.email],
+            "[FBA] Dein Zugang wurde freigegeben",
+            f"Hallo {pending.full_name or username},\n\n"
+            f"Dein Zugang zur Fluessigboden Akademie Ausschreibungs-Plattform "
+            f"ist freigegeben. Logg dich mit deinem Microsoft-Account ein.\n",
+        )
+    except Exception:
+        pass
+    return RedirectResponse(url=f"/admin/registrations?flash={username} freigegeben", status_code=303)
+
+
+@app.post("/admin/registrations/{rid}/reject")
+def admin_registration_reject(rid: int, request: Request, db: Session = Depends(get_db)):
+    pending = db.get(PendingRegistration, rid)
+    if not pending:
+        return RedirectResponse(url="/admin/registrations?error=Nicht gefunden", status_code=303)
+    pending.status = "rejected"
+    pending.decided_at = datetime.utcnow()
+    pending.decided_by = request.session.get("user")
+    db.commit()
+    return RedirectResponse(url="/admin/registrations?flash=Abgelehnt", status_code=303)

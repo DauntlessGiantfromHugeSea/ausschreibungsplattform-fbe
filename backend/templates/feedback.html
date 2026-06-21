@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Feedback – Flüssigboden Akademie · Ausschreibungen{% endblock %}
+{% block content %}
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Feedback</span>
+</nav>
+
+{% if flash %}
+  <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>
+{% endif %}
+{% if error %}
+  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>
+{% endif %}
+
+<div class="mb-6">
+  <h1 class="text-2xl font-semibold tracking-tight">Feedback & Wünsche</h1>
+  <p class="text-sm text-zinc-500 mt-1">
+    Bugs, Verbesserungs-Ideen oder neue Suchprofile gewünscht? Schreib's hier rein — geht direkt an den Admin.
+  </p>
+</div>
+
+<form method="post" action="/feedback" class="card p-6 max-w-2xl space-y-4">
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Was möchtest du melden?</label>
+    <select name="kind" class="input">
+      <option value="general">Allgemeines Feedback</option>
+      <option value="bug">Bug / Fehler</option>
+      <option value="feature">Verbesserungsvorschlag</option>
+      <option value="profile">Neues Suchprofil gewünscht (KI schlägt Keywords vor)</option>
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Kurztitel (optional)</label>
+    <input class="input" type="text" name="title" maxlength="200" placeholder="z.B. Profil 'Fernwärme NRW' anlegen">
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Beschreibung *</label>
+    <textarea class="input min-h-[150px]" name="body" required placeholder="Was soll passieren / was ist kaputt / welche Begriffe sollen ins neue Profil?"></textarea>
+  </div>
+  <button type="submit" class="btn-primary">Absenden</button>
+</form>
+
+{% endblock %}

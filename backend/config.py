@@ -100,6 +100,18 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
 
+    # ---- Microsoft / Azure AD OAuth (optional) ----------------------
+    # Wenn alle drei gesetzt sind, zeigt die Login-Seite einen 'Mit
+    # Microsoft anmelden'-Button.
+    # Azure-Portal -> App Registrations -> New
+    #   Redirect URI: <YOUR_HOST>/auth/microsoft/callback
+    # Tenant 'common' = beliebige Microsoft-Identitaeten (Work + Personal).
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_tenant_id: str = "common"
+    # Wenn leer wird base_url + /auth/microsoft/callback genutzt.
+    microsoft_redirect_uri: str = ""
+
     # ---- Enricher (separater Docker-Container) -----------------------
     # Shared-Secret fuer /api/internal/* - der Enricher schickt diesen
     # Token im Header X-Internal-Token. Wenn leer, sind die Endpoints

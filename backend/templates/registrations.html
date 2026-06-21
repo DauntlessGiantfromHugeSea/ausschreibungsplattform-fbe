@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Registrierungs-Anfragen – Flüssigboden Akademie · Ausschreibungen{% endblock %}
+{% block content %}
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Registrierungen</span>
+</nav>
+
+{% if flash %}<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>{% endif %}
+{% if error %}<div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>{% endif %}
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2">Registrierungs-Anfragen</h1>
+<p class="text-sm text-zinc-500 mb-6">User, die sich via Microsoft-Login angemeldet haben, warten hier auf Freigabe.</p>
+
+{% if not items %}
+<div class="card p-6 text-center text-zinc-500">Keine offenen Anfragen.</div>
+{% else %}
+<div class="card overflow-x-auto">
+  <table class="dashboard min-w-full">
+    <thead>
+      <tr>
+        <th>E-Mail</th><th>Name</th><th>Provider</th><th>Status</th>
+        <th>Angefragt</th><th class="text-right pr-4">Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in items %}
+      <tr>
+        <td class="font-medium">{{ r.email }}</td>
+        <td class="text-sm">{{ r.full_name or '—' }}</td>
+        <td><span class="pill bg-zinc-100 text-zinc-700">{{ r.provider }}</span></td>
+        <td>
+          {% if r.status == 'pending' %}<span class="pill bg-amber-100 text-amber-800">offen</span>
+          {% elif r.status == 'approved' %}<span class="pill bg-emerald-100 text-emerald-800">freigegeben</span>
+          {% else %}<span class="pill bg-rose-100 text-rose-800">abgelehnt</span>{% endif %}
+        </td>
+        <td class="text-xs text-zinc-500">{{ r.requested_at.strftime('%d.%m.%Y %H:%M') }}</td>
+        <td class="text-right whitespace-nowrap">
+          {% if r.status == 'pending' %}
+          <form method="post" action="/admin/registrations/{{ r.id }}/approve" class="inline">
+            <select name="role" class="input text-xs" style="width:90px;display:inline-block;">
+              <option value="user">user</option>
+              <option value="viewer">viewer</option>
+              <option value="admin">admin</option>
+            </select>
+            <button class="btn-primary text-xs">✓ Freigeben</button>
+          </form>
+          <form method="post" action="/admin/registrations/{{ r.id }}/reject" class="inline"
+                onsubmit="return confirm('Wirklich ablehnen?');">
+            <button class="btn-ghost text-xs hover:!text-rose-600">✕ Ablehnen</button>
+          </form>
+          {% else %}
+          <span class="text-xs text-zinc-400">{{ r.decided_by or '' }} · {{ r.decided_at.strftime('%d.%m.%Y') if r.decided_at }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

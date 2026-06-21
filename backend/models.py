@@ -132,6 +132,10 @@ class User(Base):
     notify_min_score = Column(Integer, default=60, nullable=False)
     notify_last_sent_at = Column(DateTime, nullable=True)
 
+    # KI-Funktionen (Claude-Analyse, Assistent) - default fuer 'user'
+    # Rolle deaktiviert, kann pro User vom Admin freigeschaltet werden.
+    ai_enabled = Column(Boolean, default=False, nullable=False)
+
     assigned_profiles = relationship(
         "SearchProfile",
         secondary=profile_users,
@@ -317,3 +321,56 @@ class TenderAttachment(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     tender = relationship("Tender", backref="attachments")
+
+
+class UserTenderStatus(Base):
+    """Per-User-Override des Tender-Status (privat).
+    Wenn fuer (user_id, tender_id) ein Eintrag existiert, hat er Vorrang
+    vor Tender.status. Admins koennen alle Eintraege sehen."""
+    __tablename__ = "user_tender_status"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    tender_id = Column(Integer, ForeignKey("tenders.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    status = Column(String(30), nullable=False)
+    note = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow,
+                        onupdate=datetime.utcnow, nullable=False)
+    __table_args__ = (
+        Index("ix_uts_unique", "user_id", "tender_id", unique=True),
+    )
+
+
+class Feedback(Base):
+    """User-Feedback (Bug, Wunsch, neues Suchprofil, ...)."""
+    __tablename__ = "feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"),
+                     nullable=True, index=True)
+    username = Column(String(80), nullable=False)
+    kind = Column(String(40), nullable=False, default="general")
+    title = Column(String(200), nullable=True)
+    body = Column(Text, nullable=False)
+    suggested_keywords = Column(Text, nullable=True)  # JSON-Liste, fuer Profil-Vorschlaege
+    status = Column(String(30), default="neu", nullable=False)
+    admin_reply = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class PendingRegistration(Base):
+    """Selbst-Registrierungs-Anfrage (z.B. via Microsoft-Login) - wartet
+    auf Admin-Freigabe. Bei Approval wird ein User-Account angelegt."""
+    __tablename__ = "pending_registrations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(255), nullable=False, unique=True)
+    full_name = Column(String(200), nullable=True)
+    provider = Column(String(40), nullable=False, default="microsoft")
+    provider_subject = Column(String(255), nullable=True)  # 'sub' Claim aus OIDC
+    status = Column(String(20), default="pending", nullable=False)  # pending|approved|rejected
+    requested_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    decided_at = Column(DateTime, nullable=True)
+    decided_by = Column(String(80), nullable=True)

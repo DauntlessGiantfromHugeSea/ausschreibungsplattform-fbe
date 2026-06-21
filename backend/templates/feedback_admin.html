@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}Feedback verwalten – Flüssigboden Akademie · Ausschreibungen{% endblock %}
+{% block content %}
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">Feedback</span>
+</nav>
+
+{% if flash %}<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>{% endif %}
+{% if error %}<div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">✕ {{ error }}</div>{% endif %}
+
+<h1 class="text-2xl font-semibold tracking-tight mb-6">Feedback ({{ items|length }})</h1>
+
+{% if not items %}
+<div class="card p-6 text-center text-zinc-500">Noch kein Feedback eingegangen.</div>
+{% else %}
+<div class="space-y-3">
+  {% for f in items %}
+  <div class="card p-5">
+    <div class="flex items-center justify-between gap-3 mb-2 flex-wrap">
+      <div class="flex items-center gap-2">
+        <span class="pill {% if f.kind == 'bug' %}bg-rose-100 text-rose-800{% elif f.kind == 'feature' %}bg-amber-100 text-amber-800{% elif f.kind == 'profile' %}bg-emerald-100 text-emerald-800{% else %}bg-zinc-100 text-zinc-700{% endif %}">{{ f.kind }}</span>
+        <span class="text-sm font-medium">{{ f.username }}</span>
+        <span class="text-xs text-zinc-400">· {{ f.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+      </div>
+      <span class="pill {% if f.status == 'neu' %}bg-amber-100 text-amber-800{% elif f.status == 'erledigt' %}bg-emerald-100 text-emerald-800{% else %}bg-zinc-100 text-zinc-700{% endif %}">{{ f.status }}</span>
+    </div>
+    {% if f.title %}<div class="font-semibold mb-1">{{ f.title }}</div>{% endif %}
+    <div class="text-sm text-zinc-700 whitespace-pre-wrap mb-3">{{ f.body }}</div>
+    {% if f.suggested_keywords %}
+      <div class="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded p-2 mb-3">
+        <strong>KI-Vorschlag (Keywords für neues Profil):</strong> {{ f.suggested_keywords }}
+      </div>
+    {% endif %}
+    {% if f.admin_reply %}<div class="text-xs text-zinc-500 bg-zinc-50 border border-zinc-200 rounded p-2 mb-2"><strong>Admin-Antwort:</strong> {{ f.admin_reply }}</div>{% endif %}
+    <form method="post" action="/admin/feedback/{{ f.id }}/status" class="flex gap-2 items-end flex-wrap">
+      <select name="status" class="input text-sm" style="max-width:160px;">
+        <option value="neu" {% if f.status == 'neu' %}selected{% endif %}>neu</option>
+        <option value="in_arbeit" {% if f.status == 'in_arbeit' %}selected{% endif %}>in_arbeit</option>
+        <option value="erledigt" {% if f.status == 'erledigt' %}selected{% endif %}>erledigt</option>
+        <option value="abgelehnt" {% if f.status == 'abgelehnt' %}selected{% endif %}>abgelehnt</option>
+      </select>
+      <input class="input text-sm flex-1" type="text" name="admin_reply" placeholder="Optional: Antwort an den User" value="{{ f.admin_reply or '' }}">
+      <button class="btn-primary text-sm">Aktualisieren</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

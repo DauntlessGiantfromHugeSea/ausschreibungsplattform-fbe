@@ -115,6 +115,23 @@
           </div>
         {% endif %}
 
+        <a href="/auth/microsoft/login"
+           class="mb-4 w-full inline-flex items-center justify-center gap-3 rounded-full py-3 text-sm font-semibold border border-zinc-300 bg-white hover:bg-zinc-50 transition"
+           style="text-decoration:none;color:#1f2937;">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 23 23" class="w-5 h-5">
+            <rect x="1" y="1" width="10" height="10" fill="#f25022"/>
+            <rect x="12" y="1" width="10" height="10" fill="#7fba00"/>
+            <rect x="1" y="12" width="10" height="10" fill="#00a4ef"/>
+            <rect x="12" y="12" width="10" height="10" fill="#ffb900"/>
+          </svg>
+          Mit Microsoft anmelden
+        </a>
+        <div class="flex items-center gap-3 my-5 text-xs text-zinc-400">
+          <span class="flex-1 h-px bg-zinc-200"></span>
+          ODER
+          <span class="flex-1 h-px bg-zinc-200"></span>
+        </div>
+
         <form method="post" action="/login" class="space-y-5">
           <input type="hidden" name="next" value="{{ next or '/' }}">
           <div>

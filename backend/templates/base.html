@@ -414,6 +414,14 @@
   </style>
 </head>
 <body class="h-full text-zinc-900 dark:text-zinc-100">
+{% if request and request.session.get('impersonator_id') %}
+<div style="background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 16px;text-align:center;font-size:13px;color:#78350f;">
+  ⚠ Du bist als <strong>{{ request.session.get('user') }}</strong> angemeldet (Support-Modus).
+  <form method="post" action="/admin/users/end-impersonation" style="display:inline;margin-left:12px;">
+    <button class="btn-ghost" style="padding:4px 12px;font-size:12px;">Zurück zu deinem Admin-Account</button>
+  </form>
+</div>
+{% endif %}
 
 {% set _path = request.url.path if request else '' %}
 {% set _role = (request.session.get('role') if request else 'user') or 'user' %}
@@ -434,7 +442,15 @@
         {% if _is_admin %}
         <a href="/admin/profiles" class="nav-link {% if _path.startswith('/admin/profiles') %}is-active{% endif %}">Profile</a>
         {% endif %}
+        <a href="/feedback" class="nav-link {% if _path.startswith('/feedback') %}is-active{% endif %}">Feedback</a>
       </nav>
+      {% if _role != 'user' %}
+      <form action="/" method="get" class="hidden lg:flex items-center" style="margin-left:1rem;">
+        <input type="search" name="q" placeholder="🔍 Alle Tender durchsuchen…"
+               style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:9999px;padding:0.4rem 1rem;font-size:0.85rem;width:240px;"
+               class="placeholder-white/60">
+      </form>
+      {% endif %}
     </div>
     <div class="flex items-center gap-2">
       {% if _is_admin %}
@@ -582,6 +598,7 @@
     <div>
       © {{ "" }}<span id="footer-year">2026</span> Flüssigboden Akademie ·
       <a href="https://fb-akademie.de" target="_blank" rel="noopener" class="hover:text-zinc-800 dark:hover:text-zinc-100">fb-akademie.de</a>
+      <span class="text-zinc-400 ml-2">v1.0.0</span>
     </div>
     <div class="flex gap-4">
       <a href="https://fb-akademie.de/impressum" target="_blank" rel="noopener" class="hover:text-zinc-800 dark:hover:text-zinc-100">Impressum</a>

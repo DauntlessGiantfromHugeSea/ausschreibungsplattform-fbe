@@ -69,6 +69,34 @@
     </ul>
   </section>
 
+  <section id="v1-features">
+    <h2 class="text-xl font-semibold mb-3">V1.0 Features (NEU)</h2>
+    <ul class="list-disc pl-5 text-sm text-zinc-700 dark:text-zinc-300 space-y-1.5">
+      <li><strong>Microsoft-Login</strong> — auf der Login-Seite oben „Mit Microsoft anmelden". Bei unbekanntem User: Registrierungs-Anfrage geht an alle Admins per E-Mail. Admin bestätigt unter <em>Einstellungen → Registrierungen</em>.</li>
+      <li><strong>Persönliche Status-Markierungen</strong> — auf jeder Tender-Detail-Seite kann jeder User „mein Status: interessant/beworben/…" setzen. Privat — andere User sehen das nicht, Admin sieht alle.</li>
+      <li><strong>Admin-Impersonation</strong> — im User-Edit „🎭 Als X anmelden" → siehst die App genau wie der User. Banner oben + „Zurück"-Button.</li>
+      <li><strong>KI pro User freigeben</strong> — Claude-Analyse + Assistent sind für Rolle <code>user</code> standardmäßig aus. Im User-Edit Checkbox „🧠 KI-Features freischalten" → Admin entscheidet pro User. Admin selbst hat KI immer.</li>
+      <li><strong>Globale Suche</strong> — Suchfeld oben im Header (Admin/Viewer) durchsucht Titel, Beschreibung, Auftraggeber UND die KI-Analyse-Texte.</li>
+      <li><strong>Feedback-Seite /feedback</strong> — Bugs, Wünsche, neue Profile melden. Für „Suchprofil-Wunsch": Claude schlägt direkt 3–5 Keywords vor, die der Admin nur noch übernehmen muss.</li>
+    </ul>
+  </section>
+
+  <section id="microsoft-setup">
+    <h2 class="text-xl font-semibold mb-3">Microsoft-Login einrichten</h2>
+    <ol class="list-decimal pl-5 text-sm text-zinc-700 dark:text-zinc-300 space-y-1">
+      <li><a href="https://portal.azure.com" target="_blank" class="text-brand-700 hover:underline">portal.azure.com</a> → <em>Microsoft Entra ID → App registrations → New registration</em></li>
+      <li>Redirect-URI: <code>https://DEIN_HOST/auth/microsoft/callback</code> (Web)</li>
+      <li>Nach Anlegen: <strong>Application (client) ID</strong> + <strong>Directory (tenant) ID</strong> notieren</li>
+      <li><em>Certificates &amp; secrets → New client secret</em> → Wert sofort kopieren (sieht man nur einmal)</li>
+      <li>Drei Werte in die <code>.env</code> der Plattform:<br>
+        <code>MICROSOFT_CLIENT_ID=...</code><br>
+        <code>MICROSOFT_CLIENT_SECRET=...</code><br>
+        <code>MICROSOFT_TENANT_ID=...</code> (oder <code>common</code> für jede Microsoft-Identität)
+      </li>
+      <li><code>systemctl restart fbe-tender</code> — Login-Seite zeigt jetzt den Microsoft-Button</li>
+    </ol>
+  </section>
+
   <section id="benutzer">
     <h2 class="text-xl font-semibold mb-3">Benutzer</h2>
     <p class="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">

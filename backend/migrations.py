@@ -313,6 +313,110 @@ def add_portal_login_test_requested_column() -> bool:
         return False
 
 
+def add_user_ai_enabled_column() -> bool:
+    """users.ai_enabled. Default True fuer Admin/Viewer, False fuer 'user'."""
+    insp = inspect(engine)
+    if "users" not in insp.get_table_names():
+        return False
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "ai_enabled" in cols:
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN ai_enabled BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            # Bestands-Admins + Viewer freischalten, Restricted bleibt aus.
+            conn.execute(text(
+                "UPDATE users SET ai_enabled = 1 WHERE role IN ('admin', 'viewer')"
+            ))
+        log.info("Migration: users.ai_enabled hinzugefuegt.")
+        return True
+    except Exception as exc:  # pragma: no cover
+        log.exception("Migration ai_enabled fehlgeschlagen: %s", exc)
+        return False
+
+
+def create_user_tender_status_table() -> bool:
+    """Per-User-Status-Override fuer Tender."""
+    insp = inspect(engine)
+    if "user_tender_status" in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE user_tender_status ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "user_id INTEGER NOT NULL, "
+                "tender_id INTEGER NOT NULL, "
+                "status VARCHAR(30) NOT NULL, "
+                "note TEXT, "
+                "updated_at DATETIME NOT NULL, "
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, "
+                "FOREIGN KEY (tender_id) REFERENCES tenders(id) ON DELETE CASCADE"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX ix_uts_unique ON user_tender_status(user_id, tender_id)"
+            ))
+        return True
+    except Exception as exc:
+        log.exception("Migration user_tender_status fehlgeschlagen: %s", exc)
+        return False
+
+
+def create_feedback_table() -> bool:
+    insp = inspect(engine)
+    if "feedback" in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE feedback ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "user_id INTEGER, "
+                "username VARCHAR(80) NOT NULL, "
+                "kind VARCHAR(40) NOT NULL DEFAULT 'general', "
+                "title VARCHAR(200), "
+                "body TEXT NOT NULL, "
+                "suggested_keywords TEXT, "
+                "status VARCHAR(30) NOT NULL DEFAULT 'neu', "
+                "admin_reply TEXT, "
+                "created_at DATETIME NOT NULL, "
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"
+                ")"
+            ))
+        return True
+    except Exception as exc:
+        log.exception("Migration feedback fehlgeschlagen: %s", exc)
+        return False
+
+
+def create_pending_registrations_table() -> bool:
+    insp = inspect(engine)
+    if "pending_registrations" in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE pending_registrations ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "email VARCHAR(255) NOT NULL UNIQUE, "
+                "full_name VARCHAR(200), "
+                "provider VARCHAR(40) NOT NULL DEFAULT 'microsoft', "
+                "provider_subject VARCHAR(255), "
+                "status VARCHAR(20) NOT NULL DEFAULT 'pending', "
+                "requested_at DATETIME NOT NULL, "
+                "decided_at DATETIME, "
+                "decided_by VARCHAR(80)"
+                ")"
+            ))
+        return True
+    except Exception as exc:
+        log.exception("Migration pending_registrations fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -328,4 +432,8 @@ def run_all() -> dict:
         "portal_login_test_flag_added": add_portal_login_test_requested_column(),
         "tender_claude_columns_added": add_tender_claude_columns(),
         "tender_attachments_table_created": create_tender_attachments_table(),
+        "user_ai_enabled_added": add_user_ai_enabled_column(),
+        "user_tender_status_created": create_user_tender_status_table(),
+        "feedback_created": create_feedback_table(),
+        "pending_registrations_created": create_pending_registrations_table(),
     }

@@ -82,6 +82,17 @@
         <span class="text-sm">Aktiv (kann sich anmelden)</span>
       </label>
     </div>
+    <div>
+      <label class="inline-flex items-center gap-2">
+        <input type="checkbox" name="ai_enabled"
+               {% if edited and edited.ai_enabled %}checked{% endif %}
+               class="h-4 w-4 rounded border-zinc-300 text-brand-700">
+        <span class="text-sm">🧠 KI-Features freischalten (Claude-Analyse, Assistent)</span>
+      </label>
+      <div class="text-xs text-zinc-400 mt-1 ml-6">
+        Admins haben KI immer. Für andere User standardmäßig aus — hier explizit aktivieren.
+      </div>
+    </div>
   </div>
 
   <div class="card p-6" id="profile-assign-card">
@@ -118,6 +129,14 @@
     <a href="/admin/users" class="btn-ghost">Abbrechen</a>
   </div>
 </form>
+
+{% if edited and edited.id != request.session.get('user_id') %}
+<form method="post" action="/admin/users/{{ edited.id }}/impersonate" class="max-w-3xl mt-6"
+      onsubmit="return confirm('Identität von {{ edited.username }} annehmen? Du kannst jederzeit zurück.');">
+  <button class="btn-ghost">🎭 Als {{ edited.username }} anmelden (Support-Modus)</button>
+  <span class="text-xs text-zinc-500 ml-3">Hilft beim User-Support — Banner oben zeigt dir, dass du im Support-Modus bist.</span>
+</form>
+{% endif %}
 
 <script>
   // Checkbox-Auswahl ins hidden CSV-Feld serialisieren, bevor abgeschickt wird.

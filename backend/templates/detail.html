@@ -107,6 +107,7 @@
       {% endif %}
     </div>
 
+    {% if ai_allowed %}
     <!-- KI-Analyse -->
     <div class="card p-6" id="ai-analysis"
          data-tender-id="{{ tender.id }}"
@@ -148,6 +149,22 @@
         Analyse vom {{ tender.ai_analyzed_at.strftime('%d.%m.%Y %H:%M') }} (gecached)
       </div>
       {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Persoenlicher Status (nur fuer den Setter sichtbar, Admins sehen alle) -->
+    <div class="card p-4 max-w-3xl">
+      <form method="post" action="/tender/{{ tender.id }}/my-status" class="flex items-center gap-2 flex-wrap text-sm">
+        <span class="text-xs text-zinc-500 mr-2">Mein persönlicher Status:</span>
+        <select name="status" class="input text-sm" style="max-width:160px;">
+          {% for s in statuses %}
+            <option value="{{ s }}" {% if my_status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn-primary text-xs">Speichern</button>
+        {% if my_status %}<span class="pill bg-emerald-50 text-emerald-700 text-xs">aktuell: {{ my_status }}</span>{% endif %}
+        <span class="text-xs text-zinc-400 ml-auto">Privat — nur du + Admin sehen das.</span>
+      </form>
     </div>
 
     <!-- Verlauf / Audit-Log -->
@@ -240,7 +257,7 @@
           </p>
         </div>
         <form method="post" action="/tender/{{ tender.id }}/claude-analyze" class="shrink-0">
-          {% if claude_configured %}
+          {% if claude_configured and ai_allowed %}
             <button type="submit" class="btn-primary text-sm">
               {% if claude_analysis %}↻ Neu analysieren{% else %}▶ Mit Claude analysieren{% endif %}
             </button>
@@ -280,7 +297,7 @@
         <div class="prose prose-sm max-w-none text-zinc-700 leading-relaxed">
           {{ claude_analysis_html|safe }}
         </div>
-      {% elif claude_configured %}
+      {% elif claude_configured and ai_allowed %}
         <div class="text-sm text-zinc-500 bg-zinc-50 border border-zinc-200 rounded p-4">
           Noch nicht analysiert. Klick auf „▶ Mit Claude analysieren" — der Agent durchsucht Wissensbasis, liest Anhänge + Enricher-Material, vergleicht mit ähnlichen Tendern und liefert eine FBA-Bewertung mit Einsparungspotenzial.
         </div>

@@ -606,37 +606,12 @@ portals:
     auto_discover: false
 - name: oeffentlichevergabe.de (DOEE)
   enabled: true
-  scraper: playwright_html
+  scraper: oeffentlichevergabe_api
   base_url: https://oeffentlichevergabe.de
-  strategy: scrape
-  notes: "Datenservice Oeffentlicher Einkauf (DOEE), bundesweite eForms-Plattform.\nUI ist eine Vue/React-SPA - Listing wird JS-seitig nachgeladen.\nBietet OpenData-REST: /api/opendata/v3/...  (eForms / JSON),\nSwagger: /documentation/swagger-ui/opendata/index.html.\nFuer den ersten Schuss scrapen wir das UI-Listing per Playwright;\ndie API-Anbindung kann spaeter ueber einen dedizierten Scraper\nersetzt werden, sobald die Endpoints geprueft sind.\n"
+  strategy: api
+  notes: "Datenservice Oeffentlicher Einkauf (DOEE), bundesweite eForms-Plattform.\nNutzt den offiziellen OpenData-Bulk-Endpoint /api/notice-exports.\nLaedt taeglich die letzten N Tage als CSV-ZIP, mergt alle Zeilen\nund filtert client-seitig auf die FBE-Cluster-Keywords.\nSwagger: /documentation/swagger-ui/opendata/index.html.\n"
   config:
-    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
-    # Pro Keyword eine Such-URL
-    search_path: /ui/de/search/?searchQuery={term}&page=1&pageSize=50
-    url_terms:
-    - Tiefbau
-    - Erdarbeiten
-    - Verfuellung
-    - Leitungsbau
-    - Spundwand
-    - Fluessigboden
-    - Kanalbau
-    - Rohrleitungsbau
-    - Bohrpfahl
-    - Baugrubensicherung
-    wait_for_selector: 'a[href*="/ui/de/notices/"], a[href*="/notice/"], .search-result-item, article'
-    wait_timeout_ms: 20000
-    result_selector: 'article, .search-result-item, li:has(a[href*="/ui/de/notices/"])'
-    title_selector: 'a[href*="/ui/de/notices/"], a[href*="/notice/"], h2 a, h3 a, .title'
-    link_selector: 'a[href*="/ui/de/notices/"], a[href*="/notice/"]'
-    authority_selector: '.buyer, .vergabestelle, .auftraggeber, [data-testid*="buyer" i]'
-    location_selector: '.location, .ort, [data-testid*="location" i]'
-    deadline_selector: '.deadline, .frist, [data-testid*="deadline" i]'
-    publication_selector: '.publication, .pub-date, [data-testid*="publication" i]'
-    description_selector: '.description, .teaser, .summary, p'
-    title_blocklist:
-    - Suche
-    - Suchergebnisse
-    - Bekanntmachungen
-    filter_by_terms: false
+    export_format: csv.zip
+    lookback_days: 14
+    max_items: 3000
+    filter_by_terms: true

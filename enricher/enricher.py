@@ -162,7 +162,16 @@ BATCH_LIMIT = int(os.environ.get("BATCH_LIMIT", "5"))
 PAGE_TIMEOUT_MS = int(os.environ.get("PAGE_TIMEOUT_MS", "30000"))
 # Deep-Crawl-Tuning
 MAX_SUBPAGES = int(os.environ.get("MAX_SUBPAGES", "4"))
-MAX_PDFS = int(os.environ.get("MAX_PDFS", "3"))
+MAX_PDFS = int(os.environ.get("MAX_PDFS", "25"))
+MAX_ATTACHMENT_MB = int(os.environ.get("MAX_ATTACHMENT_MB", "30"))
+ATTACHMENT_EXTENSIONS = tuple(
+    s.strip().lower()
+    for s in os.environ.get(
+        "ATTACHMENT_EXTENSIONS",
+        ".pdf,.docx,.doc,.xlsx,.xls,.zip,.txt,.rtf,.odt,.ods,.csv"
+    ).split(",")
+    if s.strip()
+)
 MAX_TEXT_PER_SOURCE = int(os.environ.get("MAX_TEXT_PER_SOURCE", "6000"))
 MAX_TOTAL_TEXT = int(os.environ.get("MAX_TOTAL_TEXT", "22000"))
 
@@ -186,6 +195,19 @@ DETAIL_LINK_PATTERNS = [
 DETAIL_LINK_RE = re.compile("|".join(DETAIL_LINK_PATTERNS), re.IGNORECASE)
 # Expander-Buttons: wir klicken alles, was diesen Pattern enthaelt.
 EXPAND_BUTTON_PATTERNS = ["mehr", "anzeigen", "aufklappen", "weiterlesen", "details", "akzeptieren"]
+# Buttons, die ein Dokument-/Anhang-Panel oeffnen (Klick noetig, bevor Links sichtbar sind).
+REVEAL_DOCS_PATTERNS = [
+    "ausschreibungsunterlagen einsehen",
+    "ausschreibungsunterlagen",
+    "vergabeunterlagen einsehen",
+    "vergabeunterlagen",
+    "unterlagen einsehen",
+    "unterlagen anzeigen",
+    "dokumente anzeigen",
+    "dokumente einsehen",
+    "anlagen anzeigen",
+    "downloads anzeigen",
+]
 
 if not TOKEN:
     log.error("ENRICHER_TOKEN ist nicht gesetzt - Abbruch.")
@@ -371,7 +393,12 @@ def _find_detail_subpages(page, base_url: str, max_n: int) -> list[str]:
 
 
 def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
-    """Sammelt PDF-Links der gleichen Domain."""
+    """Sammelt Dokument-Links der gleichen Domain.
+
+    Erfasst nicht nur .pdf-URLs, sondern alle Endungen aus ATTACHMENT_EXTENSIONS
+    sowie Server-Side-Downloads (download.html, downloadAttachment, getFile,
+    attachment, file?id=, Link mit download-Attribut).
+    """
     base_host = urlparse(base_url).netloc
     out, seen = [], set()
     try:
@@ -379,65 +406,177 @@ def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
     except Exception:
         return []
     soup = BeautifulSoup(html, "html.parser")
+    download_url_re = re.compile(
+        r"(download(\.html|attachment|file)?|getfile|attachment|/file\?|/files/|fileservlet)",
+        re.IGNORECASE,
+    )
     for a in soup.find_all("a", href=True):
         if len(out) >= max_n:
             break
         href = a["href"].strip()
-        if not href or "#" in href and not href.lower().endswith(".pdf"):
-            href = href.split("#", 1)[0]
-        if not href:
+        if not href or href.startswith(("javascript:", "mailto:", "#")):
             continue
-        full = urljoin(base_url, href)
-        if not full.lower().endswith(".pdf") and ".pdf?" not in full.lower():
+        href_clean = href.split("#", 1)[0]
+        if not href_clean:
             continue
+        full = urljoin(base_url, href_clean)
         if urlparse(full).netloc != base_host:
             continue
         if full in seen:
+            continue
+        low = full.lower()
+        # Direkter Dateilink ueber Endung?
+        ext_match = any(low.endswith(ext) or (ext + "?") in low for ext in ATTACHMENT_EXTENSIONS)
+        # Server-Side-Download-URL?
+        download_match = bool(download_url_re.search(low))
+        # <a download="..."> Attribut?
+        has_download_attr = a.has_attr("download")
+        if not (ext_match or download_match or has_download_attr):
             continue
         seen.add(full)
         out.append(full)
     return out
 
 
-def _download_and_extract_pdf(ctx, url: str) -> tuple[str, bytes, str]:
-    """Laedt ein PDF ueber den Playwright-Kontext (= mit Session-Cookies)
-    und extrahiert Text. Liefert (extracted_text, body, content_type).
-    body/content_type leer bei Fehler."""
-    try:
-        req = ctx.request
-        resp = req.get(url, timeout=PAGE_TIMEOUT_MS)
-        if resp.status >= 400:
-            return "", b"", ""
-        body = resp.body()
-        if not body or len(body) < 200:
-            return "", b"", ""
-        ct = ""
+def _reveal_documents(page) -> int:
+    """Klickt 'Ausschreibungsunterlagen einsehen' o.ae., damit die Datei-Tabelle
+    sichtbar wird. Liefert die Zahl der ausgefuehrten Klicks."""
+    clicked = 0
+    for pat in REVEAL_DOCS_PATTERNS:
         try:
-            ct = resp.headers.get("content-type", "")
+            locator = page.locator(
+                f"button:has-text('{pat}'), a:has-text('{pat}'), input[value*='{pat}' i]",
+                has_text=re.compile(pat, re.IGNORECASE),
+            )
+            n = min(locator.count(), 3)
+            for i in range(n):
+                try:
+                    locator.nth(i).scroll_into_view_if_needed(timeout=1500)
+                    locator.nth(i).click(timeout=3000, no_wait_after=True)
+                    clicked += 1
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    if clicked:
+        try:
+            page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
             pass
+    return clicked
+
+
+def _filename_from_response(resp, fallback_url: str) -> str:
+    """Liest Content-Disposition oder faellt auf URL-Pfad zurueck."""
+    from urllib.parse import unquote
+    try:
+        cd = resp.headers.get("content-disposition", "") if resp else ""
+    except Exception:
+        cd = ""
+    if cd:
+        m = re.search(r"filename\*?=(?:UTF-8''|\")?([^\";]+)", cd, re.IGNORECASE)
+        if m:
+            return unquote(m.group(1).strip().strip('"'))
+    path = urlparse(fallback_url).path
+    name = unquote(path.rsplit("/", 1)[-1]) or "anhang.bin"
+    return name
+
+
+def _click_download_capture(page, ctx, url: str) -> tuple[str, bytes, str, str]:
+    """Klickt das href=url auf der Seite an, faengt den Browser-Download ab.
+    Liefert (filename, body, content_type, extracted_text). Leere Werte bei Fehler.
+    Wird gebraucht, wenn ein Server nur per Session-Cookie + POST Downloads ausliefert."""
+    try:
+        sel = f"a[href='{url}']"
+        loc = page.locator(sel).first
+        if loc.count() == 0:
+            # Versuche mit relativem href
+            from urllib.parse import urlparse as _up
+            rel = _up(url).path
+            loc = page.locator(f"a[href='{rel}']").first
+            if loc.count() == 0:
+                return "", b"", "", ""
+        with page.expect_download(timeout=PAGE_TIMEOUT_MS) as dl_info:
+            loc.click(timeout=5000, no_wait_after=True)
+        download = dl_info.value
+        path = Path(download.path()) if download.path() else None
+        if not path or not path.exists():
+            return "", b"", "", ""
+        body = path.read_bytes()
+        filename = download.suggested_filename or _filename_from_response(None, url)
+        ct = ""
+        # Endung -> Content-Type-Hint
+        low = filename.lower()
+        if low.endswith(".pdf"):
+            ct = "application/pdf"
+        elif low.endswith(".docx"):
+            ct = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif low.endswith(".xlsx"):
+            ct = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        elif low.endswith(".zip"):
+            ct = "application/zip"
+        # Text aus PDF
         text = ""
-        if pdf_extract_text:
+        if low.endswith(".pdf") and pdf_extract_text:
             try:
                 text = pdf_extract_text(io.BytesIO(body)) or ""
                 text = _html_to_text(text, MAX_TEXT_PER_SOURCE) if text else ""
             except Exception:
                 text = ""
-        return text, body, ct
+        return filename, body, ct, text
     except Exception as exc:
-        log.info("PDF-Fehler %s: %s", url[:80], exc)
-        return "", b"", ""
+        log.info("Download-Click fuer %s fehlgeschlagen: %s", url[:80], exc)
+        return "", b"", "", ""
 
 
-def _upload_attachment(tender_id: int, url: str, body: bytes, content_type: str, extracted_text: str) -> None:
+def _download_and_extract_pdf(ctx, url: str) -> tuple[str, bytes, str, str]:
+    """Laedt ein Dokument ueber den Playwright-Kontext (= mit Session-Cookies)
+    und extrahiert ggf. Text. Liefert (extracted_text, body, content_type, filename).
+    body leer bei Fehler oder HTML-Antwort statt Datei."""
+    try:
+        req = ctx.request
+        resp = req.get(url, timeout=PAGE_TIMEOUT_MS)
+        if resp.status >= 400:
+            return "", b"", "", ""
+        body = resp.body()
+        if not body or len(body) < 200:
+            return "", b"", "", ""
+        # Groessen-Limit
+        if len(body) > MAX_ATTACHMENT_MB * 1024 * 1024:
+            log.info("Anhang %s zu gross (%.1f MB), uebersprungen", url[:80], len(body) / 1024 / 1024)
+            return "", b"", "", ""
+        ct = ""
+        try:
+            ct = resp.headers.get("content-type", "")
+        except Exception:
+            pass
+        filename = _filename_from_response(resp, url)
+        # HTML-Antwort statt Datei? -> kein Anhang, ggf. via Klick versuchen
+        low_ct = (ct or "").lower()
+        if "html" in low_ct and not filename.lower().endswith(tuple(ATTACHMENT_EXTENSIONS)):
+            return "", b"", "", ""
+        text = ""
+        if filename.lower().endswith(".pdf") and pdf_extract_text:
+            try:
+                text = pdf_extract_text(io.BytesIO(body)) or ""
+                text = _html_to_text(text, MAX_TEXT_PER_SOURCE) if text else ""
+            except Exception:
+                text = ""
+        return text, body, ct, filename
+    except Exception as exc:
+        log.info("Download-Fehler %s: %s", url[:80], exc)
+        return "", b"", "", ""
+
+
+def _upload_attachment(tender_id: int, url: str, body: bytes, content_type: str, extracted_text: str, filename: str = "") -> None:
     """Speichert Anhang via Internal-API auf der Plattform. Failed silently."""
     import base64
     from urllib.parse import urlparse, unquote
     if not body:
         return
-    # Filename aus URL
-    path = urlparse(url).path
-    filename = unquote(path.rsplit("/", 1)[-1]) or "anhang.pdf"
+    if not filename:
+        path = urlparse(url).path
+        filename = unquote(path.rsplit("/", 1)[-1]) or "anhang.bin"
     try:
         http.post(
             f"/api/internal/tenders/{tender_id}/attachments",
@@ -518,10 +657,14 @@ def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, st
         page.goto(url, wait_until="networkidle")
         _kill_overlays(page)
         _auto_expand(page)
+        # 1b) Spezial: 'Ausschreibungsunterlagen einsehen' o.ae. klicken
+        _reveal_documents(page)
         sources.append(("main", page.url, _page_text(page)))
 
-        # 2) PDF-Links sammeln (auf der Main-Page, bevor wir wegnavigieren)
+        # 2) Dokumenten-Links auf der Main-Page sammeln
         pdf_urls = _find_pdf_links(page, url, MAX_PDFS)
+        # Mapping URL -> page (fuer Click-Fallback noetig: auf welcher Seite war der Link?)
+        url_origin: dict[str, str] = {u: page.url for u in pdf_urls}
         sub_urls = _find_detail_subpages(page, url, MAX_SUBPAGES)
 
         # 3) Unterseiten besuchen
@@ -530,22 +673,39 @@ def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, st
                 page.goto(sub, wait_until="networkidle")
                 _kill_overlays(page)
                 _auto_expand(page)
-                # Auch von Unterseiten PDFs sammeln (mit Restbudget)
+                _reveal_documents(page)
                 rest = max(0, MAX_PDFS - len(pdf_urls))
                 if rest:
                     for u in _find_pdf_links(page, sub, rest):
                         if u not in pdf_urls:
                             pdf_urls.append(u)
+                            url_origin[u] = page.url
                 sources.append(("sub", sub, _page_text(page)))
             except Exception as exc:
                 log.info("Sub-Page %s fehlgeschlagen: %s", sub[:80], exc)
                 continue
 
-        # 4) PDFs laden + extrahieren + via Internal-API als Anhang speichern
+        # 4) Dokumente laden:
+        #    Strategie A: direkter GET ueber den Browser-Kontext (Cookies/Session).
+        #    Strategie B (Fallback): wenn A leer/HTML zurueckliefert, navigieren wir
+        #                          auf die Origin-Seite und klicken den Link an,
+        #                          um Browser-Download-Events zu nutzen.
         for pu in pdf_urls[:MAX_PDFS]:
-            txt, body, ct = _download_and_extract_pdf(ctx, pu)
+            txt, body, ct, fn = _download_and_extract_pdf(ctx, pu)
+            if not body:
+                # Fallback: per Klick downloaden
+                origin = url_origin.get(pu)
+                try:
+                    if origin and page.url != origin:
+                        page.goto(origin, wait_until="networkidle")
+                        _kill_overlays(page); _reveal_documents(page)
+                    fn2, body2, ct2, txt2 = _click_download_capture(page, ctx, pu)
+                    if body2:
+                        body, ct, fn, txt = body2, ct2, fn2, txt2
+                except Exception as exc:
+                    log.info("Click-Fallback fuer %s fehlgeschlagen: %s", pu[:80], exc)
             if body and tender_id:
-                _upload_attachment(tender_id, pu, body, ct, txt)
+                _upload_attachment(tender_id, pu, body, ct, txt, filename=fn)
             if txt:
                 sources.append(("pdf", pu, txt))
 

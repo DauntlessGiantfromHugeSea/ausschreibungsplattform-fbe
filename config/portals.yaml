@@ -71,7 +71,7 @@ portals:
     - schachtbau
 - name: evergabe-online.de (BMI)
   enabled: true
-  scraper: crawl_html
+  scraper: playwright_html
   base_url: https://www.evergabe-online.de
   strategy: scrape
   notes: 'Bund-Laender-Plattform der Beschaffungsstelle des BMI. Listing
@@ -86,15 +86,17 @@ portals:
   config:
     user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
     listing_paths:
+    - /search.html?3
     - /search.html?publishDateRange=ALL
     - /search.html?1
     - /search.html
-    link_selector: 'table.table-advanced td a, table.table-striped td a, a.searchResultLink, a.publicationLink, a.notice-link
+    link_selector: 'a[href*="tenderdetails.html"], table.table-advanced td a, table.table-striped td a, a.searchResultLink, a.publicationLink, a.notice-link
 
       '
-    link_pattern: (searchPanel-results|/notice|/announcement|/tender)
+    link_pattern: (tenderdetails\.html|searchPanel-results|/notice|/announcement|/tender)
+    wait_for_selector: 'a[href*="tenderdetails.html"], table.table-advanced, table.table-striped'
     max_details: 200
-    request_delay_s: 0.3
+    request_delay_s: 0.5
     detail_title_selector: h1, .title, .announcement-title, .notice-title
     detail_authority_selector: .authority, .buyer, .vergabestelle, .auftraggeber
     detail_location_selector: .place, .location, .ort, .erfuellungsort

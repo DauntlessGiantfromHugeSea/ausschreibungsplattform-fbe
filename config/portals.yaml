@@ -90,18 +90,22 @@ portals:
     - /search.html?publishDateRange=ALL
     - /search.html?1
     - /search.html
-    link_selector: 'a[href*="tenderdetails.html"], table.table-advanced td a, table.table-striped td a, a.searchResultLink, a.publicationLink, a.notice-link
-
-      '
-    link_pattern: (tenderdetails\.html|searchPanel-results|/notice|/announcement|/tender)
-    wait_for_selector: 'a[href*="tenderdetails.html"], table.table-advanced, table.table-striped'
-    max_details: 200
-    request_delay_s: 0.5
-    detail_title_selector: h1, .title, .announcement-title, .notice-title
-    detail_authority_selector: .authority, .buyer, .vergabestelle, .auftraggeber
-    detail_location_selector: .place, .location, .ort, .erfuellungsort
-    detail_deadline_selector: .deadline, .frist, .submissionDeadline, .angebotsfrist
-    detail_publication_selector: .publicationDate, .published, .veroeffentlicht
+    wait_for_selector: 'a[href*="tenderdetails.html"]'
+    wait_timeout_ms: 20000
+    # Eine Ergebniszeile = ein <tr> mit einem tenderdetails-Link drin.
+    result_selector: 'tr:has(a[href*="tenderdetails.html"])'
+    title_selector: 'a[href*="tenderdetails.html"]'
+    link_selector: 'a[href*="tenderdetails.html"]'
+    authority_selector: 'td.authority, td.buyer, .vergabestelle, .auftraggeber'
+    location_selector: 'td.place, td.location, .ort, .erfuellungsort'
+    deadline_selector: 'td.deadline, .frist, .submissionDeadline'
+    publication_selector: 'td.publicationDate, .published, .veroeffentlicht'
+    description_selector: '.description, td.description, td.cpv'
+    # Sicherheit: Title-Strings, die wir NIE als Tender akzeptieren (Page-Header etc.)
+    title_blocklist:
+    - Ausschreibungssuche
+    - Suchergebnisse
+    - Bekanntmachungen suchen
 - name: DTVP - Deutsches Vergabeportal
   enabled: true
   scraper: dtvp

@@ -65,6 +65,10 @@
         <td class="text-right whitespace-nowrap sticky right-0 bg-white">
           <a href="/admin/probe?portal={{ p.name|urlencode }}" class="btn-icon" title="Testen">🔍</a>
           <a href="/admin/portals/{{ p.name|urlencode }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+          <form method="post" action="/admin/portals/{{ p.name|urlencode }}/purge" class="inline"
+                onsubmit="return confirm('Wirklich ALLE bisherigen Tender von &quot;{{ p.name }}&quot; aus der DB loeschen? (Portal-Config bleibt, beim naechsten Crawl wird neu geladen.)');">
+            <button type="submit" class="btn-icon hover:!text-amber-600 hover:!border-amber-300" title="Bisherige Tender dieses Portals loeschen">🧹</button>
+          </form>
           <form method="post" action="/admin/portals/{{ p.name|urlencode }}/delete" class="inline"
                 onsubmit="return confirm('Portal &quot;{{ p.name }}&quot; wirklich löschen?');">
             <button type="submit" class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Löschen">🗑</button>

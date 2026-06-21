@@ -1036,6 +1036,23 @@ def admin_portal_delete(name: str):
     return RedirectResponse(url=f"/admin/portals?flash={name} geloescht.", status_code=303)
 
 
+@app.post("/admin/portals/{name}/purge")
+def admin_portal_purge(name: str, db: Session = Depends(get_db)):
+    """Loescht alle Tender + abhaengige Daten dieses Portals - fuer
+    Bereinigung nach kaputter Crawler-Konfiguration."""
+    portal_match = db.query(Tender).filter(Tender.portal == name)
+    ids = [t.id for t in portal_match.all()]
+    if not ids:
+        return RedirectResponse(url=f"/admin/portals?flash=Keine Tender von {name} vorhanden.", status_code=303)
+    db.query(TenderAttachment).filter(TenderAttachment.tender_id.in_(ids)).delete(synchronize_session=False)
+    db.query(TenderEvent).filter(TenderEvent.tender_id.in_(ids)).delete(synchronize_session=False)
+    db.query(UserTenderStatus).filter(UserTenderStatus.tender_id.in_(ids)).delete(synchronize_session=False)
+    db.query(Comment).filter(Comment.tender_id.in_(ids)).delete(synchronize_session=False)
+    portal_match.delete(synchronize_session=False)
+    db.commit()
+    return RedirectResponse(url=f"/admin/portals?flash={len(ids)} Eintraege von {name} geloescht.", status_code=303)
+
+
 @app.get("/admin/portals/new", response_class=HTMLResponse)
 def admin_portal_new(request: Request):
     return templates.TemplateResponse(

@@ -3915,9 +3915,21 @@ def admin_changelog(request: Request, db: Session = Depends(get_db),
                     flash: Optional[str] = None, error: Optional[str] = None):
     items = (db.query(ChangelogEntry)
              .order_by(ChangelogEntry.created_at.desc()).all())
+    # Vorschlag fuer naechste Version: letzten Eintrag patch-bump, sonst app-version
+    next_version = ""
+    if items:
+        import re as _re
+        m = _re.match(r"^[Vv]?(\d+)\.(\d+)\.(\d+)$", items[0].version.strip())
+        if m:
+            a, b, c = (int(x) for x in m.groups())
+            next_version = f"V{a}.{b}.{c+1}"
+        else:
+            next_version = items[0].version
+    else:
+        next_version = f"V{APP_VERSION}"
     return templates.TemplateResponse(request, "changelog_admin.html",
         {"items": items, "user": request.session.get("user"),
-         "flash": flash, "error": error})
+         "flash": flash, "error": error, "next_version": next_version})
 
 
 @app.post("/admin/changelog/save")

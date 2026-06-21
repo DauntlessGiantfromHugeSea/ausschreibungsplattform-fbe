@@ -3606,7 +3606,36 @@ def feedback_submit(
                   title=title.strip() or None, body=body.strip(),
                   suggested_keywords=suggested)
     db.add(fb); db.commit()
+    _notify_admins_new_feedback(db, fb)
     return RedirectResponse(url="/feedback?flash=Danke! Dein Feedback ist beim Admin.", status_code=303)
+
+
+def _notify_admins_new_feedback(db: Session, fb: Feedback) -> None:
+    """Mail an alle aktiven Admins mit E-Mail, wenn neues Feedback eintrudelt."""
+    admins = (db.query(User)
+              .filter(User.role == "admin", User.is_active == True,  # noqa: E712
+                      User.email.isnot(None))
+              .all())
+    emails = [a.email for a in admins if a.email]
+    if not emails:
+        return
+    from backend import notify as _notify
+    label = {"bug": "Bug", "feature": "Wunsch", "profile": "Profil-Wunsch"}.get(fb.kind, "Feedback")
+    subj = f"[FBA] Neues {label} von {fb.username}"
+    body = (
+        f"Hallo Admin,\n\n"
+        f"{fb.username} hat ein {label} eingereicht:\n\n"
+        f"Titel:  {fb.title or '-'}\n"
+        f"Kategorie: {fb.kind}\n\n"
+        f"-------\n{fb.body}\n-------\n\n"
+    )
+    if fb.suggested_keywords:
+        body += f"KI-Vorschlag (Keywords): {fb.suggested_keywords}\n\n"
+    body += "Bearbeiten unter: /admin/feedback\n"
+    try:
+        _notify._send_to(emails, subj, body)
+    except Exception:
+        log.exception("Admin-Notify fuer Feedback fehlgeschlagen")
 
 
 @app.get("/admin/feedback", response_class=HTMLResponse)

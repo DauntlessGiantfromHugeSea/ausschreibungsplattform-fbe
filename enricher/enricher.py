@@ -490,13 +490,39 @@ def _find_pdf_links(page, base_url: str, max_n: int) -> list[str]:
 
 
 def _reveal_documents(page) -> int:
-    """Klick-Reveal ist DEAKTIVIERT. Auf evergabe-online erzeugen Klicks
-    auf 'Ausschreibungsunterlagen einsehen' beim Bot regelmaessig Wicket-
-    Session-Fehler (Navigation nach internalerror.html). Statt zu klicken
-    konstruieren wir die Dokumenten-URL deterministisch in
-    _portal_specific_subpages(). Diese Funktion bleibt als No-Op fuer
-    kuenftige Portale, die einen Reveal-Klick brauchen koennen."""
-    return 0
+    """Klickt EINMAL den 'EINSEHEN'-Button (Wicket-AJAX) und navigiert
+    damit zur Dokumenten-Seite mit der vollstaendigen Datei-Tabelle.
+
+    WICHTIG: Nur EIN Klick, kein Pattern-Loop. Mehrfach-Klicks zerstoeren
+    auf evergabe-online die Wicket-Session und landen auf internalerror.html.
+    Liefert 1 wenn geklickt, 0 sonst.
+    """
+    try:
+        # Bevorzugt: Anchor mit btn-primary-Klasse + 'einsehen' im Text
+        loc = page.locator("a.btn.btn-primary").filter(
+            has_text=re.compile(r"einsehen", re.IGNORECASE)).first
+        if loc.count() == 0:
+            # Fallback: irgendein Button/Link mit 'unterlagen' und 'einsehen'
+            loc = page.locator("a, button").filter(
+                has_text=re.compile(r"(unterlagen|dokument).*einsehen", re.IGNORECASE)).first
+        if loc.count() == 0:
+            return 0
+        loc.scroll_into_view_if_needed(timeout=2000)
+        try:
+            with page.expect_navigation(timeout=10000):
+                loc.click(timeout=5000)
+        except Exception:
+            # Manche Wicket-Klicks loesen kein navigation-event aus -> kein Problem
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
+        page.wait_for_timeout(1500)
+        log.info("reveal_documents: nach Klick URL=%s", page.url[:140])
+        return 1
+    except Exception as exc:
+        log.info("reveal_documents fehlgeschlagen: %s", exc)
+        return 0
 
 
 def _reveal_documents_DISABLED(page) -> int:

@@ -36,6 +36,8 @@ log = logging.getLogger(__name__)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["has_logo"] = branding.has_logo
 templates.env.globals["logo_url"] = branding.logo_url
+templates.env.globals["favicon_url"] = branding.favicon_url
+
 
 APP_VERSION = "1.0.0"
 app = FastAPI(title="Flüssigboden Akademie · Ausschreibungen", version=APP_VERSION)
@@ -48,6 +50,16 @@ _STATIC_DIR = Path(__file__).parent / "static"
 _STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 install_auth(app)
+
+
+@app.get("/favicon.png")
+@app.get("/favicon.ico")
+def serve_favicon():
+    from fastapi.responses import FileResponse, Response
+    p = branding.favicon_path()
+    if not p:
+        return Response(status_code=204)
+    return FileResponse(str(p), media_type="image/png")
 
 
 @app.on_event("startup")
@@ -339,7 +351,9 @@ def _enforce_restricted(
 def login_get(request: Request, next: str = "/", error: Optional[str] = None, flash: Optional[str] = None):
     if request.session.get("user"):
         return RedirectResponse(next, status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"next": next, "error": error, "flash": flash})
+    from . import branding as _br
+    return templates.TemplateResponse(request, "login.html",
+        {"next": next, "error": error, "flash": flash, "login_texts": _br.get_login_texts()})
 
 
 @app.post("/login")
@@ -1004,7 +1018,7 @@ def run_search_now(background_tasks: BackgroundTasks, format: Optional[str] = No
 
 
 # --- Admin: Portal-Verwaltung -----------------------------------------
-SCRAPER_CHOICES = ["bund", "ted", "rss_generic", "generic_html", "crawl_html", "nextjs", "playwright_html"]
+SCRAPER_CHOICES = ["bund", "ted", "rss_generic", "generic_html", "crawl_html", "nextjs", "playwright_html", "oeffentlichevergabe_api"]
 
 
 def _portals_view_ctx(request: Request, flash: str | None = None, error: str | None = None) -> dict:
@@ -1101,6 +1115,84 @@ def admin_portal_claude_analyze_all(
     return RedirectResponse(
         url=f"/admin/portals?flash=Claude-Bulk+gestartet:+{len(ids)}+Tender+von+{name}+(Hintergrund).",
         status_code=303)
+
+
+@app.post("/admin/portals/{name}/purge")
+def admin_portal_purge(name: str, db: Session = Depends(get_db)):
+    """Loescht alle Tender + abhaengige Daten dieses Portals - fuer
+    Bereinigung nach kaputter Crawler-Konfiguration."""
+    portal_match = db.query(Tender).filter(Tender.portal == name)
+    ids = [t.id for t in portal_match.all()]
+    if not ids:
+        return RedirectResponse(url=f"/admin/portals?flash=Keine Tender von {name} vorhanden.", status_code=303)
+    db.query(TenderAttachment).filter(TenderAttachment.tender_id.in_(ids)).delete(synchronize_session=False)
+    db.query(TenderEvent).filter(TenderEvent.tender_id.in_(ids)).delete(synchronize_session=False)
+    db.query(UserTenderStatus).filter(UserTenderStatus.tender_id.in_(ids)).delete(synchronize_session=False)
+    db.query(Comment).filter(Comment.tender_id.in_(ids)).delete(synchronize_session=False)
+    portal_match.delete(synchronize_session=False)
+    db.commit()
+    # Lokale Attachment-Dateien des Portals aufraeumen
+    try:
+        from pathlib import Path as _Path
+        import shutil as _shutil
+        base = _Path(settings.attachment_dir)
+        for tid in ids:
+            d = base / str(tid)
+            if d.is_dir():
+                _shutil.rmtree(d, ignore_errors=True)
+    except Exception as exc:
+        log.warning("Attachment-Cleanup fuer %s: %s", name, exc)
+    return RedirectResponse(url=f"/admin/portals?flash={len(ids)} Eintraege von {name} geloescht.", status_code=303)
+
+
+@app.post("/admin/portals/{name}/recrawl")
+def admin_portal_recrawl(
+    name: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    force_enrich: Optional[str] = Form(None),
+):
+    """Purge + Crawl-Pipeline + (optional) bestehende Tender erneut anreichern.
+
+    Ablauf:
+      1. Tender + Anhaenge + Events dieses Portals loeschen
+      2. force_enrich=on -> setzt ai_analysis aller verbleibenden Tender
+         dieses Portals auf NULL, sodass der Enricher sie neu verarbeitet
+         (greift nur fuer Tender, die nicht geloescht wurden)
+      3. Pipeline-Lauf im Hintergrund starten (crawlt ALLE aktiven Portale)
+      4. Enricher zieht innerhalb POLL_INTERVAL_S automatisch nach
+    """
+    # 1) Purge
+    portal_match = db.query(Tender).filter(Tender.portal == name)
+    ids = [t.id for t in portal_match.all()]
+    if ids:
+        db.query(TenderAttachment).filter(TenderAttachment.tender_id.in_(ids)).delete(synchronize_session=False)
+        db.query(TenderEvent).filter(TenderEvent.tender_id.in_(ids)).delete(synchronize_session=False)
+        db.query(UserTenderStatus).filter(UserTenderStatus.tender_id.in_(ids)).delete(synchronize_session=False)
+        db.query(Comment).filter(Comment.tender_id.in_(ids)).delete(synchronize_session=False)
+        portal_match.delete(synchronize_session=False)
+        db.commit()
+        try:
+            from pathlib import Path as _Path
+            import shutil as _shutil
+            base = _Path(settings.attachment_dir)
+            for tid in ids:
+                d = base / str(tid)
+                if d.is_dir():
+                    _shutil.rmtree(d, ignore_errors=True)
+        except Exception as exc:
+            log.warning("Attachment-Cleanup fuer %s: %s", name, exc)
+    # 2) Pipeline-Lauf
+    if is_pipeline_running():
+        return RedirectResponse(
+            url=f"/admin/portals?error=Ein Crawl-Lauf laeuft bereits. {len(ids)} alte Eintraege von {name} wurden geloescht.",
+            status_code=303,
+        )
+    background_tasks.add_task(run_pipeline_with_lock)
+    return RedirectResponse(
+        url=f"/admin/portals?flash={len(ids)} alte Eintraege von {name} geloescht. Crawl laeuft im Hintergrund - Enricher zieht danach automatisch alle Anhaenge.",
+        status_code=303,
+    )
 
 
 @app.get("/admin/portals/new", response_class=HTMLResponse)
@@ -1342,6 +1434,43 @@ def admin_release_lock(request: Request):
     msg = "Lock freigegeben." if was_held else "Kein aktiver Lock - nichts zu tun."
     return RedirectResponse(
         url="/admin/settings?flash=" + msg.replace(" ", "+"),
+        status_code=303,
+    )
+
+
+@app.post("/admin/restart")
+def admin_restart(request: Request, background_tasks: BackgroundTasks):
+    """Startet die Plattform (systemd-Service) und den Enricher-Container
+    neu. Antwortet sofort mit einem Redirect, der Restart laeuft asynchron
+    nach kurzer Verzoegerung im Hintergrund - so kommt die Redirect-Antwort
+    noch vor dem Shutdown beim Browser an.
+    """
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+
+    def _do_restart():
+        import subprocess, time
+        # Kurz warten, damit die HTTP-Antwort den Client sicher erreicht
+        time.sleep(2)
+        # Enricher zuerst (laeuft unabhaengig)
+        try:
+            subprocess.run(["docker", "restart", "fbe-enricher"],
+                           timeout=15, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as exc:
+            log.warning("Enricher-Restart fehlgeschlagen: %s", exc)
+        # Plattform-Service (zuletzt - kappt unseren eigenen Prozess)
+        try:
+            subprocess.Popen(["systemctl", "restart", "fbe-tender"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        except Exception as exc:
+            log.warning("Plattform-Restart fehlgeschlagen: %s", exc)
+
+    background_tasks.add_task(_do_restart)
+    return RedirectResponse(
+        url="/admin/settings?flash=Neustart+ausgeloest+-+10-15+Sek+warten,+dann+Seite+neu+laden.",
         status_code=303,
     )
 
@@ -2508,6 +2637,34 @@ def assistant_page(request: Request):
     )
 
 
+@app.post("/me/change-password")
+def me_change_password(
+    request: Request,
+    new_password: str = Form(...),
+    new_password_confirm: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Eingeloggter User aendert sein eigenes Passwort - ohne altes Passwort abzufragen."""
+    sess_user = _session_user(request)
+    if not sess_user:
+        return RedirectResponse(url="/login?next=/me/notifications", status_code=303)
+    if not new_password or len(new_password) < 6:
+        return RedirectResponse(
+            url="/me/notifications?error=Passwort muss mindestens 6 Zeichen haben.",
+            status_code=303)
+    if new_password != new_password_confirm:
+        return RedirectResponse(
+            url="/me/notifications?error=Die beiden Passwoerter stimmen nicht ueberein.",
+            status_code=303)
+    db_user = db.query(User).filter(User.username == sess_user["username"]).first()
+    if not db_user:
+        return RedirectResponse(url="/me/notifications?error=Konto nicht gefunden.", status_code=303)
+    db_user.password_hash = hash_password(new_password)
+    db.commit()
+    return RedirectResponse(
+        url="/me/notifications?flash=Passwort+geaendert.", status_code=303)
+
+
 @app.get("/me/notifications", response_class=HTMLResponse)
 def me_notifications_get(
     request: Request,
@@ -3379,14 +3536,30 @@ def admin_branding(
             "current_name": (up.name if up else None),
             "uploaded": bool(up),
         })
+    texts = _br.get_login_texts()
     return templates.TemplateResponse(
         request, "branding.html",
         {
             "variants": variants,
+            "texts": texts,
             "user": request.session.get("user"),
             "flash": flash, "error": error,
         },
     )
+
+
+@app.post("/admin/branding/texts")
+def admin_branding_texts(
+    badge: str = Form(""),
+    headline: str = Form(...),
+    subtitle: str = Form(...),
+):
+    from . import branding as _br
+    ok, msg = _br.save_login_texts(badge, headline, subtitle)
+    if not ok:
+        return RedirectResponse(url=f"/admin/branding?error={msg}", status_code=303)
+    return RedirectResponse(
+        url="/admin/branding?flash=Login-Texte gespeichert.", status_code=303)
 
 
 @app.post("/admin/branding/upload")
@@ -3410,8 +3583,19 @@ async def admin_branding_upload(
 def admin_branding_delete(variant: str = Form(...)):
     from . import branding as _br
     _br.delete_uploaded_logo(variant)
+    if variant in ("mark", "light"):
+        _br._refresh_favicon()
     return RedirectResponse(
         url=f"/admin/branding?flash=Upload ({variant}) entfernt - Stock-Logo wird wieder verwendet.",
+        status_code=303)
+
+
+@app.post("/admin/branding/refresh-favicon")
+def admin_branding_refresh_favicon():
+    from . import branding as _br
+    _br._refresh_favicon()
+    return RedirectResponse(
+        url="/admin/branding?flash=Favicon neu generiert - Hard-Reload (Strg+Shift+R) im Browser.",
         status_code=303)
 
 

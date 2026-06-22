@@ -13,9 +13,9 @@
   <title>{% block title %}Flüssigboden Akademie · Ausschreibungen{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% if has_logo() %}
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="shortcut icon" href="/static/favicon.png">
-  <link rel="apple-touch-icon" href="/static/favicon.png">
+  <link rel="icon" type="image/png" href="{{ favicon_url() }}">
+  <link rel="shortcut icon" href="{{ favicon_url() }}">
+  <link rel="apple-touch-icon" href="{{ favicon_url() }}">
   {% endif %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

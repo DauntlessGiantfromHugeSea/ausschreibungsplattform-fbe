@@ -172,6 +172,7 @@ class GenericHtmlScraper(BaseScraper):
         pub_sel = config.get("publication_selector")
         desc_sel = config.get("description_selector")
 
+        title_blocklist = [s.strip().lower() for s in (config.get("title_blocklist") or []) if s.strip()]
         out: dict[str, TenderItem] = {}
         for el in soup.select(result_sel):
             title_el = el.select_one(title_sel)
@@ -180,8 +181,13 @@ class GenericHtmlScraper(BaseScraper):
             title = title_el.get_text(" ", strip=True)
             if not title:
                 continue
+            if title.lower() in title_blocklist:
+                continue
 
             url_full = _find_link(el, base_url, link_sel, title_el) or _synthetic_url(base_url, title)
+            # Synthetic-URLs (Hash-Fragmente) sind hier nutzlos -> Eintrag verwerfen
+            if "#card-" in url_full:
+                continue
 
             # Volltext der Karte fuer Label- und Filter-Faelle
             full_text = el.get_text(" ", strip=True)

@@ -71,35 +71,15 @@ portals:
     - schachtbau
 - name: evergabe-online.de (BMI)
   enabled: true
-  scraper: crawl_html
+  scraper: rss_generic
   base_url: https://www.evergabe-online.de
-  strategy: scrape
-  notes: 'Bund-Laender-Plattform der Beschaffungsstelle des BMI. Listing
-
-    hat 1262+ Bekanntmachungen total. Wir crawlen die ersten
-
-    max_details Detailseiten und filtern client-seitig auf die
-
-    Cluster-Begriffe.
-
-    '
+  strategy: rss
+  notes: "Bund-Laender-Plattform der Beschaffungsstelle des BMI.\nOffizieller News-RSS aus evergabe-online.info enthaelt alle neuen\nBekanntmachungen. Wir filtern client-seitig auf die FBE-Cluster-\nBegriffe (Tiefbau, Erdarbeiten, Leitungsbau, Spundwand, Verfuellung,\nFluessigboden, ZFSV, etc.). Die Item-URL zeigt direkt auf die\ntenderdetails.html-Seite - dort klickt der Enricher\n'Ausschreibungsunterlagen einsehen' und zieht die Anhaenge.\n"
   config:
-    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
-    listing_paths:
-    - /search.html?publishDateRange=ALL
-    - /search.html?1
-    - /search.html
-    link_selector: 'table.table-advanced td a, table.table-striped td a, a.searchResultLink, a.publicationLink, a.notice-link
-
-      '
-    link_pattern: (searchPanel-results|/notice|/announcement|/tender)
-    max_details: 200
-    request_delay_s: 0.3
-    detail_title_selector: h1, .title, .announcement-title, .notice-title
-    detail_authority_selector: .authority, .buyer, .vergabestelle, .auftraggeber
-    detail_location_selector: .place, .location, .ort, .erfuellungsort
-    detail_deadline_selector: .deadline, .frist, .submissionDeadline, .angebotsfrist
-    detail_publication_selector: .publicationDate, .published, .veroeffentlicht
+    feed_urls:
+    - https://www.evergabe-online.info/SiteGlobals/Functions/RSSFeed/DE/eVergabe/RSSNewsfeed/RSSNewsfeed.xml?nn=1063186
+    filter_by_terms: true
+    max_items_per_feed: 500
 - name: DTVP - Deutsches Vergabeportal
   enabled: true
   scraper: dtvp
@@ -624,3 +604,14 @@ portals:
     description_selector: .description, .beschreibung, .teaser, p
     filter_by_terms: true
     auto_discover: false
+- name: oeffentlichevergabe.de (DOEE)
+  enabled: true
+  scraper: oeffentlichevergabe_api
+  base_url: https://oeffentlichevergabe.de
+  strategy: api
+  notes: "Datenservice Oeffentlicher Einkauf (DOEE), bundesweite eForms-Plattform.\nNutzt den offiziellen OpenData-Bulk-Endpoint /api/notice-exports.\nLaedt taeglich die letzten N Tage als CSV-ZIP, mergt alle Zeilen\nund filtert client-seitig auf die FBE-Cluster-Keywords.\nSwagger: /documentation/swagger-ui/opendata/index.html.\n"
+  config:
+    export_format: csv.zip
+    lookback_days: 14
+    max_items: 3000
+    filter_by_terms: true

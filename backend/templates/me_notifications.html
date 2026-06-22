@@ -96,4 +96,23 @@
   </div>
 </form>
 
+<form method="post" action="/me/change-password" class="card p-6 space-y-4 max-w-2xl mt-6"
+      onsubmit="return confirm('Neues Passwort wirklich setzen?');">
+  <div>
+    <h2 class="text-base font-semibold mb-1">🔐 Passwort aendern</h2>
+    <p class="text-xs text-zinc-500">
+      Neues Passwort eingeben — gilt sofort. Mindestens 6 Zeichen.
+    </p>
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Neues Passwort</label>
+    <input class="input" type="password" name="new_password" required minlength="6" autocomplete="new-password">
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-zinc-600 mb-1">Wiederholen</label>
+    <input class="input" type="password" name="new_password_confirm" required minlength="6" autocomplete="new-password">
+  </div>
+  <button class="btn-primary">Passwort speichern</button>
+</form>
+
 {% endblock %}

@@ -465,6 +465,28 @@ def create_changelog_entries_table() -> bool:
         return False
 
 
+def create_user_portals_table() -> bool:
+    insp = inspect(engine)
+    if "user_portals" in insp.get_table_names():
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE user_portals ("
+                "user_id INTEGER NOT NULL, "
+                "portal VARCHAR(200) NOT NULL, "
+                "PRIMARY KEY (user_id, portal), "
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_user_portals_user_id ON user_portals(user_id)"
+            ))
+        return True
+    except Exception as exc:
+        log.exception("Migration user_portals fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -486,4 +508,5 @@ def run_all() -> dict:
         "pending_registrations_created": create_pending_registrations_table(),
         "pending_registration_columns_added": add_pending_registration_columns(),
         "changelog_entries_created": create_changelog_entries_table(),
+        "user_portals_created": create_user_portals_table(),
     }

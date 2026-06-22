@@ -33,6 +33,17 @@ profile_users = Table(
 )
 
 
+class UserPortal(Base):
+    """User -> erlaubte Portale (M:N als Tabelle, weil Portal-Name nur String ist).
+    Wenn ein User KEINEN Eintrag hat, gilt: alle Portale erlaubt (innerhalb seiner Profile).
+    Sobald mindestens ein Eintrag existiert, ist die Liste die Whitelist.
+    """
+    __tablename__ = "user_portals"
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     primary_key=True)
+    portal = Column(String(200), primary_key=True)
+
+
 class TenderStatus(str, Enum):
     NEU = "neu"
     GEPRUEFT = "geprüft"

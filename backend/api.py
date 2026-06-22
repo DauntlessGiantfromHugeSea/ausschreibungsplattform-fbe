@@ -14,7 +14,7 @@ from fastapi import BackgroundTasks, Body, Depends, FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from .auth import authenticate, hash_password, install_auth, is_restricted, require_admin
@@ -292,21 +292,33 @@ def _user_assigned_profiles(db: Session, request: Request) -> list[SearchProfile
     return list(user.assigned_profiles)
 
 
+def _user_allowed_portals(db: Session, user_id: int) -> list[str]:
+    """Liefert die fuer den User freigeschalteten Portal-Namen. Leere Liste = alle erlaubt."""
+    from .models import UserPortal
+    rows = db.query(UserPortal.portal).filter(UserPortal.user_id == user_id).all()
+    return [r[0] for r in rows]
+
+
 def _enforce_restricted(
     db: Session,
     request: Request,
     base_query,
     selected_profile_id: Optional[int] = None,
 ) -> tuple[object, list[SearchProfile], Optional[SearchProfile]]:
-    """Schraenkt base_query auf die zugewiesenen Profile des Restricted-Users ein.
+    """Schraenkt base_query auf die zugewiesenen Profile UND Portale des Users ein.
 
     Liefert (query, alle_zugewiesenen_profile, gewaehltes_profil_oder_None).
-    Wenn selected_profile_id gesetzt aber dem User nicht zugewiesen -> 403-aequivalent
-    (query auf 'nichts'). Wenn keine Profile zugewiesen -> query auf 'nichts'.
     """
     profiles = _user_assigned_profiles(db, request)
     if not profiles:
         return base_query.filter(Tender.id == -1), [], None
+
+    # Portal-Whitelist (leer = alle erlaubt)
+    uid = request.session.get("user_id")
+    if uid:
+        allowed_portals = _user_allowed_portals(db, uid)
+        if allowed_portals:
+            base_query = base_query.filter(Tender.portal.in_(allowed_portals))
 
     selected = None
     if selected_profile_id:
@@ -319,7 +331,6 @@ def _enforce_restricted(
 
     if selected:
         return base_query.filter(_profile_filter_expr(selected)), profiles, selected
-    # Kein konkretes Profil gewaehlt - Union ueber alle zugewiesenen
     return base_query.filter(or_(*[_profile_filter_expr(p) for p in profiles])), profiles, None
 
 
@@ -1034,6 +1045,62 @@ def admin_portal_delete(name: str):
     raw["portals"] = portals
     yaml_store.write_portals(raw)
     return RedirectResponse(url=f"/admin/portals?flash={name} geloescht.", status_code=303)
+
+
+@app.post("/admin/portals/{name}/claude-analyze-all")
+def admin_portal_claude_analyze_all(
+    name: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    only_missing: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Laesst Claude alle Tender eines Portals analysieren (inkl. Anhaenge).
+    only_missing='on' -> nur Tender ohne claude_analysis. Sonst: alle."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from . import claude_agent as _cla
+    if not _cla.is_configured():
+        return RedirectResponse(
+            url="/admin/portals?error=Anthropic-Key+fehlt.", status_code=303)
+
+    q = db.query(Tender.id).filter(Tender.portal == name)
+    if only_missing == "on":
+        q = q.filter(or_(Tender.claude_analysis.is_(None),
+                         func.length(Tender.claude_analysis) == 0))
+    ids = [r[0] for r in q.all()]
+    if not ids:
+        return RedirectResponse(
+            url=f"/admin/portals?flash=Keine+passenden+Tender+fuer+{name}.",
+            status_code=303)
+
+    def _worker(tender_ids: list[int]):
+        from .db import SessionLocal
+        s = SessionLocal()
+        ok_cnt = err_cnt = 0
+        try:
+            for tid in tender_ids:
+                t = s.get(Tender, tid)
+                if not t:
+                    continue
+                try:
+                    ok, content, _ = _cla.run_and_store(s, t)
+                    if ok:
+                        ok_cnt += 1
+                    else:
+                        err_cnt += 1
+                except Exception as exc:
+                    err_cnt += 1
+                    log.exception("Claude-Bulk %s Exception: %s", tid, exc)
+        finally:
+            s.close()
+            log.info("Bulk-Claude fertig fuer %s: %d ok, %d fehler", name, ok_cnt, err_cnt)
+
+    background_tasks.add_task(_worker, ids)
+    return RedirectResponse(
+        url=f"/admin/portals?flash=Claude-Bulk+gestartet:+{len(ids)}+Tender+von+{name}+(Hintergrund).",
+        status_code=303)
 
 
 @app.get("/admin/portals/new", response_class=HTMLResponse)
@@ -1918,6 +1985,8 @@ def admin_user_edit(user_id: int, request: Request, db: Session = Depends(get_db
     edited = db.get(User, user_id)
     if not edited:
         return RedirectResponse(url="/admin/users?error=User nicht gefunden", status_code=303)
+    all_portals = [p.name for p in load_portals()]
+    assigned_portals = set(_user_allowed_portals(db, edited.id))
     return templates.TemplateResponse(
         request, "user_edit.html",
         {
@@ -1925,6 +1994,8 @@ def admin_user_edit(user_id: int, request: Request, db: Session = Depends(get_db
             "user": request.session.get("user"),
             "all_profiles": db.query(SearchProfile).order_by(SearchProfile.name).all(),
             "assigned_profile_ids": {p.id for p in edited.assigned_profiles},
+            "all_portals": all_portals,
+            "assigned_portals": assigned_portals,
         },
     )
 
@@ -1940,6 +2011,18 @@ def _apply_profile_assignments(db: Session, user: User, profile_ids_csv: str) ->
     return len(profs)
 
 
+def _apply_portal_assignments(db: Session, user: User, portals: list[str]) -> int:
+    """Setzt die Portal-Whitelist des Users (leer = alle erlaubt)."""
+    from .models import UserPortal
+    db.query(UserPortal).filter(UserPortal.user_id == user.id).delete()
+    db.flush()
+    for p in portals:
+        p = (p or "").strip()
+        if p:
+            db.add(UserPortal(user_id=user.id, portal=p))
+    return len([p for p in portals if (p or "").strip()])
+
+
 @app.post("/admin/users/save")
 def admin_user_save(
     request: Request,
@@ -1953,6 +2036,8 @@ def admin_user_save(
     profile_ids: str = Form(""),
     profile_assign_present: str = Form(""),  # Sentinel: '1' wenn die Checkbox-UI im Form war
     ai_enabled: Optional[str] = Form(None),
+    portals: list[str] = Form([]),
+    portal_assign_present: str = Form(""),
     db: Session = Depends(get_db),
 ):
     username = username.strip()
@@ -1987,6 +2072,8 @@ def admin_user_save(
             msg = f"{username} aktualisiert ({n_profiles} Profile zugewiesen)."
         else:
             msg = f"{username} aktualisiert."
+        if portal_assign_present == "1":
+            _apply_portal_assignments(db, edited, portals)
         db.commit()
         return RedirectResponse(url=f"/admin/users?flash={msg}", status_code=303)
 

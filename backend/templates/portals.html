@@ -65,6 +65,12 @@
         <td class="text-right whitespace-nowrap sticky right-0 bg-white">
           <a href="/admin/probe?portal={{ p.name|urlencode }}" class="btn-icon" title="Testen">🔍</a>
           <a href="/admin/portals/{{ p.name|urlencode }}/edit" class="btn-icon" title="Bearbeiten">✎</a>
+          <form method="post" action="/admin/portals/{{ p.name|urlencode }}/claude-analyze-all" class="inline"
+                onsubmit="return confirm('Claude soll ALLE Tender von &quot;{{ p.name }}&quot; analysieren (inkl. Anhaenge)?\n\nLaeuft im Hintergrund - kann je Tender 10-30 Sek dauern.');">
+            <input type="hidden" name="only_missing" value="on">
+            <button type="submit" class="btn-icon hover:!text-violet-700 hover:!border-violet-300"
+                    title="Alle Tender dieses Portals mit Claude analysieren (nur die ohne Analyse)">🧠</button>
+          </form>
           <form method="post" action="/admin/portals/{{ p.name|urlencode }}/delete" class="inline"
                 onsubmit="return confirm('Portal &quot;{{ p.name }}&quot; wirklich löschen?');">
             <button type="submit" class="btn-icon hover:!text-rose-600 hover:!border-rose-300" title="Löschen">🗑</button>

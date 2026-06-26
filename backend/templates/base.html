@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de" class="h-full bg-zinc-50 dark:bg-zinc-900">
+<html lang="de" class="h-full">
 <head>
   <meta charset="UTF-8">
   <script>
@@ -69,24 +69,64 @@
 
     /* ============================================================
        Theme - Dark Teal Nav + Lime Accent (FB Akademie)
+       Semantische Tokens: Light = Default, .dark schaltet ALLES um.
        ============================================================ */
     :root {
+      /* Surfaces */
       --bg-base: #eef2f5;
       --bg-tint-1: rgba(0, 126, 128, 0.08);
       --bg-tint-2: rgba(99, 102, 241, 0.05);
       --bg-tint-3: rgba(212, 245, 97, 0.06);
-      --nav-bg: #003233;
-      --nav-bg-2: #004c4d;
-      --accent: #d4f561;
+      --surface:    #ffffff;
+      --surface-2:  #f5f7f8;        /* Hover-Fill, Header in Tabellen */
+      --surface-3:  #f3f4f6;        /* Striping */
+      --surface-elev: rgba(255, 255, 255, 0.92);  /* Glass-Card */
+      /* Borders */
+      --border:     rgba(15, 23, 42, 0.12);
+      --border-strong: rgba(0, 50, 51, 0.18);
+      --border-soft: rgba(15, 23, 42, 0.06);
+      /* Text */
+      --text:       #0f172a;
+      --text-muted: #475569;
+      --text-faint: #94a3b8;
+      /* Nav / Accent (unveraendert in beiden Modi) */
+      --nav-bg:     #003233;
+      --nav-bg-2:   #004c4d;
+      --accent:     #d4f561;
       --accent-hover: #c8e84a;
+      --accent-ink: rgb(0, 50, 51);
+      /* Glass + Shadow */
       --glass-bg: rgba(255, 255, 255, 0.72);
       --glass-bg-strong: rgba(255, 255, 255, 0.85);
       --glass-border: rgba(255, 255, 255, 0.55);
       --glass-stroke: rgba(15, 23, 42, 0.06);
-      --text: #0f172a;
-      --text-muted: #475569;
       --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 30px -18px rgba(15, 23, 42, 0.18);
       --shadow-card-hover: 0 1px 2px rgba(15, 23, 42, 0.05), 0 18px 40px -20px rgba(15, 23, 42, 0.22);
+      /* Brand-Tint fuer .text-brand-700 etc. - dunkel-mode kippt ins helle */
+      --brand-ink: #004c4d;
+    }
+    html.dark {
+      --bg-base: #0b0f10;
+      --bg-tint-1: rgba(0, 126, 128, 0.10);
+      --bg-tint-2: rgba(99, 102, 241, 0.08);
+      --bg-tint-3: rgba(212, 245, 97, 0.05);
+      --surface:    #18181b;       /* zinc-900 */
+      --surface-2:  #27272a;       /* zinc-800 */
+      --surface-3:  #3f3f46;       /* zinc-700 */
+      --surface-elev: rgba(24, 24, 27, 0.92);
+      --border:     rgba(255, 255, 255, 0.10);
+      --border-strong: rgba(255, 255, 255, 0.18);
+      --border-soft: rgba(255, 255, 255, 0.06);
+      --text:       #f4f4f5;
+      --text-muted: #a1a1aa;
+      --text-faint: #71717a;
+      --glass-bg: rgba(24, 24, 27, 0.72);
+      --glass-bg-strong: rgba(24, 24, 27, 0.92);
+      --glass-border: rgba(255, 255, 255, 0.06);
+      --glass-stroke: rgba(255, 255, 255, 0.08);
+      --shadow-card: 0 1px 2px rgba(0,0,0,0.35), 0 12px 30px -18px rgba(0,0,0,0.6);
+      --shadow-card-hover: 0 1px 2px rgba(0,0,0,0.4), 0 18px 40px -20px rgba(0,0,0,0.7);
+      --brand-ink: #99cbcd;
     }
 
     html, body {
@@ -104,31 +144,32 @@
 
     @layer components {
       .pill { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium; }
-      .relevance-bar { @apply h-1.5 rounded-full bg-zinc-100 overflow-hidden; }
+      .relevance-bar { @apply h-1.5 rounded-full overflow-hidden; background: var(--surface-3); }
       .chip {
         @apply inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition;
-        background: #ffffff;
-        border: 1.5px solid rgba(0, 50, 51, 0.18);
-        color: rgb(15, 23, 42);
+        background: var(--surface);
+        border: 1.5px solid var(--border-strong);
+        color: var(--text);
       }
-      .chip:hover { background: #f5f7f8; border-color: rgba(0, 50, 51, 0.4); }
+      .chip:hover { background: var(--surface-2); border-color: var(--border-strong); filter: brightness(1.02); }
       .chip-active {
         background: var(--accent) !important;
-        color: rgb(0, 50, 51) !important;
+        color: var(--accent-ink) !important;
         border-color: transparent !important;
         font-weight: 600 !important;
       }
     }
 
-    /* Liquid-Glass Karten - frosted weiss + soft shadow */
+    /* Liquid-Glass Karten - frosted + soft shadow */
     .card {
       border-radius: 1rem;
-      background: var(--glass-bg-strong);
+      background: var(--surface-elev);
       backdrop-filter: saturate(1.4) blur(20px);
       -webkit-backdrop-filter: saturate(1.4) blur(20px);
       border: 1px solid var(--glass-stroke);
       box-shadow: var(--shadow-card), inset 0 1px 0 var(--glass-border);
       transition: box-shadow 0.25s ease, transform 0.25s ease;
+      color: var(--text);
     }
     .card:hover { box-shadow: var(--shadow-card-hover); }
 
@@ -140,8 +181,7 @@
       box-shadow: var(--shadow-card), inset 0 1px 0 var(--glass-border);
     }
 
-    /* Buttons - Base wird auf ALLE Varianten gelegt (nicht via Cascade),
-       damit auch class="btn-primary" allein (ohne 'btn') pill-shaped wird. */
+    /* Buttons */
     .btn,
     .btn-primary,
     .btn-ghost,
@@ -166,7 +206,7 @@
     .btn-danger:active { transform: translateY(0.5px); }
 
     .btn-primary {
-      color: rgb(0, 50, 51) !important;
+      color: var(--accent-ink) !important;
       background: var(--accent) !important;
       border: 1px solid transparent !important;
     }
@@ -176,14 +216,15 @@
 
     .btn-ghost,
     .btn-secondary {
-      color: rgb(15, 23, 42) !important;
-      background: #ffffff !important;
-      border: 1.5px solid rgba(0, 50, 51, 0.18) !important;
+      color: var(--text) !important;
+      background: var(--surface) !important;
+      border: 1.5px solid var(--border-strong) !important;
     }
     .btn-ghost:hover,
     .btn-secondary:hover {
-      background: #f5f7f8 !important;
-      border-color: rgba(0, 50, 51, 0.4) !important;
+      background: var(--surface-2) !important;
+      border-color: var(--border-strong) !important;
+      filter: brightness(1.03);
     }
 
     .btn-danger {
@@ -195,36 +236,38 @@
     .btn-icon {
       display: inline-flex; align-items: center; justify-content: center;
       height: 2.25rem; width: 2.25rem; border-radius: 9999px;
-      background: #ffffff;
-      border: 1.5px solid rgba(0, 50, 51, 0.12);
-      color: rgb(71, 85, 105);
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      color: var(--text-muted);
       transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
     .btn-icon:hover {
-      background: #f5f7f8;
-      color: rgb(0, 50, 51);
-      border-color: rgba(0, 50, 51, 0.35);
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--border-strong);
     }
 
-    /* Inputs - klar, weiss, brand-fokus */
+    /* Inputs */
     .input {
       width: 100%;
       border-radius: 0.75rem;
       padding: 0.625rem 0.875rem;
       font-size: 0.9rem;
-      background: #ffffff;
-      border: 1px solid rgba(15, 23, 42, 0.12);
+      background: var(--surface);
+      border: 1px solid var(--border);
       color: var(--text);
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
+    .input::placeholder { color: var(--text-faint); }
     .input:focus {
       outline: none;
       border-color: rgb(0, 126, 128);
-      box-shadow: 0 0 0 4px rgba(0, 126, 128, 0.12);
+      box-shadow: 0 0 0 4px rgba(0, 126, 128, 0.18);
     }
     select.input { padding-right: 2.25rem; }
+    textarea.input { font-family: inherit; line-height: 1.5; }
 
-    /* Topbar - solid dunkles teal */
+    /* Topbar bleibt in BEIDEN Modi dunkel-teal */
     header.topbar {
       background: var(--nav-bg);
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -233,7 +276,6 @@
     }
     header.topbar a { color: rgba(255, 255, 255, 0.85); }
     header.topbar a:hover { color: #ffffff; }
-    /* Nav-Pills im Header */
     header.topbar .nav-link {
       padding: 0.5rem 1.1rem;
       border-radius: 9999px;
@@ -243,177 +285,173 @@
     header.topbar .nav-link:hover { background: rgba(255, 255, 255, 0.06); }
     header.topbar .nav-link.is-active {
       background: var(--accent);
-      color: rgb(0, 50, 51) !important;
+      color: var(--accent-ink) !important;
       font-weight: 600;
     }
-    /* Header-Icons auf dunklem BG: dezente weisse Outlines */
+    /* Header-Icons IMMER auf dunklem BG, egal welcher Modus */
     header.topbar .btn-icon {
-      background: transparent;
-      border-color: rgba(255, 255, 255, 0.18);
-      color: rgba(255, 255, 255, 0.85);
+      background: transparent !important;
+      border-color: rgba(255, 255, 255, 0.18) !important;
+      color: rgba(255, 255, 255, 0.85) !important;
     }
     header.topbar .btn-icon:hover {
-      background: rgba(255, 255, 255, 0.08);
-      color: #ffffff;
-      border-color: rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #ffffff !important;
+      border-color: rgba(255, 255, 255, 0.35) !important;
     }
-    /* Solide Dropdown-Menues (Status, User, Profil). Light + Dark Mode
-       deklarieren wir direkt - so spielt kein generischer text-zinc-*
-       Override mehr rein. */
+    header.topbar .btn-ghost { color: #fff !important; }
+    /* Dropdown-Menues (Status, User, Profil) */
     .menu-panel-solid {
-      background: #ffffff !important;
-      border: 1px solid rgba(15, 23, 42, 0.08) !important;
+      background: var(--surface) !important;
+      border: 1px solid var(--border) !important;
       border-radius: 0.75rem !important;
       box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.18),
                   0 2px 6px rgba(15, 23, 42, 0.06) !important;
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
+      color: var(--text) !important;
     }
     .menu-panel-solid a,
     .menu-panel-solid div,
     .menu-panel-solid span,
-    .menu-panel-solid strong {
-      color: #1f2937 !important;
-    }
-    .menu-panel-solid a {
-      text-decoration: none;
-    }
-    .menu-panel-solid a:hover {
-      background-color: #f3f4f6 !important;
-    }
+    .menu-panel-solid strong { color: var(--text) !important; }
+    .menu-panel-solid a { text-decoration: none; }
+    .menu-panel-solid a:hover { background-color: var(--surface-2) !important; }
     .menu-panel-solid a.danger,
-    .menu-panel-solid a[href="/logout"] {
-      color: #b91c1c !important;
-    }
+    .menu-panel-solid a[href="/logout"] { color: #b91c1c !important; }
     .menu-panel-solid a.danger:hover,
     .menu-panel-solid a[href="/logout"]:hover {
-      background-color: #fef2f2 !important;
+      background-color: rgba(220, 38, 38, 0.12) !important;
       color: #991b1b !important;
     }
-    .dark .menu-panel-solid {
-      background: #27272a !important;
-      border-color: rgb(63 63 70) !important;
-    }
-    .dark .menu-panel-solid a,
-    .dark .menu-panel-solid div,
-    .dark .menu-panel-solid span,
-    .dark .menu-panel-solid strong {
-      color: #f4f4f5 !important;
-    }
-    .dark .menu-panel-solid a:hover {
-      background-color: rgb(63 63 70) !important;
-    }
-    .dark .menu-panel-solid a[href="/logout"] {
-      color: #fca5a5 !important;
-    }
-    .dark .menu-panel-solid a[href="/logout"]:hover {
-      background-color: rgba(220, 38, 38, 0.15) !important;
-      color: #fecaca !important;
-    }
+    html.dark .menu-panel-solid a[href="/logout"] { color: #fca5a5 !important; }
+    html.dark .menu-panel-solid a[href="/logout"]:hover { color: #fecaca !important; background: rgba(220,38,38,0.18) !important; }
 
-    /* Header-Active-Highlight (Status-/Settings-/Hilfe-Icons) auf Lime */
+    /* Active-Highlight bei Top-Bar Icons (Status/Settings/Hilfe) */
     header.topbar .btn-icon[class*='!bg-brand-50'] {
       background: var(--accent) !important;
-      color: rgb(0, 50, 51) !important;
+      color: var(--accent-ink) !important;
       border-color: transparent !important;
     }
-    /* User-Avatar-Initial wird im Header lime */
     header.topbar .bg-brand-100 { background-color: var(--accent) !important; }
-    header.topbar .text-brand-700 { color: rgb(0, 50, 51) !important; }
-    table.dashboard { @apply w-full text-sm; }
+    header.topbar .text-brand-700 { color: var(--accent-ink) !important; }
+
+    /* Tabellen */
+    table.dashboard { @apply w-full text-sm; color: var(--text); }
     table.dashboard thead th {
-      @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800 z-10;
+      padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+      background: var(--surface);
     }
-    table.dashboard thead th a { @apply hover:text-zinc-900; }
-    table.dashboard tbody td { @apply px-3 py-2 align-top border-b border-zinc-100 dark:border-zinc-700/60 text-sm; }
-    table.dashboard tbody tr:hover { @apply bg-zinc-50/70 dark:bg-zinc-700/40; }
+    table.dashboard thead th a { color: inherit; }
+    table.dashboard thead th a:hover { color: var(--text); }
+    table.dashboard tbody td {
+      padding: 0.5rem 0.75rem; vertical-align: top;
+      border-bottom: 1px solid var(--border-soft);
+      font-size: 0.875rem;
+    }
+    table.dashboard tbody tr:hover { background-color: var(--surface-2); }
     .truncate-2 {
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
       overflow: hidden;
     }
 
-    /* Dark mode global overrides */
-    .dark body { background-color: rgb(24 24 27); color: rgb(244 244 245); }
-    .dark .card { background-color: rgb(39 39 42); border-color: rgb(63 63 70); }
-    .dark header, .dark nav { background-color: rgb(39 39 42) !important; border-color: rgb(63 63 70) !important; color: rgb(244 244 245) !important; }
-    .dark .bg-white { background-color: rgb(39 39 42) !important; }
-    .dark .text-zinc-900 { color: rgb(244 244 245) !important; }
-    .dark .text-zinc-800 { color: rgb(228 228 231) !important; }
-    .dark .text-zinc-700 { color: rgb(212 212 216) !important; }
-    .dark .text-zinc-600 { color: rgb(161 161 170) !important; }
-    .dark .text-zinc-500 { color: rgb(161 161 170) !important; }
-    .dark .text-zinc-400 { color: rgb(113 113 122) !important; }
-    .dark .border-zinc-200, .dark .border-zinc-200\/70 { border-color: rgb(63 63 70) !important; }
-    .dark .border-zinc-100 { border-color: rgb(63 63 70) !important; }
-    .dark .border-zinc-300 { border-color: rgb(82 82 91) !important; }
-    .dark .hover\:bg-zinc-50:hover { background-color: rgb(63 63 70) !important; }
-    .dark .bg-zinc-50, .dark .bg-zinc-50\/50, .dark .bg-zinc-50\/70 { background-color: rgb(39 39 42) !important; }
-    .dark .bg-zinc-100 { background-color: rgb(63 63 70) !important; }
+    /* ============================================================
+       Dark Mode - Tailwind-Klassen-Overrides (semantisch ergaenzend)
+       ============================================================ */
+    html.dark .bg-white { background-color: var(--surface) !important; }
+    html.dark .text-zinc-900,
+    html.dark .text-zinc-800 { color: var(--text) !important; }
+    html.dark .text-zinc-700 { color: rgb(212 212 216) !important; }
+    html.dark .text-zinc-600,
+    html.dark .text-zinc-500 { color: var(--text-muted) !important; }
+    html.dark .text-zinc-400 { color: var(--text-faint) !important; }
+    html.dark .border-zinc-200,
+    html.dark .border-zinc-200\/70,
+    html.dark .border-zinc-100 { border-color: var(--border) !important; }
+    html.dark .border-zinc-300 { border-color: var(--border-strong) !important; }
+    html.dark .divide-zinc-200 > * + * { border-color: var(--border) !important; }
+    html.dark .hover\:bg-zinc-50:hover,
+    html.dark .hover\:bg-zinc-100:hover { background-color: var(--surface-2) !important; }
+    html.dark .bg-zinc-50,
+    html.dark .bg-zinc-50\/50,
+    html.dark .bg-zinc-50\/70 { background-color: var(--surface-2) !important; }
+    html.dark .bg-zinc-100 { background-color: var(--surface-3) !important; }
+    html.dark .bg-zinc-200 { background-color: var(--surface-3) !important; }
 
-    /* Coloured tints: in Dark Mode dunkler + saturierter Text */
-    .dark .bg-emerald-50  { background-color: rgb(6 78 59 / 0.35) !important; }
-    .dark .text-emerald-800, .dark .text-emerald-700 { color: rgb(167 243 208) !important; }
-    .dark .border-emerald-200 { border-color: rgb(6 95 70) !important; }
+    /* Coloured tints fuer Status/Flash/Pills */
+    html.dark .bg-emerald-50  { background-color: rgb(6 78 59 / 0.45) !important; }
+    html.dark .bg-emerald-100 { background-color: rgb(6 78 59 / 0.6) !important; }
+    html.dark .text-emerald-900,
+    html.dark .text-emerald-800,
+    html.dark .text-emerald-700 { color: rgb(167 243 208) !important; }
+    html.dark .border-emerald-200 { border-color: rgb(6 95 70) !important; }
 
-    .dark .bg-rose-50     { background-color: rgb(76 5 25 / 0.45) !important; }
-    .dark .text-rose-800, .dark .text-rose-700, .dark .text-rose-900 { color: rgb(254 205 211) !important; }
-    .dark .border-rose-200 { border-color: rgb(136 19 55) !important; }
+    html.dark .bg-rose-50     { background-color: rgb(76 5 25 / 0.5) !important; }
+    html.dark .bg-rose-100    { background-color: rgb(76 5 25 / 0.7) !important; }
+    html.dark .text-rose-900,
+    html.dark .text-rose-800,
+    html.dark .text-rose-700 { color: rgb(254 205 211) !important; }
+    html.dark .border-rose-200 { border-color: rgb(136 19 55) !important; }
 
-    .dark .bg-amber-50    { background-color: rgb(120 53 15 / 0.35) !important; }
-    .dark .text-amber-800, .dark .text-amber-700 { color: rgb(253 230 138) !important; }
-    .dark .border-amber-200 { border-color: rgb(146 64 14) !important; }
+    html.dark .bg-amber-50    { background-color: rgb(120 53 15 / 0.45) !important; }
+    html.dark .bg-amber-100   { background-color: rgb(120 53 15 / 0.65) !important; }
+    html.dark .text-amber-900,
+    html.dark .text-amber-800,
+    html.dark .text-amber-700 { color: rgb(253 230 138) !important; }
+    html.dark .border-amber-200 { border-color: rgb(146 64 14) !important; }
 
-    .dark .bg-sky-50      { background-color: rgb(8 47 73 / 0.45) !important; }
-    .dark .text-sky-700, .dark .text-sky-800 { color: rgb(186 230 253) !important; }
-    .dark .border-sky-200 { border-color: rgb(7 89 133) !important; }
+    html.dark .bg-sky-50      { background-color: rgb(8 47 73 / 0.55) !important; }
+    html.dark .bg-sky-100     { background-color: rgb(8 47 73 / 0.75) !important; }
+    html.dark .text-sky-900,
+    html.dark .text-sky-800,
+    html.dark .text-sky-700 { color: rgb(186 230 253) !important; }
+    html.dark .border-sky-200 { border-color: rgb(7 89 133) !important; }
 
-    /* Dark-Mode-Overrides fuer die Teal-Brand-Reihe (rgb 0,126,128). */
-    .dark .bg-brand-50    { background-color: rgb(0 50 51 / 0.40) !important; }
-    .dark .bg-brand-100   { background-color: rgb(0 50 51 / 0.55) !important; }
-    .dark .text-brand-700, .dark .text-brand-800 { color: rgb(153 203 205) !important; }
-    .dark .border-brand-200 { border-color: rgb(0 76 77) !important; }
+    html.dark .bg-violet-50   { background-color: rgb(46 16 101 / 0.45) !important; }
+    html.dark .bg-violet-100  { background-color: rgb(46 16 101 / 0.65) !important; }
+    html.dark .text-violet-700,
+    html.dark .text-violet-800 { color: rgb(221 214 254) !important; }
+    html.dark .border-violet-200 { border-color: rgb(91 33 182) !important; }
 
-    /* Form-Inputs in den Templates verwenden .input - sicherstellen, dass sie
-       im Dark Mode genau passen. */
-    .dark .input {
-      background-color: rgb(24 24 27) !important;
-      color: rgb(244 244 245) !important;
-      border-color: rgb(82 82 91) !important;
-    }
-    .dark .input::placeholder { color: rgb(113 113 122); }
+    html.dark .bg-indigo-50   { background-color: rgb(30 27 75 / 0.55) !important; }
+    html.dark .text-indigo-700,
+    html.dark .text-indigo-800 { color: rgb(199 210 254) !important; }
 
-    /* Buttons im Dark Mode */
-    .dark .btn-ghost {
-      background-color: rgb(63 63 70) !important;
-      color: rgb(228 228 231) !important;
-      border-color: rgb(82 82 91) !important;
-    }
-    .dark .btn-icon {
-      background-color: rgb(39 39 42) !important;
-      color: rgb(212 212 216) !important;
-      border-color: rgb(63 63 70) !important;
-    }
-    .dark .btn-icon:hover { background-color: rgb(63 63 70) !important; color: rgb(244 244 245) !important; }
+    /* Brand-Tint (Teal) */
+    html.dark .bg-brand-50    { background-color: rgb(0 50 51 / 0.45) !important; }
+    html.dark .bg-brand-100   { background-color: rgb(0 50 51 / 0.65) !important; }
+    html.dark .text-brand-700,
+    html.dark .text-brand-800,
+    html.dark .text-brand-900 { color: rgb(153 203 205) !important; }
+    html.dark .border-brand-200 { border-color: rgb(0 76 77) !important; }
+    html.dark .hover\:text-brand-700:hover { color: rgb(153 203 205) !important; }
 
     /* Code / pre */
-    .dark code, .dark pre {
-      background-color: rgb(24 24 27);
+    html.dark code, html.dark pre {
+      background-color: var(--surface);
       color: rgb(228 228 231);
-      border-color: rgb(63 63 70);
+      border-color: var(--border);
     }
 
-    /* Tabellen */
-    .dark table.dashboard thead th { background-color: rgb(39 39 42) !important; color: rgb(212 212 216) !important; border-bottom-color: rgb(63 63 70) !important; }
-    .dark table.dashboard tbody tr:hover { background-color: rgb(63 63 70 / 0.5) !important; }
+    /* Sticky-Spalten (z.B. action-Spalte rechts) brauchen surface-Hintergrund */
+    html.dark .sticky.bg-white { background-color: var(--surface) !important; }
 
-    /* Dropdowns & Menues */
-    .dark .card.py-1 { background-color: rgb(39 39 42); }
+    /* Pills: hellgraue Standard-Pills duenkeln */
+    html.dark .pill.bg-zinc-100 { background-color: var(--surface-3) !important; color: rgb(228 228 231) !important; }
+    html.dark .pill.bg-zinc-50  { background-color: var(--surface-2) !important; color: rgb(228 228 231) !important; }
 
-    /* Pills mit hellem Standard-Background */
-    .dark .pill.bg-zinc-100 { background-color: rgb(63 63 70) !important; color: rgb(228 228 231) !important; }
+    /* Theme-Toggle-Button-Sichtbarkeit in Light vs Dark */
+    [data-theme-toggle] svg { display: none; }
+    [data-theme-toggle] svg.icon-sun { display: inline; }
+    html.dark [data-theme-toggle] svg.icon-sun { display: none; }
+    html.dark [data-theme-toggle] svg.icon-moon { display: inline; }
   </style>
 </head>
-<body class="h-full text-zinc-900 dark:text-zinc-100">
+<body class="h-full">
 {% if request and request.session.get('impersonator_id') %}
 <div style="background:#fef3c7;border-bottom:2px solid #f59e0b;padding:8px 16px;text-align:center;font-size:13px;color:#78350f;">
   ⚠ Du bist als <strong>{{ request.session.get('user') }}</strong> angemeldet (Support-Modus).
@@ -587,10 +625,12 @@
 </script>
 <button data-theme-toggle type="button"
         onclick="(function(){const h=document.documentElement;const d=h.classList.toggle('dark');localStorage.setItem('theme',d?'dark':'light')})()"
-        class="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg bg-brand-500 hover:bg-brand-600 text-white flex items-center justify-center transition"
-        title="Theme umschalten" aria-label="Theme umschalten">
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-6 w-6 hidden dark:inline"><path d="M9.305 1.667V3.75h1.389V1.667h-1.39zm-4.707 1.95l-.982.982L5.09 6.072l.982-.982-1.473-1.473zm10.802 0L13.927 5.09l.982.982 1.473-1.473-.982-.982zM10 5.139a4.872 4.872 0 0 0-4.862 4.86A4.872 4.872 0 0 0 10 14.862 4.872 4.872 0 0 0 14.86 10 4.872 4.872 0 0 0 10 5.139zm-7.638 4.166V10.7H4.45V9.305H2.362zm13.193 0V10.7h2.083V9.305h-2.083zM5.09 13.928l-1.473 1.473.982.982 1.473-1.473-.982-.982zm9.82 0l-.982.982 1.473 1.473.982-.982-1.473-1.473zM9.305 15.55v2.083h1.389V15.55H9.305z"/></svg>
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-6 w-6 inline dark:hidden"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.05 8.05 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Z"/></svg>
+        class="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg text-white flex items-center justify-center transition"
+        style="background:#003233;"
+        onmouseover="this.style.background='#004c4d'" onmouseout="this.style.background='#003233'"
+        title="Hell-/Dunkel-Modus umschalten" aria-label="Theme umschalten">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon-sun h-6 w-6"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.05 8.05 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Z"/></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon-moon h-6 w-6"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
 </button>
 
 <footer class="mt-12 border-t border-zinc-200/70 dark:border-zinc-700 py-6">

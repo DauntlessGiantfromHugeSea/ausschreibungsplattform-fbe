@@ -3195,6 +3195,8 @@ def admin_portal_login_save(
     success_selector: str = Form(""),
     username: str = Form(...),
     password: str = Form(""),
+    totp_secret: str = Form(""),
+    totp_selector: str = Form(""),
     enabled: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -3229,6 +3231,14 @@ def admin_portal_login_save(
     # behalten (Edit-Modus zeigt das Passwortfeld leer aus Sicherheitsgruenden).
     if password.strip():
         item.password = password
+    # TOTP-Secret analog: nur ueberschreiben wenn neu eingegeben.
+    # 'LOESCHEN' als Sonderwert entfernt das Secret.
+    ts = totp_secret.strip().replace(" ", "")
+    if ts == "LOESCHEN":
+        item.totp_secret = None
+    elif ts:
+        item.totp_secret = ts
+    item.totp_selector = totp_selector.strip() or None
     item.enabled = enabled == "on"
 
     db.commit()
@@ -3291,6 +3301,8 @@ def internal_portal_logins(db: Session = Depends(get_db)):
             "success_selector": it.success_selector,
             "username": it.username,
             "password": it.password,
+            "totp_secret": it.totp_secret,
+            "totp_selector": it.totp_selector,
         })
     return out
 
@@ -3332,6 +3344,8 @@ def internal_portal_logins_pending_test(db: Session = Depends(get_db)):
             "success_selector": it.success_selector,
             "username": it.username,
             "password": it.password,
+            "totp_secret": it.totp_secret,
+            "totp_selector": it.totp_selector,
         })
     return out
 

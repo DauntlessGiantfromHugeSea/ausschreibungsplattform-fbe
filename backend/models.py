@@ -299,6 +299,11 @@ class PortalLogin(Base):
     # Sensitiv-Feldern (Passwort-Hashes). Der UI maskiert das Eingabefeld.
     username = Column(String(200), nullable=False, default="")
     password = Column(String(500), nullable=False, default="")
+    # 2FA via Authenticator-App (TOTP): Base32-Secret aus der 2FA-Einrichtung
+    # des Portals. Der Enricher generiert damit die 6-stelligen Codes selbst.
+    # totp_selector = CSS-Selektor des Code-Eingabefelds (leer = Auto-Erkennung).
+    totp_secret = Column(String(200), nullable=True)
+    totp_selector = Column(String(500), nullable=True)
     # Altlasten aus dem frueheren env-name-Schema. Werden nicht mehr genutzt,
     # bleiben aber im Model damit der INSERT bestehende DBs mit
     # NOT NULL-Constraint nicht bricht.

@@ -166,6 +166,17 @@ FALLBACK_SUBMIT_SELECTORS = [
     "button:has-text('Einloggen')",
     "a:has-text('Anmelden')",
 ]
+# 2FA-Code-Eingabefelder (TOTP): Auto-Erkennung nach dem ersten Submit.
+FALLBACK_TOTP_SELECTORS = [
+    "input[autocomplete='one-time-code']",
+    "input[name*='otp' i]",
+    "input[name*='totp' i]",
+    "input[name*='code' i][type='text']",
+    "input[name*='code' i][type='tel']",
+    "input[name*='code' i][type='number']",
+    "input[id*='otp' i]",
+    "input[id*='token' i]",
+]
 
 # Buttons, die Cookie-Consent akzeptieren (Klick > DOM-Remove, weil viele
 # Portale den Consent serverseitig speichern und sonst je Seite neu fragen).
@@ -250,6 +261,76 @@ def perform_login(page, conf: dict, timeout_ms: int = 20000) -> tuple[bool, str]
     return False, last_reason
 
 
+def _generate_totp(secret: str) -> str | None:
+    """Generiert den aktuellen 6-stelligen TOTP-Code aus dem Base32-Secret."""
+    try:
+        import pyotp
+    except ImportError:
+        log.warning("pyotp nicht installiert - TOTP-Login nicht moeglich "
+                    "(pip install pyotp + Image neu bauen)")
+        return None
+    try:
+        clean = secret.strip().replace(" ", "").upper()
+        return pyotp.TOTP(clean).now()
+    except Exception as exc:
+        log.warning("TOTP-Generierung fehlgeschlagen: %s", exc)
+        return None
+
+
+def _handle_totp_step(page, conf: dict, timeout_ms: int) -> tuple[bool | None, str]:
+    """Erkennt und fuellt das 2FA-Code-Feld nach dem ersten Submit.
+
+    Liefert:
+      (True, info)   - Code eingegeben + abgeschickt
+      (False, err)   - 2FA-Feld da, aber Code-Eingabe fehlgeschlagen
+      (None, "")     - kein 2FA-Feld gefunden (Portal fragt nicht / schon vorbei)
+    """
+    configured = (conf.get("totp_selector") or "").strip()
+    candidates = ([configured] if configured else []) + FALLBACK_TOTP_SELECTORS
+
+    field = None
+    used_sel = ""
+    for sel in candidates:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible():
+                field = loc
+                used_sel = sel
+                break
+        except Exception:
+            continue
+    if field is None:
+        return None, ""
+
+    code = _generate_totp(conf["totp_secret"])
+    if not code:
+        return False, "2FA-Feld gefunden, aber TOTP-Code konnte nicht generiert werden (Secret pruefen / pyotp fehlt)"
+
+    try:
+        field.fill(code, timeout=4000)
+    except Exception as exc:
+        return False, f"2FA-Code-Eingabe fehlgeschlagen ({used_sel}): {type(exc).__name__}"
+
+    # Absenden: erst konfigurierten Submit probieren, dann Fallbacks, dann Enter.
+    ok, _ = _click_first(page, conf.get("submit_selector", ""), FALLBACK_SUBMIT_SELECTORS)
+    if not ok:
+        try:
+            field.press("Enter")
+        except Exception:
+            return False, "2FA-Code eingegeben, aber kein Submit-Weg gefunden"
+
+    try:
+        page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    except Exception:
+        pass
+    try:
+        page.wait_for_timeout(800)
+    except Exception:
+        pass
+    log.info("2FA-Code eingegeben (Feld: %s)", used_sel)
+    return True, f"2FA ok ({used_sel})"
+
+
 def _perform_login_once(page, conf: dict, timeout_ms: int) -> tuple[bool, str]:
     try:
         page.goto(conf["login_url"], wait_until="networkidle", timeout=timeout_ms)
@@ -279,6 +360,13 @@ def _perform_login_once(page, conf: dict, timeout_ms: int) -> tuple[bool, str]:
         page.wait_for_timeout(800)
     except Exception:
         pass
+
+    # 2FA-Schritt (TOTP via Authenticator-Secret)?
+    if conf.get("totp_secret"):
+        handled, totp_info = _handle_totp_step(page, conf, timeout_ms)
+        if handled is False:
+            return False, totp_info
+        # handled is None = kein 2FA-Feld aufgetaucht -> normal weiter
 
     final_url = ""
     try:

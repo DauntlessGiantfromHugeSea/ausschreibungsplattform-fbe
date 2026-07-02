@@ -110,6 +110,33 @@
   </div>
 
   <div class="card p-6 space-y-4">
+    <h3 class="text-base font-semibold">2FA / Authenticator (optional)</h3>
+    <p class="text-xs text-zinc-500">
+      Wenn das Portal einen 6-stelligen Code aus einer Authenticator-App verlangt:
+      Beim Einrichten der 2FA im Portal wird neben dem QR-Code ein <strong>Secret</strong>
+      (Base32-Zeichenkette, z.B. <code>JBSWY3DPEHPK3PXP</code>) angezeigt — das hier eintragen.
+      Der Bot generiert die Codes dann selbst.
+      <strong>SMS-/E-Mail-Codes funktionieren nicht</strong> — dafür den Session-Import (unten) nutzen.
+    </p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">
+          TOTP-Secret {% if item and item.totp_secret %}(gesetzt — leer = unverändert, „LOESCHEN" = entfernen){% endif %}
+        </label>
+        <input class="input font-mono text-sm" type="password" name="totp_secret" maxlength="200"
+               autocomplete="off"
+               placeholder="{% if item and item.totp_secret %}••••••• (gesetzt){% else %}z.B. JBSWY3DPEHPK3PXP{% endif %}">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-zinc-600 mb-1">Code-Feld-Selektor (optional)</label>
+        <input class="input font-mono text-sm" type="text" name="totp_selector" maxlength="500"
+               value="{{ item.totp_selector if item and item.totp_selector else '' }}"
+               placeholder="leer = automatisch (input[name*='otp'], …)">
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-6 space-y-4">
     <h3 class="text-base font-semibold">CSS-Selektoren <span class="text-xs font-normal text-zinc-500">(optional — Automatik probiert gängige Formulare selbst)</span></h3>
     <p class="text-xs text-zinc-500">
       Leer lassen = der Bot erkennt E-Mail-/Passwort-Feld und Anmelden-Button automatisch

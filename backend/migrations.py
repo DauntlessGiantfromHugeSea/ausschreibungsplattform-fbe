@@ -614,6 +614,27 @@ def add_tender_content_fp_column() -> bool:
         return False
 
 
+def add_portal_login_totp_columns() -> bool:
+    """2FA: totp_secret + totp_selector fuer portal_logins."""
+    insp = inspect(engine)
+    if "portal_logins" not in insp.get_table_names():
+        return False
+    cols = {c["name"] for c in insp.get_columns("portal_logins")}
+    added = False
+    try:
+        with engine.begin() as conn:
+            if "totp_secret" not in cols:
+                conn.execute(text("ALTER TABLE portal_logins ADD COLUMN totp_secret VARCHAR(200)"))
+                added = True
+            if "totp_selector" not in cols:
+                conn.execute(text("ALTER TABLE portal_logins ADD COLUMN totp_selector VARCHAR(500)"))
+                added = True
+        return added
+    except Exception as exc:
+        log.exception("Migration portal_login_totp fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -638,4 +659,5 @@ def run_all() -> dict:
         "changelog_seeded": seed_changelog_entries(),
         "user_portals_created": create_user_portals_table(),
         "tender_content_fp_added": add_tender_content_fp_column(),
+        "portal_login_totp_added": add_portal_login_totp_columns(),
     }

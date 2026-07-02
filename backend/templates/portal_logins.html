@@ -110,7 +110,8 @@
     <ol class="list-decimal pl-5 text-zinc-600 space-y-1.5">
       <li><strong>Selektoren manuell setzen:</strong> Login-Seite im Browser öffnen, F12 → Rechtsklick aufs Feld → <em>Untersuchen</em>. Der HTML-Tag liefert den Selektor, z.B. <code>input[name='user[email]']</code>. Dasselbe für Passwort-Feld + Button.</li>
       <li><strong>Success-Selektor</strong> (optional): ein Element, das NUR eingeloggt existiert, z.B. <code>a[href*='logout']</code>. Macht den Test zuverlässiger.</li>
-      <li><strong>2FA / Captcha / Keycloak-Sonderfälle:</strong> Script-Login klappt dort nie. Stattdessen: im Browser normal einloggen → Cookie-Editor-Extension → „Export als JSON" → beim Login-Eintrag unter <em>Session importieren</em> einfügen. Der Bot nutzt dann deine Browser-Session.</li>
+      <li><strong>2FA mit Authenticator-App:</strong> Funktioniert automatisch — beim Login-Eintrag das <em>TOTP-Secret</em> hinterlegen (die Base32-Zeichenkette, die das Portal beim Einrichten der 2FA neben dem QR-Code anzeigt). Der Bot generiert die 6-stelligen Codes selbst.</li>
+      <li><strong>SMS-/E-Mail-Codes oder Captcha:</strong> Nicht automatisierbar. Stattdessen: im Browser normal einloggen → Cookie-Editor-Extension → „Export als JSON" → beim Login-Eintrag unter <em>Session importieren</em> einfügen. Der Bot nutzt dann deine Browser-Session.</li>
     </ol>
   </div>
 </div>

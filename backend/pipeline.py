@@ -25,7 +25,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .config import settings
 from .database import SessionLocal
-from .dedup import fingerprint
+from .dedup import fingerprint, content_fingerprint
 from .models import Tender, TenderStatus
 from .portal_config import PortalConfig, enabled_portals
 from .region_resolver import infer_region
@@ -204,6 +204,7 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
         item.description = " · ".join(parts) if parts else item.title
 
     fp = fingerprint(item.url, item.title, item.contracting_authority, item.deadline)
+    content_fp = content_fingerprint(item.title, item.contracting_authority, item.deadline)
     sr = score_text(
         title=item.title,
         description=item.description,
@@ -226,7 +227,29 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
             existing.score_breakdown = breakdown_json
             if item.deadline:
                 existing.deadline = item.deadline
+            if not existing.content_fp:
+                existing.content_fp = content_fp
             db.commit()
+            return "updated"
+
+        # Cross-Portal-Duplikat? Gleicher Titel+Auftraggeber+Frist von einem
+        # anderen Portal -> nicht nochmal einfuegen, nur Score aktualisieren
+        # falls der neue hoeher ist. Nur wenn Auftraggeber ODER Frist gesetzt
+        # sind - sonst wuerden generische Titel ('Tiefbauarbeiten') kollidieren.
+        cross = None
+        if item.contracting_authority or item.deadline:
+            cross = db.query(Tender).filter(Tender.content_fp == content_fp).first()
+        if cross:
+            if sr.score > (cross.relevance_score or 0):
+                cross.relevance_score = sr.score
+                cross.relevance_level = sr.level
+                cross.matched_terms = matched_str
+                cross.score_breakdown = breakdown_json
+            if item.deadline and not cross.deadline:
+                cross.deadline = item.deadline
+            db.commit()
+            log.debug("Cross-Portal-Duplikat: '%s' (%s) schon von %s vorhanden",
+                      (item.title or "")[:60], item.portal, cross.portal)
             return "updated"
 
         tender = Tender(
@@ -247,6 +270,7 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
             cpv_codes=";".join(item.cpv_codes) if item.cpv_codes else None,
             documents=json.dumps(item.documents) if item.documents else None,
             fingerprint=fp,
+            content_fp=content_fp,
         )
         db.add(tender)
         try:

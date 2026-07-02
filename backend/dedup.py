@@ -32,6 +32,34 @@ def fingerprint(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _norm_title(value: str | None) -> str:
+    """Aggressivere Normalisierung fuer Cross-Portal-Vergleich:
+    lowercase, Satzzeichen raus, Whitespace kollabiert."""
+    if not value:
+        return ""
+    s = value.strip().lower()
+    s = re.sub(r"[^\w\säöüß]", " ", s, flags=re.UNICODE)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def content_fingerprint(
+    title: str | None,
+    authority: str | None,
+    deadline: Optional[datetime],
+) -> str:
+    """Fingerprint OHNE URL - erkennt dieselbe Ausschreibung, wenn sie auf
+    mehreren Portalen veroeffentlicht wurde (gleicher Titel + Auftraggeber
+    + Frist, aber unterschiedliche Portal-URLs)."""
+    parts = [
+        _norm_title(title),
+        _norm(authority),
+        deadline.date().isoformat() if deadline else "",
+    ]
+    raw = "|".join(parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 def is_duplicate(session, fp: str) -> bool:
     from .models import Tender
 

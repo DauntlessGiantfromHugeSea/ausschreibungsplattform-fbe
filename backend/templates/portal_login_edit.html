@@ -110,28 +110,29 @@
   </div>
 
   <div class="card p-6 space-y-4">
-    <h3 class="text-base font-semibold">CSS-Selektoren</h3>
+    <h3 class="text-base font-semibold">CSS-Selektoren <span class="text-xs font-normal text-zinc-500">(optional — Automatik probiert gängige Formulare selbst)</span></h3>
     <p class="text-xs text-zinc-500">
-      Mit DevTools (F12) am Login-Formular die Selektoren herausfinden.
-      Klassisch: <code>input[name='...']</code> oder <code>#id</code>.
+      Leer lassen = der Bot erkennt E-Mail-/Passwort-Feld und Anmelden-Button automatisch
+      (Keycloak, Cosinex, Rails, Wicket …). Nur ausfüllen, wenn der Test ohne fehlschlägt.
+      Selektoren mit DevTools (F12) am Login-Formular herausfinden: <code>input[name='...']</code> oder <code>#id</code>.
     </p>
     <div>
-      <label class="block text-xs font-medium text-zinc-600 mb-1">Username-Feld-Selektor *</label>
-      <input class="input font-mono text-sm" type="text" name="username_selector" required maxlength="500"
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Username-Feld-Selektor</label>
+      <input class="input font-mono text-sm" type="text" name="username_selector" maxlength="500"
              value="{{ item.username_selector if item else '' }}"
-             placeholder="input[name='user[email]']">
+             placeholder="leer = automatisch (input[type='email'], …)">
     </div>
     <div>
-      <label class="block text-xs font-medium text-zinc-600 mb-1">Passwort-Feld-Selektor *</label>
-      <input class="input font-mono text-sm" type="text" name="password_selector" required maxlength="500"
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Passwort-Feld-Selektor</label>
+      <input class="input font-mono text-sm" type="text" name="password_selector" maxlength="500"
              value="{{ item.password_selector if item else '' }}"
-             placeholder="input[name='user[password]']">
+             placeholder="leer = automatisch (input[type='password'])">
     </div>
     <div>
-      <label class="block text-xs font-medium text-zinc-600 mb-1">Submit-Button-Selektor *</label>
-      <input class="input font-mono text-sm" type="text" name="submit_selector" required maxlength="500"
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Submit-Button-Selektor</label>
+      <input class="input font-mono text-sm" type="text" name="submit_selector" maxlength="500"
              value="{{ item.submit_selector if item else '' }}"
-             placeholder="button[type='submit']">
+             placeholder="leer = automatisch (button[type='submit'], 'Anmelden', …)">
     </div>
     <div>
       <label class="block text-xs font-medium text-zinc-600 mb-1">Erfolgs-Selektor (optional, aber empfohlen)</label>

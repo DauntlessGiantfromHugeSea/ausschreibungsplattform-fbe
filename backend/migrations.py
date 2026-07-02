@@ -585,6 +585,35 @@ def seed_changelog_entries() -> bool:
         return False
 
 
+def add_tender_content_fp_column() -> bool:
+    """Cross-Portal-Dedup: content_fp-Spalte + Backfill fuer Bestandsdaten."""
+    insp = inspect(engine)
+    if "tenders" not in insp.get_table_names():
+        return False
+    cols = {c["name"] for c in insp.get_columns("tenders")}
+    if "content_fp" in cols:
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE tenders ADD COLUMN content_fp VARCHAR(64)"))
+            conn.execute(text("CREATE INDEX ix_tenders_content_fp ON tenders(content_fp)"))
+        # Backfill in Python (Normalisierung ist SQL-seitig nicht abbildbar)
+        from .db import SessionLocal
+        from .models import Tender
+        from .dedup import content_fingerprint
+        s = SessionLocal()
+        try:
+            for t in s.query(Tender).all():
+                t.content_fp = content_fingerprint(t.title, t.contracting_authority, t.deadline)
+            s.commit()
+        finally:
+            s.close()
+        return True
+    except Exception as exc:
+        log.exception("Migration content_fp fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -608,4 +637,5 @@ def run_all() -> dict:
         "changelog_entries_created": create_changelog_entries_table(),
         "changelog_seeded": seed_changelog_entries(),
         "user_portals_created": create_user_portals_table(),
+        "tender_content_fp_added": add_tender_content_fp_column(),
     }

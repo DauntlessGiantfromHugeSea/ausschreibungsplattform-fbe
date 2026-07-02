@@ -74,6 +74,9 @@ class Tender(Base):
     cpv_codes = Column(String(500), nullable=True)
     documents = Column(Text, nullable=True)            # JSON-encoded list
     fingerprint = Column(String(64), nullable=False, unique=True, index=True)
+    # Cross-Portal-Fingerprint (Titel+Auftraggeber+Frist, OHNE URL) -
+    # erkennt dieselbe Ausschreibung auf mehreren Portalen.
+    content_fp = Column(String(64), nullable=True, index=True)
     # JSON-Liste mit Score-Komponenten: [{"label":..., "points":..., "detail":...}, ...]
     score_breakdown = Column(Text, nullable=True)
     # KI-Analyse (Fluessigboden-Eignung + Kosteneinsparungs-Schaetzung).

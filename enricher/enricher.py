@@ -56,6 +56,11 @@ _LOGGED_IN: set[str] = set()
 # Cache der Logins aus der Plattform-DB - alle 60s neu geholt.
 _REMOTE_LOGINS: dict = {}
 _REMOTE_LOGINS_LAST_FETCH: float = 0.0
+# Fail-Backoff: Host -> Unix-Zeit, bis zu der KEIN Re-Login versucht wird.
+# Verhindert, dass ein kaputter Login jeden einzelnen Tender-Crawl um
+# 20-40s verzoegert und das Portal mit Fehlversuchen geflutet wird.
+_LOGIN_FAILED_UNTIL: dict[str, float] = {}
+LOGIN_FAIL_BACKOFF_S = int(os.environ.get("LOGIN_FAIL_BACKOFF_S", "1800"))
 
 
 def get_portal_logins() -> dict:
@@ -132,8 +137,10 @@ def run_pending_login_tests() -> int:
                     continue
                 if ok:
                     # Erfolgreicher Test -> Session auf Disk fuer
-                    # spaetere Crawls (kein erneuter Login noetig).
+                    # spaetere Crawls (kein erneuter Login noetig) +
+                    # Fail-Backoff fuer den Host aufheben.
                     _save_session(ctx, host)
+                    _LOGIN_FAILED_UNTIL.pop(host, None)
                     log.info("Login-Test %s OK (%s) - Session gespeichert", host, reason)
                     report_login_result(lid, True, reason)
                 else:
@@ -779,7 +786,13 @@ def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, st
         #    c) sonst -> perform_login + save_session
         if login_conf:
             need_login = True
-            if _saved_state_path(login_key):
+            now_ts = time.time()
+            if _LOGIN_FAILED_UNTIL.get(login_key, 0) > now_ts:
+                # Kuerzlich fehlgeschlagen -> Backoff, ohne Login weitercrawlen
+                need_login = False
+                log.info("Login-Backoff fuer %s aktiv (noch %ds) - crawle ohne Login",
+                         login_key, int(_LOGIN_FAILED_UNTIL[login_key] - now_ts))
+            elif _saved_state_path(login_key):
                 if _is_session_alive(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS):
                     need_login = False
                     log.info("Bestehende Session fuer %s noch gueltig - kein Re-Login", login_key)
@@ -791,10 +804,13 @@ def deep_crawl(pw, url: str, tender_id: int | None = None) -> list[tuple[str, st
                 ok, reason = _perform_login(page, login_conf, timeout_ms=PAGE_TIMEOUT_MS)
                 if ok:
                     _save_session(ctx, login_key)
+                    _LOGIN_FAILED_UNTIL.pop(login_key, None)
                     log.info("Login erfolgreich fuer %s (%s) - Session gespeichert", login_key, reason)
                     report_login_result(login_conf.get("id"), True, reason)
                 else:
-                    log.warning("Login fehlgeschlagen fuer %s: %s", login_key, reason)
+                    _LOGIN_FAILED_UNTIL[login_key] = time.time() + LOGIN_FAIL_BACKOFF_S
+                    log.warning("Login fehlgeschlagen fuer %s: %s - Backoff %ds",
+                                login_key, reason, LOGIN_FAIL_BACKOFF_S)
                     report_login_result(login_conf.get("id"), False, reason)
 
         # 1) Hauptseite

@@ -59,7 +59,10 @@
           {% elif it.last_status == 'ok' %}
             <span class="pill bg-emerald-100 text-emerald-800">✓ ok</span>
           {% elif it.last_status == 'fail' %}
-            <span class="pill bg-rose-100 text-rose-800" title="{{ it.last_error or '' }}">✕ fail</span>
+            <span class="pill bg-rose-100 text-rose-800">✕ fail</span>
+            {% if it.last_error %}
+            <div class="text-xs text-rose-700 mt-1 max-w-xs whitespace-normal leading-snug">{{ it.last_error[:180] }}</div>
+            {% endif %}
           {% else %}
             <span class="pill bg-amber-100 text-amber-800">noch nicht versucht</span>
           {% endif %}
@@ -89,14 +92,27 @@
 </div>
 {% endif %}
 
-<div class="card p-5 mt-6 text-sm">
-  <h3 class="font-semibold mb-2">CSS-Selektoren finden</h3>
-  <ol class="list-decimal pl-5 text-zinc-600 space-y-1">
-    <li>Login-Seite des Portals im Browser oeffnen, DevTools (F12) starten.</li>
-    <li>Per <em>Rechtsklick → Untersuchen</em> auf das Benutzername-Feld - der dargestellte HTML-Tag liefert den Selektor (z.B. <code>input[name='user[email]']</code>).</li>
-    <li>Dasselbe fuer Passwort-Feld + Login-Button.</li>
-    <li><strong>Success-Selektor:</strong> nach Login einen Selektor finden, der NUR im eingeloggten Zustand existiert (z.B. <code>a[href*='logout']</code>). Ohne wird der Login als erfolgreich angenommen.</li>
-  </ol>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+  <div class="card p-5 text-sm">
+    <h3 class="font-semibold mb-2">⚡ So einfach geht's (der Normalfall)</h3>
+    <ol class="list-decimal pl-5 text-zinc-600 space-y-1.5">
+      <li><strong>+ Neuer Login</strong> → Host (z.B. <code>evergabe.de</code>), Login-URL, Benutzername, Passwort eintragen. <strong>Selektoren kannst du leer lassen</strong> — der Bot erkennt gängige Login-Formulare (E-Mail-Feld, Passwort-Feld, Anmelden-Button) automatisch.</li>
+      <li>Auf <strong>▶ Testen</strong> klicken → Ergebnis erscheint nach ~30 Sekunden.</li>
+      <li>Bei <span class="pill bg-emerald-100 text-emerald-800">✓ ok</span>: fertig. Die Session wird gespeichert und überlebt Neustarts.</li>
+      <li>Bei <span class="pill bg-rose-100 text-rose-800">✕ fail</span>: der Fehlergrund steht direkt unter dem Status — meist reicht es, die Login-URL zu prüfen oder die Selektoren manuell zu setzen (siehe rechts).</li>
+    </ol>
+    <p class="text-xs text-zinc-500 mt-3">
+      Fehlgeschlagene Logins werden automatisch 30 Minuten pausiert, damit das Portal nicht mit Fehlversuchen geflutet wird. Ein manueller ▶ Test hebt die Pause sofort auf.
+    </p>
+  </div>
+  <div class="card p-5 text-sm">
+    <h3 class="font-semibold mb-2">🔧 Wenn die Automatik nicht greift</h3>
+    <ol class="list-decimal pl-5 text-zinc-600 space-y-1.5">
+      <li><strong>Selektoren manuell setzen:</strong> Login-Seite im Browser öffnen, F12 → Rechtsklick aufs Feld → <em>Untersuchen</em>. Der HTML-Tag liefert den Selektor, z.B. <code>input[name='user[email]']</code>. Dasselbe für Passwort-Feld + Button.</li>
+      <li><strong>Success-Selektor</strong> (optional): ein Element, das NUR eingeloggt existiert, z.B. <code>a[href*='logout']</code>. Macht den Test zuverlässiger.</li>
+      <li><strong>2FA / Captcha / Keycloak-Sonderfälle:</strong> Script-Login klappt dort nie. Stattdessen: im Browser normal einloggen → Cookie-Editor-Extension → „Export als JSON" → beim Login-Eintrag unter <em>Session importieren</em> einfügen. Der Bot nutzt dann deine Browser-Session.</li>
+    </ol>
+  </div>
 </div>
 
 <script>

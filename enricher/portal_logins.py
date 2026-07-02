@@ -140,24 +140,52 @@ def is_session_alive(page, conf: dict, timeout_ms: int = 10000) -> bool:
         return False
 
 
-def perform_login(page, conf: dict, timeout_ms: int = 20000) -> tuple[bool, str]:
-    """Fuehrt den Login-Flow aus. Liefert (ok, reason).
+# Fallback-Selektoren: greifen, wenn der konfigurierte Selektor nichts
+# findet. Deckt die gaengigen Login-Formulare (Keycloak, Wicket,
+# Rails/Devise, Cosinex, Healy-Hudson) ab.
+FALLBACK_USERNAME_SELECTORS = [
+    "input[type='email']",
+    "input[name*='user' i][type='text']",
+    "input[name*='mail' i]",
+    "input[name*='login' i]",
+    "input[id*='user' i]",
+    "input[id*='mail' i]",
+    "input[autocomplete='username']",
+    "form input[type='text']:visible",
+]
+FALLBACK_PASSWORD_SELECTORS = [
+    "input[type='password']",
+    "input[autocomplete='current-password']",
+]
+FALLBACK_SUBMIT_SELECTORS = [
+    "button[type='submit']",
+    "input[type='submit']",
+    "form button",
+    "button:has-text('Anmelden')",
+    "button:has-text('Login')",
+    "button:has-text('Einloggen')",
+    "a:has-text('Anmelden')",
+]
 
-    reason ist ein Klartext-Fehlergrund bei Misserfolg, oder bei Erfolg
-    eine kurze Info (z.B. die Zielseite nach Login).
-    """
-    req = ("login_url", "username_selector", "password_selector",
-           "submit_selector", "username", "password")
-    for k in req:
-        if not conf.get(k):
-            return False, f"Config unvollstaendig: '{k}' fehlt"
+# Buttons, die Cookie-Consent akzeptieren (Klick > DOM-Remove, weil viele
+# Portale den Consent serverseitig speichern und sonst je Seite neu fragen).
+COOKIE_ACCEPT_TEXTS = [
+    "Alle akzeptieren", "Akzeptieren", "Alles akzeptieren", "Zustimmen",
+    "Einverstanden", "Accept all", "Accept", "OK",
+]
 
-    try:
-        page.goto(conf["login_url"], wait_until="networkidle", timeout=timeout_ms)
-    except Exception as exc:
-        return False, f"login_url '{conf['login_url']}' nicht ladbar: {exc}"
 
-    # Cookie-Banner best-effort wegklicken
+def _dismiss_cookie_banner(page) -> None:
+    """Cookie-Banner erst per Klick akzeptieren, dann Reste entfernen."""
+    for txt in COOKIE_ACCEPT_TEXTS:
+        try:
+            btn = page.locator(f"button:has-text('{txt}'), a:has-text('{txt}')").first
+            if btn.count() and btn.is_visible():
+                btn.click(timeout=1500, no_wait_after=True)
+                page.wait_for_timeout(400)
+                break
+        except Exception:
+            continue
     try:
         page.evaluate("""
             const sel = '[id*=cookie i], [class*=cookie i], [id*=consent i], [class*=consent i]';
@@ -166,24 +194,89 @@ def perform_login(page, conf: dict, timeout_ms: int = 20000) -> tuple[bool, str]
     except Exception:
         pass
 
-    # Username eintippen
+
+def _fill_first(page, configured: str, fallbacks: list[str], value: str,
+                what: str) -> tuple[bool, str]:
+    """Versucht erst den konfigurierten Selektor, dann die Fallbacks.
+    Liefert (ok, benutzter_selektor_oder_fehler)."""
+    candidates = [configured] + [s for s in fallbacks if s != configured]
+    for sel in candidates:
+        if not sel:
+            continue
+        try:
+            loc = page.locator(sel).first
+            if loc.count() == 0:
+                continue
+            loc.fill(value, timeout=4000)
+            return True, sel
+        except Exception:
+            continue
+    return False, f"{what}: keiner der Selektoren traf ({configured} + {len(fallbacks)} Fallbacks)"
+
+
+def _click_first(page, configured: str, fallbacks: list[str]) -> tuple[bool, str]:
+    candidates = [configured] + [s for s in fallbacks if s != configured]
+    for sel in candidates:
+        if not sel:
+            continue
+        try:
+            loc = page.locator(sel).first
+            if loc.count() == 0:
+                continue
+            loc.click(timeout=4000)
+            return True, sel
+        except Exception:
+            continue
+    return False, f"Submit: keiner der Selektoren klickbar ({configured} + {len(fallbacks)} Fallbacks)"
+
+
+def perform_login(page, conf: dict, timeout_ms: int = 20000) -> tuple[bool, str]:
+    """Fuehrt den Login-Flow aus - mit Fallback-Selektoren und einem
+    automatischen Retry. Liefert (ok, reason)."""
+    if not conf.get("login_url") or not conf.get("username") or not conf.get("password"):
+        return False, "Config unvollstaendig: login_url/username/password fehlt"
+
+    last_reason = ""
+    for attempt in (1, 2):
+        ok, reason = _perform_login_once(page, conf, timeout_ms)
+        if ok:
+            return True, reason if attempt == 1 else f"{reason} (2. Versuch)"
+        last_reason = reason
+        log.info("Login-Versuch %d fehlgeschlagen: %s", attempt, reason)
+        try:
+            page.wait_for_timeout(1500)
+        except Exception:
+            pass
+    return False, last_reason
+
+
+def _perform_login_once(page, conf: dict, timeout_ms: int) -> tuple[bool, str]:
     try:
-        page.fill(conf["username_selector"], conf["username"], timeout=5000)
+        page.goto(conf["login_url"], wait_until="networkidle", timeout=timeout_ms)
     except Exception as exc:
-        return False, f"username_selector '{conf['username_selector']}' nicht gefunden ({type(exc).__name__})"
-    # Passwort eintippen
-    try:
-        page.fill(conf["password_selector"], conf["password"], timeout=5000)
-    except Exception as exc:
-        return False, f"password_selector '{conf['password_selector']}' nicht gefunden ({type(exc).__name__})"
-    # Submit
-    try:
-        page.click(conf["submit_selector"], timeout=5000)
-    except Exception as exc:
-        return False, f"submit_selector '{conf['submit_selector']}' nicht klickbar ({type(exc).__name__})"
+        return False, f"login_url '{conf['login_url']}' nicht ladbar: {exc}"
+
+    _dismiss_cookie_banner(page)
+
+    ok, info = _fill_first(page, conf.get("username_selector", ""),
+                           FALLBACK_USERNAME_SELECTORS, conf["username"], "Username")
+    if not ok:
+        return False, info
+    ok, info = _fill_first(page, conf.get("password_selector", ""),
+                           FALLBACK_PASSWORD_SELECTORS, conf["password"], "Passwort")
+    if not ok:
+        return False, info
+    ok, info = _click_first(page, conf.get("submit_selector", ""),
+                            FALLBACK_SUBMIT_SELECTORS)
+    if not ok:
+        return False, info
 
     try:
         page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    except Exception:
+        pass
+    try:
+        page.wait_for_timeout(800)
     except Exception:
         pass
 
@@ -193,10 +286,26 @@ def perform_login(page, conf: dict, timeout_ms: int = 20000) -> tuple[bool, str]
     except Exception:
         pass
 
-    # Heuristik: wenn die finale URL noch immer die login_url ist, ist der Login
-    # vermutlich abgelehnt (falsche Credentials, weil Keycloak/etc. zurueck zum
-    # Formular leitet).
-    if final_url and conf["login_url"] in final_url:
+    # Fehlermeldung auf der Seite? (Keycloak/Devise zeigen .alert/.error)
+    try:
+        err_el = page.locator(".alert-danger, .alert-error, .error-message, [class*='login-error' i]").first
+        if err_el.count() and err_el.is_visible():
+            err_txt = (err_el.inner_text() or "").strip()[:150]
+            if err_txt:
+                return False, f"Portal meldet: {err_txt}"
+    except Exception:
+        pass
+
+    # Heuristik: finale URL noch die login_url -> vermutlich abgelehnt.
+    if final_url and conf["login_url"].split("?")[0] in final_url and "logout" not in final_url:
+        # Ausnahme: success_selector trifft trotzdem (SPA-Logins bleiben auf der URL)
+        succ = conf.get("success_selector")
+        if succ:
+            try:
+                page.wait_for_selector(succ, timeout=3000)
+                return True, f"ok (success_selector auf Login-URL - SPA-Login, {final_url[:80]})"
+            except Exception:
+                pass
         return False, f"Nach Submit noch auf Login-Seite ({final_url[:120]}) - Credentials/CSRF/Captcha?"
 
     succ = conf.get("success_selector")

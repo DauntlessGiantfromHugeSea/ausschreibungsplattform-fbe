@@ -68,6 +68,9 @@ def _startup():
     from . import migrations
     migrations.run_all()
     branding.ensure_logo()
+    # Kaputte Scraper-Zuordnungen (z.B. 'bund' auf dtvp.de) selbst reparieren.
+    from . import portal_sanity
+    portal_sanity.sanitize_portals()
 
 
 # --- Helpers --------------------------------------------------------
@@ -1243,6 +1246,21 @@ def admin_portal_save(
     if not name:
         return RedirectResponse(url="/admin/portals?error=Name ist erforderlich.", status_code=303)
 
+    # Fehlpaarung Scraper<->Portal abfangen (z.B. 'bund' auf dtvp.de waere
+    # garantiert kaputt). Wenn wir den richtigen Scraper kennen: auto-korrigieren.
+    from . import portal_sanity
+    _pair_ok, _recommended = portal_sanity.check_pairing(scraper, base_url)
+    _autofix_note = ""
+    if not _pair_ok:
+        if _recommended:
+            _autofix_note = f" (Scraper automatisch auf '{_recommended}' korrigiert - '{scraper.strip()}' passt nicht zu dieser URL)"
+            scraper = _recommended
+        else:
+            return RedirectResponse(
+                url=f"/admin/portals?error=Scraper '{scraper.strip()}' ist fest an ein anderes Portal gebunden und liefert auf {base_url.strip()} nur 404. Bitte generic_html, crawl_html oder playwright_html waehlen.",
+                status_code=303,
+            )
+
     try:
         cfg_data = yaml_store.parse_yaml_string(config_yaml) if config_yaml.strip() else {}
     except Exception as exc:
@@ -1292,7 +1310,7 @@ def admin_portal_save(
 
     raw["portals"] = portals
     yaml_store.write_portals(raw)
-    return RedirectResponse(url=f"/admin/portals?flash={name} gespeichert.", status_code=303)
+    return RedirectResponse(url=f"/admin/portals?flash={name} gespeichert.{_autofix_note}", status_code=303)
 
 
 # --- Admin: Suchbegriffe ----------------------------------------------

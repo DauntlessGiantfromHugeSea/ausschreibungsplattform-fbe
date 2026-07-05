@@ -299,7 +299,16 @@
       color: #ffffff !important;
       border-color: rgba(255, 255, 255, 0.35) !important;
     }
-    header.topbar .btn-ghost { color: #fff !important; }
+    /* User-Button im Header: transparent auf dunklem Teal, weisse Schrift */
+    header.topbar .btn-ghost {
+      background: transparent !important;
+      border-color: rgba(255, 255, 255, 0.25) !important;
+      color: #ffffff !important;
+    }
+    header.topbar .btn-ghost:hover {
+      background: rgba(255, 255, 255, 0.08) !important;
+      border-color: rgba(255, 255, 255, 0.45) !important;
+    }
     /* Dropdown-Menues (Status, User, Profil) */
     .menu-panel-solid {
       background: var(--surface) !important;

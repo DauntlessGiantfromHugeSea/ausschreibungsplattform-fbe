@@ -635,6 +635,31 @@ def add_portal_login_totp_columns() -> bool:
         return False
 
 
+def add_user_interest_columns() -> bool:
+    """Interessenprofil: interests_text, interest_suggestion, interest_status."""
+    insp = inspect(engine)
+    if "users" not in insp.get_table_names():
+        return False
+    cols = {c["name"] for c in insp.get_columns("users")}
+    added = False
+    try:
+        with engine.begin() as conn:
+            if "interests_text" not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN interests_text TEXT"))
+                added = True
+            if "interest_suggestion" not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN interest_suggestion TEXT"))
+                added = True
+            if "interest_status" not in cols:
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN interest_status VARCHAR(20) NOT NULL DEFAULT 'none'"))
+                added = True
+        return added
+    except Exception as exc:
+        log.exception("Migration user_interests fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -660,4 +685,5 @@ def run_all() -> dict:
         "user_portals_created": create_user_portals_table(),
         "tender_content_fp_added": add_tender_content_fp_column(),
         "portal_login_totp_added": add_portal_login_totp_columns(),
+        "user_interest_columns_added": add_user_interest_columns(),
     }

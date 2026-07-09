@@ -39,6 +39,16 @@ templates.env.globals["logo_url"] = branding.logo_url
 templates.env.globals["favicon_url"] = branding.favicon_url
 
 
+def _jinja_fromjson(value):
+    try:
+        return json.loads(value or "{}")
+    except Exception:
+        return {}
+
+
+templates.env.filters["fromjson"] = _jinja_fromjson
+
+
 APP_VERSION = "1.0.0"
 app = FastAPI(title="Flüssigboden Akademie · Ausschreibungen", version=APP_VERSION)
 
@@ -2684,6 +2694,127 @@ def assistant_page(request: Request):
         {"user": user, "configured": ai_mod.is_configured(),
          "model": settings.openai_model},
     )
+
+
+# --- Interessenprofil (User-Self-Service mit KI-Vorschlag) -------------
+def _me_db_user(request: Request, db: Session) -> User | None:
+    sess_user = _session_user(request)
+    if not sess_user:
+        return None
+    return db.query(User).filter(User.username == sess_user["username"]).first()
+
+
+@app.post("/me/interests/save")
+def me_interests_save(request: Request, interests: str = Form(""),
+                      db: Session = Depends(get_db)):
+    u = _me_db_user(request, db)
+    if not u:
+        return RedirectResponse(url="/login?next=/me/notifications", status_code=303)
+    u.interests_text = interests.strip()[:4000] or None
+    db.commit()
+    return RedirectResponse(url="/me/notifications?flash=Interessen gespeichert.", status_code=303)
+
+
+@app.post("/me/interests/suggest")
+def me_interests_suggest(request: Request, interests: str = Form(""),
+                         db: Session = Depends(get_db)):
+    """Erzeugt aus dem Freitext einen KI-Vorschlag (Zusammenfassung +
+    Keywords). Wird NICHT automatisch aktiv - der User muss freigeben."""
+    u = _me_db_user(request, db)
+    if not u:
+        return RedirectResponse(url="/login?next=/me/notifications", status_code=303)
+    txt = interests.strip()[:4000]
+    if txt:
+        u.interests_text = txt
+    if not (u.interests_text or "").strip():
+        return RedirectResponse(
+            url="/me/notifications?error=Bitte erst deine Interessen beschreiben.",
+            status_code=303)
+    from . import ai as ai_mod
+    if not ai_mod.is_configured():
+        return RedirectResponse(
+            url="/me/notifications?error=KI nicht konfiguriert (OPENAI_API_KEY fehlt).",
+            status_code=303)
+    prompt = (
+        "Ein Nutzer einer Ausschreibungsplattform (Tiefbau/Leitungsbau/"
+        "Fluessigboden/Planungsleistungen) beschreibt seine Interessen:\n\n"
+        f"---\n{u.interests_text}\n---\n\n"
+        "Erstelle daraus ein Interessenprofil. Antworte NUR mit validem JSON, "
+        "exakt in dieser Form:\n"
+        '{"summary": "<2-3 Saetze, was den Nutzer interessiert>", '
+        '"keywords": ["<8-15 deutsche Suchbegriffe/Komposita, wie sie in '
+        'Ausschreibungstiteln vorkommen>"]}'
+    )
+    try:
+        raw = ai_mod.chat([{"role": "user", "content": prompt}])
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        data = json.loads(m.group(0) if m else raw)
+        keywords = [str(k).strip() for k in (data.get("keywords") or []) if str(k).strip()][:20]
+        summary = str(data.get("summary") or "").strip()[:600]
+        if not keywords:
+            raise ValueError("keine Keywords generiert")
+    except Exception as exc:
+        log.warning("Interessen-Vorschlag fehlgeschlagen: %s", exc)
+        return RedirectResponse(
+            url="/me/notifications?error=KI-Vorschlag fehlgeschlagen - bitte nochmal versuchen.",
+            status_code=303)
+    u.interest_suggestion = json.dumps({"summary": summary, "keywords": keywords},
+                                       ensure_ascii=False)
+    u.interest_status = "suggested"
+    db.commit()
+    return RedirectResponse(
+        url="/me/notifications?flash=KI-Vorschlag erstellt - bitte pruefen und freigeben.#interessen",
+        status_code=303)
+
+
+@app.post("/me/interests/approve")
+def me_interests_approve(request: Request, db: Session = Depends(get_db)):
+    """User gibt den KI-Vorschlag frei -> persoenliches Suchprofil
+    'Interessen - <username>' wird erzeugt/aktualisiert und zugewiesen."""
+    u = _me_db_user(request, db)
+    if not u:
+        return RedirectResponse(url="/login?next=/me/notifications", status_code=303)
+    if not u.interest_suggestion or u.interest_status != "suggested":
+        return RedirectResponse(
+            url="/me/notifications?error=Kein offener KI-Vorschlag vorhanden.",
+            status_code=303)
+    try:
+        data = json.loads(u.interest_suggestion)
+        keywords = data.get("keywords") or []
+    except Exception:
+        keywords = []
+    if not keywords:
+        return RedirectResponse(
+            url="/me/notifications?error=Vorschlag enthaelt keine Keywords.",
+            status_code=303)
+    pname = f"Interessen – {u.username}"
+    prof = db.query(SearchProfile).filter(SearchProfile.name == pname).first()
+    if not prof:
+        prof = SearchProfile(name=pname)
+        db.add(prof)
+        db.flush()
+    prof.description = (data.get("summary") or "")[:500] or f"KI-Interessenprofil von {u.username}"
+    prof.keywords = json.dumps(keywords, ensure_ascii=False)
+    if prof not in u.assigned_profiles:
+        u.assigned_profiles.append(prof)
+    u.interest_status = "approved"
+    db.commit()
+    return RedirectResponse(
+        url="/me/notifications?flash=Interessenprofil freigegeben - dein Dashboard beruecksichtigt es ab sofort.#interessen",
+        status_code=303)
+
+
+@app.post("/me/interests/discard")
+def me_interests_discard(request: Request, db: Session = Depends(get_db)):
+    u = _me_db_user(request, db)
+    if not u:
+        return RedirectResponse(url="/login?next=/me/notifications", status_code=303)
+    u.interest_suggestion = None
+    u.interest_status = "none"
+    db.commit()
+    return RedirectResponse(
+        url="/me/notifications?flash=Vorschlag verworfen - Interessen anpassen und neu erstellen.#interessen",
+        status_code=303)
 
 
 @app.post("/me/change-password")

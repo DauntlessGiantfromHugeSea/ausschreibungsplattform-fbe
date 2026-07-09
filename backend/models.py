@@ -150,6 +150,14 @@ class User(Base):
     # Rolle deaktiviert, kann pro User vom Admin freigeschaltet werden.
     ai_enabled = Column(Boolean, default=False, nullable=False)
 
+    # Interessenprofil: Freitext des Users + KI-Vorschlag (JSON:
+    # {"summary": str, "keywords": [str]}) + Status-Workflow:
+    # none -> suggested (KI-Vorschlag liegt vor) -> approved (User hat
+    # freigegeben, persoenliches SearchProfile wurde erzeugt/aktualisiert).
+    interests_text = Column(Text, nullable=True)
+    interest_suggestion = Column(Text, nullable=True)
+    interest_status = Column(String(20), default="none", nullable=False)
+
     assigned_profiles = relationship(
         "SearchProfile",
         secondary=profile_users,

@@ -96,6 +96,56 @@
   </div>
 </form>
 
+<div class="card p-6 space-y-4 max-w-2xl mt-6" id="interessen">
+  <div>
+    <h2 class="text-base font-semibold mb-1">🎯 Meine Interessen</h2>
+    <p class="text-xs text-zinc-500">
+      Beschreibe frei, welche Ausschreibungen dich interessieren (Themen, Regionen, Gewerke,
+      Projektgrößen …). Die KI macht daraus ein Interessenprofil mit Suchbegriffen —
+      <strong>aktiv wird es erst, wenn du es freigibst.</strong>
+    </p>
+  </div>
+
+  <form method="post" action="/me/interests/suggest" class="space-y-3">
+    <textarea class="input min-h-[120px]" name="interests" maxlength="4000"
+              placeholder="z.B.: Ich betreue Projekte im Leitungsbau in Sachsen und Thüringen, vor allem Fernwärme und Trinkwasser. Spannend sind auch Planungsleistungen für Kabeltrassen …">{{ me.interests_text or '' }}</textarea>
+    <div class="flex gap-2 flex-wrap">
+      <button class="btn-primary text-sm">🧠 KI-Vorschlag erstellen</button>
+      <button class="btn-ghost text-sm" formaction="/me/interests/save">Nur Text speichern</button>
+    </div>
+  </form>
+
+  {% if me.interest_status == 'suggested' and me.interest_suggestion %}
+    {% set sug = me.interest_suggestion | fromjson %}
+    <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+      <div class="text-sm font-semibold text-amber-900">Vorschlag der KI — noch nicht aktiv</div>
+      {% if sug.summary %}<p class="text-sm text-amber-900/80">{{ sug.summary }}</p>{% endif %}
+      <div class="flex flex-wrap gap-1.5">
+        {% for kw in sug.keywords %}
+        <span class="pill bg-white text-zinc-800 border border-amber-300">{{ kw }}</span>
+        {% endfor %}
+      </div>
+      <div class="flex gap-2">
+        <form method="post" action="/me/interests/approve">
+          <button class="btn-primary text-sm">✓ Freigeben & aktivieren</button>
+        </form>
+        <form method="post" action="/me/interests/discard">
+          <button class="btn-ghost text-sm">Verwerfen</button>
+        </form>
+      </div>
+      <p class="text-xs text-amber-800/70">
+        Nach Freigabe entsteht das Suchprofil „Interessen – {{ me.username }}", das deinem Konto
+        zugewiesen wird. Text oben anpassen + neu erstellen ersetzt den Vorschlag.
+      </p>
+    </div>
+  {% elif me.interest_status == 'approved' %}
+    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+      ✓ Dein Interessenprofil ist aktiv (Suchprofil „Interessen – {{ me.username }}").
+      Interessen ändern? Text anpassen → neuen KI-Vorschlag erstellen → freigeben.
+    </div>
+  {% endif %}
+</div>
+
 <form method="post" action="/me/change-password" class="card p-6 space-y-4 max-w-2xl mt-6"
       onsubmit="return confirm('Neues Passwort wirklich setzen?');">
   <div>

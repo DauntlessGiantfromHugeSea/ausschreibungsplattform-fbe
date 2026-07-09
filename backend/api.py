@@ -2594,6 +2594,37 @@ def admin_ai_knowledge_post(
     return RedirectResponse(url="/admin/ai-knowledge?flash=Gespeichert.", status_code=303)
 
 
+@app.post("/admin/ai-knowledge/import-site")
+def admin_ai_knowledge_import_site(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    site_url: str = Form(...),
+    max_pages: int = Form(40),
+):
+    """Crawlt eine Website (z.B. fb-eng.de) und legt den Inhalt als
+    Markdown-Datei in der Wissensbasis ab - fliesst automatisch in
+    Enricher-Prompt + Claude-Analyse ein."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    url = site_url.strip()
+    if not url:
+        return RedirectResponse(url="/admin/ai-knowledge?error=URL fehlt", status_code=303)
+
+    def _run(u: str, mp: int):
+        from . import site_import
+        try:
+            n, fname = site_import.crawl_site(u, max_pages=max(5, min(mp, 100)))
+            log.info("Website-Import fertig: %d Seiten -> %s", n, fname)
+        except Exception as exc:
+            log.exception("Website-Import %s fehlgeschlagen: %s", u, exc)
+
+    background_tasks.add_task(_run, url, max_pages)
+    return RedirectResponse(
+        url="/admin/ai-knowledge?flash=Import gestartet - dauert je nach Seitenzahl 1-3 Minuten. Ergebnis erscheint unter Einstellungen → Notizen %26 Wissen (website-....md).",
+        status_code=303)
+
+
 @app.post("/tender/{tender_id}/ai-analyze")
 def tender_ai_analyze(
     tender_id: int,
@@ -3126,6 +3157,115 @@ def internal_knowledge():
     return out
 
 
+# --- Admin: System-Doktor ---------------------------------------------
+@app.get("/admin/doctor", response_class=HTMLResponse)
+def admin_doctor(request: Request, db: Session = Depends(get_db),
+                 flash: Optional[str] = None):
+    """Ende-zu-Ende-Diagnose: prueft pro Portal Crawl-Ergebnis, Login-Status,
+    Enrichment-Abdeckung und Anhang-Abdeckung - mit konkreten Fix-Hinweisen."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    from pathlib import Path as _Path
+
+    checks: list[dict] = []
+
+    # 1) Enricher-Heartbeat: neueste .md im Enrich-Volume
+    enrich_dir = _Path(settings.enrich_dir)
+    newest_ts = None
+    if enrich_dir.is_dir():
+        mtimes = [f.stat().st_mtime for f in enrich_dir.glob("*.md")]
+        if mtimes:
+            newest_ts = datetime.fromtimestamp(max(mtimes))
+    if newest_ts is None:
+        checks.append({"level": "error", "topic": "Enricher",
+                       "msg": "Noch keine Anreicherungs-Dateien gefunden.",
+                       "hint": "Laeuft der Container? docker logs -f fbe-enricher"})
+    elif (datetime.now() - newest_ts).total_seconds() > 3600 * 6:
+        checks.append({"level": "warn", "topic": "Enricher",
+                       "msg": f"Letzte Anreicherung ist alt ({newest_ts.strftime('%d.%m. %H:%M')}).",
+                       "hint": "docker restart fbe-enricher, dann Logs pruefen."})
+    else:
+        checks.append({"level": "ok", "topic": "Enricher",
+                       "msg": f"Aktiv - letzte Anreicherung {newest_ts.strftime('%d.%m. %H:%M')}."})
+
+    # 2) Logins
+    for lg in db.query(PortalLogin).filter(PortalLogin.enabled == True).all():  # noqa: E712
+        if lg.last_status == "fail":
+            checks.append({"level": "error", "topic": f"Login {lg.host}",
+                           "msg": (lg.last_error or "fehlgeschlagen")[:200],
+                           "hint": "Portal-Logins → Eintrag pruefen → ▶ Testen. Bei 2FA: TOTP-Secret hinterlegen; bei Captcha: Session-Import."})
+        elif lg.last_status == "ok" and lg.last_error and "ACHTUNG" in lg.last_error:
+            checks.append({"level": "warn", "topic": f"Login {lg.host}",
+                           "msg": lg.last_error[:220],
+                           "hint": "Im Portal manuell einloggen und pruefen, ob das Konto die Vergabeunterlagen sehen darf (oft: erst 'Teilnahme' am Verfahren noetig)."})
+        elif lg.last_status == "ok":
+            checks.append({"level": "ok", "topic": f"Login {lg.host}", "msg": "Login + Session ok."})
+        else:
+            checks.append({"level": "warn", "topic": f"Login {lg.host}",
+                           "msg": "Noch nie getestet.",
+                           "hint": "Portal-Logins → ▶ Testen (Ergebnis nach ~30 s)."})
+
+    # 3) Portale: Crawl-Ergebnis + Anhang-/Enrichment-Abdeckung
+    last_run = load_run_state() or {}
+    portal_runs = {p.get("name"): p for p in (last_run.get("portals") or [])}
+    for p in enabled_portals():
+        run = portal_runs.get(p.name) or {}
+        n_items = run.get("fetched")
+        err = run.get("error_msg")
+        total = db.query(Tender).filter(Tender.portal == p.name).count()
+        with_attach = (db.query(Tender.id)
+                       .join(TenderAttachment, TenderAttachment.tender_id == Tender.id)
+                       .filter(Tender.portal == p.name).distinct().count())
+        enriched = (db.query(Tender)
+                    .filter(Tender.portal == p.name, Tender.ai_analysis.isnot(None)).count())
+        if err:
+            checks.append({"level": "error", "topic": f"Portal {p.name}",
+                           "msg": f"Crawl-Fehler: {str(err)[:180]}",
+                           "hint": "Portale → 🔍 Probe fuer Diagnose (HTTP-Status, Selektoren)."})
+        elif n_items == 0 and total == 0:
+            checks.append({"level": "warn", "topic": f"Portal {p.name}",
+                           "msg": "0 Treffer im letzten Lauf und keine Tender in der DB.",
+                           "hint": "Probe laufen lassen. Wenn HTTP 200 aber 0 Treffer: Selektoren/Suchbegriffe pruefen."})
+        else:
+            detail = f"{total} Tender · {enriched} angereichert · {with_attach} mit Anhaengen"
+            if total > 5 and with_attach == 0:
+                checks.append({"level": "warn", "topic": f"Portal {p.name}",
+                               "msg": detail + " - Anhaenge fehlen komplett.",
+                               "hint": "Login fuer diesen Host anlegen/testen (Unterlagen oft erst nach Login sichtbar)."})
+            else:
+                checks.append({"level": "ok", "topic": f"Portal {p.name}", "msg": detail})
+
+    order = {"error": 0, "warn": 1, "ok": 2}
+    checks.sort(key=lambda c: order.get(c["level"], 3))
+    counts = {
+        "error": sum(1 for c in checks if c["level"] == "error"),
+        "warn": sum(1 for c in checks if c["level"] == "warn"),
+        "ok": sum(1 for c in checks if c["level"] == "ok"),
+    }
+    return templates.TemplateResponse(
+        request, "doctor.html",
+        {"checks": checks, "counts": counts,
+         "user": request.session.get("user"), "flash": flash})
+
+
+@app.post("/admin/doctor/test-all-logins")
+def admin_doctor_test_all(request: Request, db: Session = Depends(get_db)):
+    """Setzt fuer alle aktiven Logins den Tiefen-Test-Flag."""
+    user = _session_user(request)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Nur Admin")
+    n = 0
+    for lg in db.query(PortalLogin).filter(PortalLogin.enabled == True).all():  # noqa: E712
+        lg.test_requested_at = datetime.utcnow()
+        lg.last_status = "pending"
+        n += 1
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/doctor?flash={n} Login-Tiefentests gestartet - Ergebnis in ~1 Minute (Seite neu laden).",
+        status_code=303)
+
+
 # --- Admin: Portal-Logins ---------------------------------------------
 @app.get("/admin/portal-logins", response_class=HTMLResponse)
 def admin_portal_logins(
@@ -3352,7 +3492,18 @@ def internal_portal_logins_pending_test(db: Session = Depends(get_db)):
     for it in items:
         if not it.username or not it.password:
             continue
+        # Beispiel-Tender des Hosts mitgeben: Der Enricher oeffnet ihn nach
+        # erfolgreichem Login und zaehlt die sichtbaren Dokument-Links.
+        # So erkennt der Test 'Login ok, aber Unterlagen trotzdem nicht
+        # sichtbar' - statt nur 'ich komme rein'.
+        sample = (
+            db.query(Tender.url)
+            .filter(Tender.url.ilike(f"%{it.host}%"))
+            .order_by(Tender.created_at.desc())
+            .first()
+        )
         out.append({
+            "sample_url": sample[0] if sample else None,
             "id": it.id,
             "host": it.host,
             "login_url": it.login_url,

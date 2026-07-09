@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set sidebar_section = 'settings' %}
+{% block title %}System-Doktor – Flüssigboden Akademie · Ausschreibungen{% endblock %}
+{% block content %}
+
+<nav class="text-sm text-zinc-500 mb-4">
+  <a href="/" class="hover:text-zinc-900">Dashboard</a>
+  <span class="mx-1.5">›</span>
+  <span class="text-zinc-700">System-Doktor</span>
+</nav>
+
+{% if flash %}<div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {{ flash }}</div>{% endif %}
+
+<div class="flex items-end justify-between mb-6 gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">🩺 System-Doktor</h1>
+    <p class="text-sm text-zinc-500 mt-1">
+      Ende-zu-Ende-Check: Crawlen die Portale? Klappen die Logins wirklich (inkl. Blick auf einen echten Tender)?
+      Kommen Anreicherungen und Anhänge an? Probleme stehen oben, mit konkretem Fix-Hinweis.
+    </p>
+  </div>
+  <div class="flex gap-2">
+    <form method="post" action="/admin/doctor/test-all-logins">
+      <button class="btn-primary">▶ Alle Logins tiefentesten</button>
+    </form>
+    <a href="/admin/doctor" class="btn-ghost">↻ Aktualisieren</a>
+  </div>
+</div>
+
+<div class="flex gap-3 mb-6 flex-wrap">
+  <span class="pill bg-rose-100 text-rose-800">{{ counts.error }} Fehler</span>
+  <span class="pill bg-amber-100 text-amber-800">{{ counts.warn }} Warnungen</span>
+  <span class="pill bg-emerald-100 text-emerald-800">{{ counts.ok }} ok</span>
+</div>
+
+<div class="space-y-2">
+  {% for c in checks %}
+  <div class="card p-4 flex items-start gap-3
+              {% if c.level == 'error' %}!border-rose-300{% elif c.level == 'warn' %}!border-amber-300{% endif %}">
+    <div class="shrink-0 text-lg leading-none mt-0.5">
+      {% if c.level == 'error' %}🔴{% elif c.level == 'warn' %}🟡{% else %}🟢{% endif %}
+    </div>
+    <div class="min-w-0">
+      <div class="text-sm font-semibold">{{ c.topic }}</div>
+      <div class="text-sm text-zinc-700 mt-0.5">{{ c.msg }}</div>
+      {% if c.hint %}
+      <div class="text-xs text-zinc-500 mt-1.5">💡 {{ c.hint }}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

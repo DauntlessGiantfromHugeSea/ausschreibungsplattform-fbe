@@ -58,6 +58,11 @@
             <span class="pill bg-blue-100 text-blue-800 animate-pulse">⏳ Test läuft …</span>
           {% elif it.last_status == 'ok' %}
             <span class="pill bg-emerald-100 text-emerald-800">✓ ok</span>
+            {% if it.last_error and 'ACHTUNG' in it.last_error %}
+            <div class="text-xs text-amber-700 mt-1 max-w-xs whitespace-normal leading-snug">⚠ {{ it.last_error[:220] }}</div>
+            {% elif it.last_error and 'Dokument' in it.last_error %}
+            <div class="text-xs text-zinc-500 mt-1 max-w-xs whitespace-normal leading-snug">{{ it.last_error[:180] }}</div>
+            {% endif %}
           {% elif it.last_status == 'fail' %}
             <span class="pill bg-rose-100 text-rose-800">✕ fail</span>
             {% if it.last_error %}

@@ -38,6 +38,27 @@
   {% endif %}
 </div>
 
+<div class="card p-6 mb-6">
+  <h2 class="text-base font-semibold mb-1">🌐 Website in die Wissensbasis importieren</h2>
+  <p class="text-xs text-zinc-500 mb-4">
+    Crawlt alle Unterseiten einer Website (Leistungen, Planungsleistungen, Referenzen, …)
+    und legt den Inhalt als <code>website-….md</code> in der Wissensbasis ab. Der Inhalt fliesst
+    automatisch in die KI-Anreicherung und die Claude-Analyse ein. Erneuter Import überschreibt
+    den alten Stand — ideal nach Website-Updates.
+  </p>
+  <form method="post" action="/admin/ai-knowledge/import-site" class="flex items-end gap-3 flex-wrap">
+    <div class="grow max-w-md">
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Website-URL</label>
+      <input class="input" type="text" name="site_url" required value="https://www.fb-eng.de" placeholder="https://www.fb-eng.de">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-zinc-600 mb-1">Max. Seiten</label>
+      <input class="input w-24" type="number" name="max_pages" value="40" min="5" max="100">
+    </div>
+    <button class="btn-primary">Import starten</button>
+  </form>
+</div>
+
 <form method="post" action="/admin/ai-knowledge" class="card p-6 space-y-4">
   <div>
     <label class="block text-xs font-medium text-zinc-600 mb-1">Wissens-Dokument (Markdown)</label>

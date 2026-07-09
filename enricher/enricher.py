@@ -141,6 +141,31 @@ def run_pending_login_tests() -> int:
                     # Fail-Backoff fuer den Host aufheben.
                     _save_session(ctx, host)
                     _LOGIN_FAILED_UNTIL.pop(host, None)
+                    # Tiefen-Check: sieht der eingeloggte Bot auf einem echten
+                    # Tender auch Dokumente? Erkennt 'Login ok, aber Konto hat
+                    # keinen Zugriff auf die Unterlagen'.
+                    sample = conf.get("sample_url")
+                    if sample:
+                        try:
+                            page.goto(sample, wait_until="networkidle",
+                                      timeout=PAGE_TIMEOUT_MS)
+                            _kill_overlays(page)
+                            _reveal_documents(page)
+                            for extra in _portal_specific_subpages(sample):
+                                try:
+                                    page.goto(extra, wait_until="networkidle",
+                                              timeout=PAGE_TIMEOUT_MS)
+                                except Exception:
+                                    pass
+                            n_docs = len(_find_pdf_links(page, page.url, 50))
+                            if n_docs:
+                                reason += f" · Beispiel-Tender: {n_docs} Dokument-Link(s) sichtbar ✓"
+                            else:
+                                reason += (" · ACHTUNG: Login ok, aber auf dem Beispiel-Tender "
+                                           "sind KEINE Dokumente sichtbar - Konto-Freigabe/"
+                                           "Teilnahme am Verfahren noetig?")
+                        except Exception as exc:
+                            reason += f" · Beispiel-Tender-Check fehlgeschlagen: {type(exc).__name__}"
                     log.info("Login-Test %s OK (%s) - Session gespeichert", host, reason)
                     report_login_result(lid, True, reason)
                 else:

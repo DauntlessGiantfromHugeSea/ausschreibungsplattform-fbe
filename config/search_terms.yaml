@@ -247,6 +247,55 @@ clusters:
       - "Düker"
       - "Dükerbau"
 
+  - name: "Planungsleistungen / Ingenieurleistungen"
+    weight: high
+    terms:
+      - "Planungsleistung"
+      - "Planungsleistungen"
+      - "Ingenieurleistung"
+      - "Ingenieurleistungen"
+      - "Objektplanung"
+      - "Fachplanung"
+      - "Generalplaner"
+      - "Generalplanung"
+      - "Tragwerksplanung"
+      - "Entwurfsplanung"
+      - "Genehmigungsplanung"
+      - "Ausführungsplanung"
+      - "Leistungsphase"
+      - "Leistungsphasen"
+      - "HOAI"
+      - "Trassenplanung"
+      - "Leitungsplanung"
+      - "Kanalplanung"
+      - "Verkehrsanlagenplanung"
+      - "Planung Ingenieurbauwerke"
+      - "Planung von Ingenieurbauwerken"
+      - "Objektplanung Ingenieurbauwerke"
+      - "Planung Tiefbau"
+      - "Fachplanung Tiefbau"
+      - "Planung Leitungsbau"
+      - "Planung Kanalbau"
+      - "Planung Erdkabeltrasse"
+      - "Planung Kabeltrasse"
+      - "thermische Trassenauslegung"
+      - "thermische Bemessung"
+      - "Bauüberwachung"
+      - "Bauoberleitung"
+      - "örtliche Bauüberwachung"
+      - "Baugrundgutachten"
+      - "geotechnisches Gutachten"
+      - "geotechnischer Bericht"
+      - "Geotechnik"
+      - "Baugrunderkundung"
+      - "Machbarkeitsstudie"
+      - "Variantenuntersuchung"
+      - "VgV-Verfahren"
+      - "Verhandlungsverfahren mit Teilnahmewettbewerb"
+      - "freiberufliche Leistungen"
+      - "SiGeKo"
+      - "Sicherheits- und Gesundheitsschutzkoordination"
+
   - name: "Tiefbau / Baugruben / Erdarbeiten"
     weight: high
     terms:
@@ -362,6 +411,16 @@ query_terms:
   - "Spundwand"
   - "Tiefbau"
   - "Fernwärme Verfüllung"
+  - "Planungsleistungen"
+  - "Objektplanung Ingenieurbauwerke"
+  - "Fachplanung Tiefbau"
+  - "Trassenplanung"
+  - "Planung Kanalbau"
+  - "Ingenieurleistungen Leitungsbau"
+  - "geotechnisches Gutachten"
+  - "Baugrundgutachten"
+  - "Bauüberwachung Tiefbau"
+  - "thermische Trassenauslegung"
 
 # CPV-Codes der EU - fuer TED-Filter (Tiefbau / Leitungsbau / Erdarbeiten /
 # Spundwand / Brunnenbohrung / Stromleitungen).
@@ -386,3 +445,14 @@ cpv_codes:
   - "45262220"   # Brunnenbohrung
   - "45231400"   # Stromleitungen
   - "45231600"   # Telekommunikationsleitungen
+  # --- Planungsleistungen / Ingenieurdienstleistungen (VgV) ---
+  - "71000000"   # Dienstleistungen von Architektur- und Ingenieurbueros
+  - "71300000"   # Dienstleistungen von Ingenieurbueros
+  - "71311000"   # Beratung im Tief- und Hochbau
+  - "71320000"   # Planungsleistungen im Bauwesen
+  - "71322000"   # Planung von Tiefbauanlagen
+  - "71322200"   # Planung von Rohrleitungen
+  - "71332000"   # Geotechnische Beratung
+  - "71351220"   # Geologische Beratung
+  - "71247000"   # Beaufsichtigung der Bauarbeiten (Bauueberwachung)
+  - "71356200"   # Technische Unterstuetzung

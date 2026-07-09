@@ -29,6 +29,26 @@ portals:
       sortOrder: dateOfIssue_dt desc
       cl2Categories_LeistungenErzeugnisse: leistung-bauleistungen
       jobsrss: 'true'
+- name: bund.de Dienstleistungen (Planung)
+  enabled: true
+  scraper: bund
+  base_url: https://www.service.bund.de
+  strategy: search_url
+  notes: "Zweiter bund.de-Feed: Kategorie Dienstleistungen statt\nBauleistungen - hier stehen die Planungs-/Ingenieurleistungen\n(VgV-Verfahren, Objektplanung, Gutachten). Client-seitig auf die\nFBE-Cluster gefiltert, inkl. neuem Planungsleistungen-Cluster.\n"
+  config:
+    user_agent: Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0
+    max_pages: 5
+    enable_keyword_search: false
+    filter_by_terms: true
+    request_delay_s: 1.0
+    listing_params:
+      nn: '4641482'
+      ambit_distance: '10'
+      type: '0'
+      resultsPerPage: 100
+      sortOrder: dateOfIssue_dt desc
+      cl2Categories_LeistungenErzeugnisse: leistung-dienstleistungen
+      jobsrss: 'true'
 - name: TED - Tenders Electronic Daily
   enabled: true
   scraper: ted

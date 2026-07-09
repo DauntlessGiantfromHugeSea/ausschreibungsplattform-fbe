@@ -26,6 +26,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from .config import settings
 from .database import SessionLocal
 from .dedup import fingerprint, content_fingerprint
+from .tender_kind import classify_kind
 from .models import Tender, TenderStatus
 from .portal_config import PortalConfig, enabled_portals
 from .region_resolver import infer_region
@@ -271,6 +272,7 @@ def _save_item(item, cfg, new_high_relevance: List[Tender]) -> str | None:
             documents=json.dumps(item.documents) if item.documents else None,
             fingerprint=fp,
             content_fp=content_fp,
+            kind=classify_kind(item.title, item.description, item.cpv_codes),
         )
         db.add(tender)
         try:

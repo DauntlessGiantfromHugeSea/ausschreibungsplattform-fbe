@@ -660,6 +660,40 @@ def add_user_interest_columns() -> bool:
         return False
 
 
+def add_tender_kind_column() -> bool:
+    """Art-Spalte (bau/planung) + Backfill via Klassifikator."""
+    insp = inspect(engine)
+    if "tenders" not in insp.get_table_names():
+        return False
+    cols = {c["name"] for c in insp.get_columns("tenders")}
+    if "kind" in cols:
+        return False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE tenders ADD COLUMN kind VARCHAR(20) NOT NULL DEFAULT 'bau'"))
+            conn.execute(text("CREATE INDEX ix_tenders_kind ON tenders(kind)"))
+        from .db import SessionLocal
+        from .models import Tender
+        from .tender_kind import classify_kind
+        s = SessionLocal()
+        try:
+            n = 0
+            for t in s.query(Tender).all():
+                k = classify_kind(t.title, t.description, t.cpv_codes)
+                if k != t.kind:
+                    t.kind = k
+                    n += 1
+            s.commit()
+            log.info("Migration kind: %d Tender als 'planung' klassifiziert", n)
+        finally:
+            s.close()
+        return True
+    except Exception as exc:
+        log.exception("Migration tender_kind fehlgeschlagen: %s", exc)
+        return False
+
+
 def run_all() -> dict:
     """Alle Migrationen einmal beim App-Start laufen lassen."""
     return {
@@ -686,4 +720,5 @@ def run_all() -> dict:
         "tender_content_fp_added": add_tender_content_fp_column(),
         "portal_login_totp_added": add_portal_login_totp_columns(),
         "user_interest_columns_added": add_user_interest_columns(),
+        "tender_kind_added": add_tender_kind_column(),
     }

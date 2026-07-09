@@ -155,6 +155,15 @@
     {% if selected_profile and selected_profile.description %}
       <p class="text-sm text-zinc-500 mt-2">{{ selected_profile.description }}</p>
     {% endif %}
+    {# Art-Filter: Bau / Planung / Beides - innerhalb der eigenen Profile #}
+    {% set k = filters.kind %}
+    {% set psuffix = ('&profile=' ~ selected_profile.id) if selected_profile else '' %}
+    <div class="flex flex-wrap items-center gap-2 mt-3">
+      <span class="text-xs text-zinc-500 mr-1">Art:</span>
+      <a href="/?x=1{{ psuffix }}" class="chip {% if not k %}chip-active{% endif %}">Beides</a>
+      <a href="/?kind=bau{{ psuffix }}" class="chip {% if k=='bau' %}chip-active{% endif %}">🏗 Bauvorhaben</a>
+      <a href="/?kind=planung{{ psuffix }}" class="chip {% if k=='planung' %}chip-active{% endif %}">📐 Planung</a>
+    </div>
   {% endif %}
 </div>
 {% else %}
@@ -177,6 +186,14 @@
      title="Auch abgelaufene Ausschreibungen anzeigen">⏱ Auch abgelaufene</a>
   <a href="/?quick=expired"     class="chip {% if q=='expired' %}chip-active{% endif %}"
      title="Nur abgelaufene Ausschreibungen">Nur abgelaufene</a>
+  <span class="w-px bg-zinc-200 mx-1"></span>
+  {% set k = filters.kind %}
+  {% set ksuffix = ('&quick=' ~ q if q else '') ~ ('&include_expired=1' if ie else '') %}
+  <a href="/?x=1{{ ksuffix }}" class="chip {% if not k %}chip-active{% endif %}" title="Bau + Planung">Beides</a>
+  <a href="/?kind=bau{{ ksuffix }}" class="chip {% if k=='bau' %}chip-active{% endif %}"
+     title="Nur Bauvorhaben">🏗 Bauvorhaben</a>
+  <a href="/?kind=planung{{ ksuffix }}" class="chip {% if k=='planung' %}chip-active{% endif %}"
+     title="Nur Planungs-/Ingenieurleistungen">📐 Planung</a>
 
   <!-- Profile-Dropdown rechts -->
   <div class="ml-auto relative" id="profile-menu">
@@ -401,6 +418,9 @@
           </td>
           <td class="max-w-[420px]">
             <a href="/tender/{{ t.id }}" class="font-medium text-zinc-900 hover:text-brand-700">{{ t.title }}</a>
+            {% if t.kind == 'planung' %}
+              <span class="pill bg-violet-50 text-violet-700 border border-violet-200 ml-1" title="Planungs-/Ingenieurleistung">📐 Planung</span>
+            {% endif %}
             {% if t.matched_terms %}
               <div class="text-xs text-zinc-500 mt-0.5 truncate-2">{{ t.matched_terms }}</div>
             {% endif %}

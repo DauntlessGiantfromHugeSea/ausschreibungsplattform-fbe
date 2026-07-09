@@ -77,6 +77,9 @@ class Tender(Base):
     # Cross-Portal-Fingerprint (Titel+Auftraggeber+Frist, OHNE URL) -
     # erkennt dieselbe Ausschreibung auf mehreren Portalen.
     content_fp = Column(String(64), nullable=True, index=True)
+    # Art der Ausschreibung: 'bau' (Bauvorhaben) oder 'planung'
+    # (Planungs-/Ingenieurleistung). Treibt den Art-Filter im Dashboard.
+    kind = Column(String(20), default="bau", nullable=False, index=True)
     # JSON-Liste mit Score-Komponenten: [{"label":..., "points":..., "detail":...}, ...]
     score_breakdown = Column(Text, nullable=True)
     # KI-Analyse (Fluessigboden-Eignung + Kosteneinsparungs-Schaetzung).

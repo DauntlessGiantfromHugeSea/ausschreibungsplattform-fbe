@@ -178,8 +178,11 @@ def _filtered_query(
     score_max: Optional[float] = None,
     quick: Optional[str] = None,
     include_expired: bool = False,
+    kind: Optional[str] = None,
 ):
     query = db.query(Tender)
+    if kind in ("bau", "planung"):
+        query = query.filter(Tender.kind == kind)
     if portal:
         query = query.filter(Tender.portal == portal)
     if region:
@@ -575,23 +578,27 @@ def index(
     per_page: int = 50,
     include_expired: Optional[str] = None,
     profile: Optional[int] = None,
+    kind: Optional[str] = None,
     flash: Optional[str] = None,
     error: Optional[str] = None,
 ):
     per_page = _normalize_per_page(per_page)
     expired_flag = bool(include_expired)
     restricted = is_restricted(request)
+    # Art-Filter (Bau/Planung/beide) darf JEDER nutzen - auch Restricted.
+    if kind not in ("bau", "planung"):
+        kind = None
 
     if restricted:
         # Restricted-User: ALLE freien Filter-Params werden ignoriert.
-        # Nur 'profile', 'status', 'sort', 'page', 'per_page' werden respektiert.
+        # Nur 'profile', 'status', 'kind', 'sort', 'page', 'per_page' bleiben.
         portal = region = level = deadline_from = deadline_to = None
         q = None
         score_min = None
         score_max = None
         quick = None
         expired_flag = False
-        query = _filtered_query(db, status=status, include_expired=False)
+        query = _filtered_query(db, status=status, include_expired=False, kind=kind)
         query, user_profiles, selected_profile = _enforce_restricted(
             db, request, query, selected_profile_id=profile,
         )
@@ -604,7 +611,7 @@ def index(
             portal=portal, region=region, status=status, level=level,
             deadline_from=deadline_from, deadline_to=deadline_to, q=q,
             score_min=score_min, score_max=score_max, quick=quick,
-            include_expired=expired_flag,
+            include_expired=expired_flag, kind=kind,
         )
         user_profiles = []
         selected_profile = None
@@ -709,6 +716,7 @@ def index(
                 "quick": quick or "",
                 "sort": sort or "score_desc",
                 "include_expired": "1" if expired_flag else "",
+                "kind": kind or "",
             },
             "configured_portals": enabled_portals(),
             "status_summary": _portal_status_summary(last_run),
